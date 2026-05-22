@@ -1,0 +1,10 @@
+[project]
+name = "ai-test-platform"
+version = "0.1.0"
+description = "AI Intelligent Test Platform"
+requires-python = ">=3.10"
+
+[tool.aerich]
+tortoise_orm = "service.core.config.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "./."
