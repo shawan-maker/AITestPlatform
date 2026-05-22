@@ -1,0 +1,27 @@
+# 虚拟环境
+venv/
+.venv/
+
+# 环境变量与密钥
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# 本地数据/缓存（按需）
+rag/output/
+rag/rag_storage/
+rag/temp/
+rag/document/
+*.log
+
+# 其他文件
+demo/

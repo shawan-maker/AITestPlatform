@@ -1,0 +1,709 @@
+[
+    {
+        "title": "正常登录 - 使用正确的手机号和密码",
+        "description": "准备有效的手机号（keywords参数），准备正确的密码（password参数），设置请求头 Content-Type: application/x-www-form-urlencoded，发送POST请求到接口 /member/public/login，携带 keywords 和 password 参数",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": "${correct_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "",
+        "extract": [
+            {
+                "var_name": "status",
+                "extract_expr": "$.status"
+            },
+            {
+                "var_name": "description",
+                "extract_expr": "$.description"
+            }
+        ],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "登录成功"
+            }
+        ],
+        "review_status": "success"
+    },
+    {
+        "title": "参数缺失 - 缺失必填参数 keywords (手机号)",
+        "description": "测试登录接口当缺失必填参数keywords（手机号）时的场景，使用有效的密码，预期返回用户不存在错误。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "password": "${correct_password}"
+            }
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "用户不存在"
+            }
+        ],
+        "review_status": "fail"
+    },
+    {
+        "title": "参数缺失 - 缺失必填参数 password (密码)",
+        "description": "1. 准备有效的手机号（keywords参数）\n2. 设置请求头 Content-Type: application/x-www-form-urlencoded\n3. 发送POST请求到接口 /member/public/login，只携带 keywords 参数",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "密码不能为空"
+            }
+        ],
+        "database": [],
+        "review_status": "success"
+    },
+    {
+        "title": "错误场景 - 用户不存在",
+        "description": "使用一个系统中不存在的手机号进行登录，验证接口返回用户不存在的错误提示",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${wrong_username}",
+                "password": "${wrong_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "wrong_username = global_func.random_mobile()\ntest.save_env_variable(\"wrong_username\", wrong_username)\nwrong_password = \"test123\"\ntest.save_env_variable(\"wrong_password\", wrong_password)",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "用户不存在"
+            }
+        ],
+        "database": [],
+        "review_status": "success"
+    },
+    {
+        "title": "错误场景 - 密码为空字符串",
+        "description": "测试登录接口在密码为空字符串时的错误处理",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": ""
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "test.assertion('相等', 200, response.status_code)\ntest.assertion('相等', 'json', response.headers.get('Content-Type').split(';')[0])\njson_resp = response.json()\ntest.assertion('相等', 100, json_resp.get('status'))\ntest.assertion('相等', '密码不能为空', json_resp.get('description'))",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "密码不能为空"
+            }
+        ],
+        "review_status": "fail"
+    },
+    {
+        "title": "错误场景 - 密码错误第1次",
+        "description": "使用有效的已注册手机号和错误的密码进行登录，验证接口返回密码错误1次的提示信息。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": null,
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": "wrong_pwd_001"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "wrong_password = 'wrong_pwd_001'\ntest.save_env_variable('wrong_password', wrong_password)",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "密码错误1次,达到3次将锁定账户"
+            }
+        ],
+        "review_status": "success"
+    },
+    {
+        "title": "错误场景 - 密码错误达到3次账户锁定",
+        "description": "准备一个有效的已注册手机号，使用错误的密码连续发送3次登录请求，验证第3次请求后账户被锁定",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": "${incorrect_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "incorrect_password = global_func.random_mobile()\ntest.save_env_variable('incorrect_password', incorrect_password)\ncounter = test.get_global_variable('login_error_counter')\nif counter is None:\n    test.save_global_variable('login_error_counter', 0)",
+        "teardown_script": "counter = test.get_global_variable('login_error_counter')\ncounter += 1\ntest.save_global_variable('login_error_counter', counter)\nif counter == 3:\n    test.assertion('==', '由于连续输入错误密码达到上限，账号已被锁定，请于1.0分钟后重新登录', test.json_extract(response.text, 'description'))",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            }
+        ],
+        "review_status": "success"
+    },
+    {
+        "title": "异常请求 - 缺少必要的请求头 Content-Type",
+        "description": "测试登录接口在请求头中未设置Content-Type字段时的异常处理",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "login_api",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {},
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": "${correct_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "不相等",
+                "field": "status_code",
+                "expected": 200
+            }
+        ],
+        "database": [],
+        "review_status": "fail"
+    },
+    {
+        "title": "异常请求 - 使用错误的请求体格式 (非x-www-form-urlencoded)",
+        "description": "测试登录接口接收到错误格式（application/json）的请求体时的处理。使用正确的手机号和密码，但Content-Type设置为JSON，验证接口是否会因格式不正确而返回错误状态码或提示。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "request": {
+            "params": {},
+            "data": {},
+            "json": {
+                "keywords": "${correct_username}",
+                "password": "${correct_password}"
+            },
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "不等于",
+                "field": "status_code",
+                "expected": 200
+            }
+        ],
+        "review_status": "error"
+    },
+    {
+        "title": "数据错误 - 参数keywords传递非手机号格式的字符串",
+        "description": "使用非手机号格式的字符串作为keywords参数进行登录，验证接口返回用户不存在的错误信息。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${invalid_keywords}",
+                "password": "${password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "invalid_keywords_list = ['abc123']\nkeyword_idx = 0\ninvalid_keywords = invalid_keywords_list[keyword_idx]\npassword = 'test123'\ntest.save_env_variable('invalid_keywords', invalid_keywords)\ntest.save_env_variable('password', password)",
+        "teardown_script": "response_json = response.json()\ntest.assertion('==', 200, response.status_code)\ntest.assertion('==', 100, response_json['status'])\ntest.assertion('==', '用户不存在', response_json['description'])",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "用户不存在"
+            }
+        ],
+        "database": [],
+        "review_status": "success"
+    },
+    {
+        "title": "数据边界 - 参数keywords字符串长度为极端值 (如超长字符串)",
+        "description": "测试登录接口对于keywords参数（手机号）长度进行极端超长输入时的处理逻辑，预期返回用户不存在或错误信息。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${long_keywords}",
+                "password": "${correct_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "long_keywords = 'a' * 1000\ncorrect_username = '13012341231'\ncorrect_password = 'test123'\ntest.save_env_variable('long_keywords', long_keywords)\ntest.save_env_variable('correct_username', correct_username)\ntest.save_env_variable('correct_password', correct_password)",
+        "teardown_script": "",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            }
+        ],
+        "database": [],
+        "review_status": "success"
+    },
+    {
+        "title": "验证keywords参数值为空字符串时的错误处理",
+        "description": "1.设置keywords参数值为空字符串 2.准备一个有效的密码（password参数） 3.设置请求头 Content-Type: application/x-www-form-urlencoded 4.发送POST请求到接口 /member/public/login，携带 keywords 和 password 参数",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "login_interface",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "",
+                "password": "${correct_password}"
+            },
+            "json": null,
+            "files": null
+        },
+        "preconditions": [],
+        "setup_script": "# 本用例使用测试数据直接传入的明文密码\n# 无需额外脚本处理",
+        "teardown_script": "# 无需专门的数据清理或复杂的响应逻辑处理",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "==",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "==",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "相等",
+                "field": "$.description",
+                "expected": "用户不存在"
+            }
+        ],
+        "database": [],
+        "review_status": "fail"
+    },
+    {
+        "title": "验证keywords参数类型错误（传递数字类型）时的错误处理",
+        "description": "测试登录接口/member/public/login当keywords参数（应为字符串类型的手机号）传入数字类型时的错误处理，预期返回状态码200，响应体JSON中status为100，description为'用户不存在'或相关错误信息。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${keywords_value}",
+                "password": "${correct_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "import json\n# 准备测试数据，正确的密码来自提供的测试数据\ntest.save_env_variable(\"correct_password\", \"test123\")\n# 根据用例要求，keywords参数传入一个数字。此处使用工具函数生成一个随机数字类型的值（如手机号格式的数字字符串）\nkeywords_num = global_func.random_mobile()\n# 确保它是一个整数或数字字符串，根据接口定义是数字类型，这里保存为字符串以匹配请求体格式，但值本身是数字\nkeywords_num_int = int(keywords_num)\ntest.save_env_variable(\"keywords_value\", str(keywords_num_int))",
+        "teardown_script": "# 无需后置操作，断言已在结构中定义",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "包含",
+                "field": "$.description",
+                "expected": "用户不存在"
+            }
+        ],
+        "database": [],
+        "review_status": "success"
+    },
+    {
+        "title": "验证password参数类型错误（传递数字类型）时的错误处理",
+        "description": "测试password参数为数字时，后端应能处理或检测类型不匹配，返回预期错误信息。测试数据使用有效的已注册手机号。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": 123456
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "# 无需前置数据准备，使用测试数据中已提供的正确账号进行登录测试\nusername = test.get_env_variable(\"correct_username\")\ntest.assertion(\"相等\", \"13012341231\", username) # 确保使用的是测试数据中正确的用户名\n",
+        "teardown_script": "# 校验预期的业务状态码和描述\nresp_json = response.json()\nstatus_value = resp_json.get('status')\ndes_value = resp_json.get('description', '')\ntest.assertion(\"相等\", 100, status_value)\n# 断言描述字段中可能包含'密码错误'或相关提示\nif '密码错误' not in des_value:\n    raise AssertionError(f\"预期提示信息中包含‘密码错误’，实际返回 {des_value}\")\n",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "相等",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "相等",
+                "field": "$.status",
+                "expected": 100
+            }
+        ],
+        "review_status": "fail"
+    },
+    {
+        "title": "验证password参数类型错误（传递布尔类型true）时的错误处理",
+        "description": "登录接口测试password参数类型校验：使用有效的手机号和布尔值true作为密码，验证接口对类型不匹配的处理能力，预期返回错误码和提示信息。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "member_public_login",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "keywords": "${correct_username}",
+                "password": true
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "test.assertion('==', 200, response.status_code)\nif response.ok:\n  try:\n    resp_json = response.json()\n    test.assertion('==', 100, resp_json.get('status'))\n    actual_desc = resp_json.get('description', '')\n    # 根据文档，password相关错误可能返回多种描述，此处检查描述包含'密码'或为空（空也视为类型校验未通过的默认处理）\n    if actual_desc:\n      test.assertion('in', '密码', actual_desc)\n    else:\n      # 描述为空也认为符合预期（某些后端可能不返回具体描述）\n      pass\n  except Exception as e:\n    raise AssertionError('响应体非JSON格式：' + str(e) + '，响应内容：' + response.text)\nelse:\n  raise AssertionError('HTTP状态码不应为错误状态：' + str(response.status_code))",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "==",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "==",
+                "field": "status",
+                "expected": 100
+            }
+        ],
+        "database": [],
+        "review_status": "success"
+    },
+    {
+        "title": "验证keywords参数缺失（或为null）时的错误处理",
+        "description": "1.准备一个有效的密码（password参数）。\n2.设置请求头 Content-Type: application/x-www-form-urlencoded。\n3.发送POST请求到接口 /member/public/login，不携带 keywords 参数。\n4.检查接口响应是否符合预期。",
+        "project": "p2p金融项目",
+        "module": "登录模块",
+        "interface": {
+            "interface_id": "",
+            "name": "登录接口",
+            "url": "/member/public/login",
+            "method": "POST"
+        },
+        "headers": {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "request": {
+            "params": {},
+            "data": {
+                "password": "${correct_password}"
+            },
+            "json": {},
+            "files": {}
+        },
+        "preconditions": [],
+        "setup_script": "",
+        "teardown_script": "# 此用例主要测试 keywords 缺失时的错误响应，无需复杂后置判断\ntest.assertion(\"==\", \"status_code\", 200)\nresp_json = response.json()\ntest.assertion(\"==\", resp_json.get('status'), 100)\ntest.assertion(\"包含\", resp_json.get('description'), \"用户不存在\")",
+        "extract": [],
+        "assertions": [
+            {
+                "type": "==",
+                "field": "status_code",
+                "expected": 200
+            },
+            {
+                "type": "==",
+                "field": "$.status",
+                "expected": 100
+            },
+            {
+                "type": "==",
+                "field": "$.description",
+                "expected": "用户不存在"
+            }
+        ],
+        "database": [],
+        "review_status": "fail"
+    }
+]
