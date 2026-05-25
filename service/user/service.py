@@ -1,7 +1,7 @@
 from tortoise.expressions import Q
 
 from service.core.exceptions import AppException
-from service.core.redis import is_token_revoked, revoke_token
+from service.core.redis import is_token_revoked, revoke_token, is_user_token_invalidated
 from service.core.security import (
     assert_token_type,
     create_access_token,
@@ -51,6 +51,8 @@ class AuthService:
         ).first()
         if user is None or not verify_password(password, user.password_hash):
             raise AppException("用户名或密码错误", 401)
+        if user.is_deleted:
+            raise AppException("账号已删除", 403)
         if not user.is_active:
             raise AppException("账号已禁用", 403)
 
@@ -79,6 +81,10 @@ class AuthService:
         user = await User.get_or_none(id=int(payload["sub"]))
         if user is None:
             raise AppException("用户不存在", 401)
+        if await is_user_token_invalidated(user.id, payload.get("iat")):
+            raise AppException("Token 已失效", 401)
+        if user.is_deleted:
+            raise AppException("账号已删除", 403)
         if not user.is_active:
             raise AppException("账号已禁用", 403)
 

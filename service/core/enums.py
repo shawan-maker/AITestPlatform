@@ -129,3 +129,20 @@ class SessionStatus(str, Enum):
     running = "running"
     success = "success"
     failed = "failed"
+
+
+class ProjectMemberRole(int, Enum):
+    viewer = 0
+    editor = 1
+    owner = 2
+
+
+PROJECT_MEMBER_ROLE_LABELS: dict[int, str] = {
+    ProjectMemberRole.viewer: "项目查看者",
+    ProjectMemberRole.editor: "项目编辑者",
+    ProjectMemberRole.owner: "项目所有者",
+}
+
+
+def project_member_role_label(role: int) -> str:
+    return PROJECT_MEMBER_ROLE_LABELS.get(role, "未知角色")

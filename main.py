@@ -10,12 +10,14 @@ from service.core.exceptions import AppException
 from service.core.redis import close_redis
 from service.core.response import success
 from service.router import api_router
+from service.user.bootstrap import ensure_default_super_admin
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 表结构由 Aerich 管理，部署前执行: python scripts/db_manage.py upgrade
     await init_db()
+    await ensure_default_super_admin()
     yield
     await close_redis()
     await close_db()
