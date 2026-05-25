@@ -1,0 +1,57 @@
+from fastapi import APIRouter, Depends
+
+from service.core.deps import get_current_active_user, require_environment_editor, require_environment_viewer
+from service.core.response import success
+from service.test_environment.variable.schemas import SnapshotCreateRequest
+from service.test_environment.variable.snapshot_service import SnapshotService
+from service.user.models import User
+
+router = APIRouter(tags=["环境-快照"])
+
+
+@router.get("/environments/{environment_id}/snapshots", summary="快照列表")
+async def list_snapshots(
+    environment_id: int,
+    _: object = Depends(require_environment_viewer),
+    user: User = Depends(get_current_active_user),
+):
+    data = await SnapshotService.list_snapshots(user, environment_id)
+    return success(data=data)
+
+
+@router.post("/environments/{environment_id}/snapshots", summary="生成快照")
+async def create_snapshot(
+    environment_id: int,
+    data: SnapshotCreateRequest = SnapshotCreateRequest(),
+    _: object = Depends(require_environment_editor),
+    user: User = Depends(get_current_active_user),
+):
+    result = await SnapshotService.create(user, environment_id, data)
+    return success(data=result, message="快照生成成功")
+
+
+@router.get("/snapshots/{snapshot_id}", summary="快照详情")
+async def get_snapshot(
+    snapshot_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    data = await SnapshotService.get_detail(user, snapshot_id)
+    return success(data=data)
+
+
+@router.put("/snapshots/{snapshot_id}/activate", summary="激活快照")
+async def activate_snapshot(
+    snapshot_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    result = await SnapshotService.activate(user, snapshot_id)
+    return success(data=result, message="快照已激活")
+
+
+@router.delete("/snapshots/{snapshot_id}", summary="删除快照")
+async def delete_snapshot(
+    snapshot_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    await SnapshotService.delete(user, snapshot_id)
+    return success(message="快照已删除")

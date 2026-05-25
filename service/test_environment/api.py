@@ -1,5 +1,17 @@
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/environments", tags=["测试环境"])
+from service.test_environment.database.api import bind_router as db_bind_router
+from service.test_environment.database.api import router as database_router
+from service.test_environment.file.api import router as file_router
+from service.test_environment.function.api import bind_router as function_bind_router
+from service.test_environment.function.api import router as function_router
+from service.test_environment.variable.api import router as variable_router
 
-# TODO: 环境、配置、数据库连接、快照 CRUD 等接口
+router = APIRouter(prefix="/env")
+
+router.include_router(variable_router)
+router.include_router(database_router)
+router.include_router(db_bind_router)
+router.include_router(function_router)
+router.include_router(function_bind_router)
+router.include_router(file_router)

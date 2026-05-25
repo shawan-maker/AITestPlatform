@@ -18,6 +18,7 @@ REDIS_URL: str | None = os.getenv("REDIS_URL")
 API_V1_PREFIX: str = "/api/v1"
 APP_TITLE: str = "AI Test Platform"
 APP_VERSION: str = "0.1.0"
+MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 
 TORTOISE_ORM = {
     "connections": {"default": DATABASE_URL},

@@ -29,6 +29,7 @@ checkpointer=InMemorySaver()
 class mainState(TypedDict):
     api_doc: str  # API接口文档
     project_name: str  # 项目名称
+    environment_id: int  # 测试环境 ID，>0 时从平台加载 test_env_data
     module_name: str  # 模块名称
     precoditions: list[str]  # 前置执行依赖接口的调用顺序
     base_cases: List  # 生成的测试用例（所有用例 - 列表）
@@ -95,6 +96,7 @@ class APICaseGeneratorMainWorkflow:
                             "api_doc": state.get("api_doc"),
                             "additional_info": state.get("additional_info"),
                             "test_env_data": state.get("test_env_data"),
+                            "environment_id": state.get("environment_id") or 0,
                             "generator_count": state.get("generator_count",0)
                         },
                         "config": config,
@@ -193,6 +195,7 @@ class APICaseGeneratorMainWorkflow2:
                                       "api_doc": state.get("api_doc"),
                                       "additional_info": state.get("additional_info"),
                                       "test_env_data": state.get("test_env_data"),
+                                      "environment_id": state.get("environment_id") or 0,
                                       "generator_count": state.get("generator_count")
                                       },
                                      config=config
@@ -243,6 +246,7 @@ class APICaseGeneratorMainWorkflow2:
                     "api_doc": state.get("api_doc"),
                     "additional_info": state.get("additional_info"),
                     "test_env_data": state.get("test_env_data"),
+                    "environment_id": state.get("environment_id") or 0,
                     "generator_count": 0
                 })
             )

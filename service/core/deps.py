@@ -93,3 +93,55 @@ async def require_project_owner_or_super_admin(
     if membership is None:
         raise AppException("需要项目所有者或超级管理员权限", 403)
     return project, user
+
+
+def _is_project_editor(membership: ProjectMember | None, user: User) -> bool:
+    if user.is_super_admin:
+        return True
+    if membership is None:
+        return False
+    return membership.role >= ProjectMemberRole.editor.value
+
+
+async def require_project_viewer(
+    project_id: int,
+    user: User = Depends(get_current_active_user),
+) -> tuple[Project, ProjectMember | None]:
+    return await require_project_access(project_id, user)
+
+
+async def require_project_editor(
+    project_id: int,
+    user: User = Depends(get_current_active_user),
+) -> tuple[Project, ProjectMember | None]:
+    project, membership = await require_project_access(project_id, user)
+    if not _is_project_editor(membership, user):
+        raise AppException("需要项目编辑者及以上权限", 403)
+    return project, membership
+
+
+async def get_environment_or_404(environment_id: int):
+    from service.test_environment.models import TestEnvironment
+
+    env = await TestEnvironment.get_or_none(id=environment_id)
+    if env is None:
+        raise AppException("变量文件不存在", 404)
+    return env
+
+
+async def require_environment_viewer(
+    environment_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    env = await get_environment_or_404(environment_id)
+    await require_project_viewer(env.project_id, user)
+    return env
+
+
+async def require_environment_editor(
+    environment_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    env = await get_environment_or_404(environment_id)
+    await require_project_editor(env.project_id, user)
+    return env

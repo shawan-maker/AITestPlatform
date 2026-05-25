@@ -1,0 +1,15 @@
+from fastapi import APIRouter
+
+from service.test_environment.variable.catalog_api import router as catalog_router
+from service.test_environment.variable.debug_var_api import router as debug_var_router
+from service.test_environment.variable.environment_api import router as environment_router
+from service.test_environment.variable.import_export_api import router as import_export_router
+from service.test_environment.variable.snapshot_api import router as snapshot_router
+
+router = APIRouter()
+
+router.include_router(catalog_router)
+router.include_router(environment_router)
+router.include_router(snapshot_router)
+router.include_router(import_export_router)
+router.include_router(debug_var_router)

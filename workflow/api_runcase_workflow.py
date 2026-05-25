@@ -43,6 +43,7 @@ checkpointer=InMemorySaver()
 class APIState(TypedDict):
     """定义工作流的数据状态"""
     project: str  # 所属项目
+    environment_id: int  # 测试环境 ID，>0 时从平台加载 test_env_data
     base_case: dict  # 基础用例
     api_doc: str  # 主接口的文档
     precoditions_api_doc: list  # 接口前置依赖
@@ -55,6 +56,44 @@ class APIState(TypedDict):
     api_case_run_result: dict  # 执行用例的结果
     review_status: str # 生成的用例是否可执行
     generator_count: int # 生成用例的次数
+
+
+def _hardcoded_test_env_data() -> dict:
+    file_path = BASE_DIR + r"\test_data\Tools.py"
+    return {
+        "base_url": "http://121.43.169.97:8081",
+        "headers": {"Content-Type": "application/json"},
+        "envs": {
+            "correct_username": "13012341231",
+            "correct_password": "test123",
+        },
+        "global_func": open(file_path, "r", encoding="utf-8").read(),
+        "db": [
+            {
+                "name": "P2P",
+                "type": "mysql",
+                "config": {
+                    "host": "121.43.169.97",
+                    "port": 3306,
+                    "user": "student",
+                    "password": "P2P_student_2023",
+                },
+            }
+        ],
+    }
+
+
+def _resolve_test_env_data(state: APIState) -> dict:
+    environment_id = state.get("environment_id") or 0
+    if environment_id:
+        from service.test_execution.env_loader import load_test_env_data_plain
+
+        return load_test_env_data_plain(environment_id)
+    test_env_data = state.get("test_env_data")
+    if test_env_data:
+        return test_env_data
+    return _hardcoded_test_env_data()
+
 
 class APIruncaseModel(BaseModel):
     """定义可执行的接口测试用例数据模型"""
@@ -79,7 +118,7 @@ class APIRuncaseGeneratorWorkflow:
         """获取测试环境数据(测试数据、工具函数、测试文件、前置依赖接口)"""
         writer = get_stream_writer()
         writer("【开始执行节点】 1、获取测试环境数据(测试数据、工具函数、测试文件、前置依赖接口)")
-        test_env_data = state.get("test_env_data")
+        test_env_data = _resolve_test_env_data(state)
         # 1、获取测试数据
         test_data = test_env_data.get("envs")
         writer(f"获取的测试数据包括：{test_data}")
@@ -151,7 +190,7 @@ class APIRuncaseGeneratorWorkflow:
         writer = get_stream_writer()
         writer("【开始执行节点】 3、执行生成的结构化接口用例")
         api_case_raw  = state.get("api_case")
-        test_env_data = state.get("test_env_data")
+        test_env_data = _resolve_test_env_data(state)
         result = {}
         # 1、将生成的可执行用例格式（List），转换成测试引擎可执行的用例格式（dict)
         runner_api_case = None

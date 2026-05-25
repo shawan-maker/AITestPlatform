@@ -150,41 +150,57 @@ def search_api_document(query:str):
     return result
 
 # 补充api测试用例生成所需要的环境数据的工具
-@tool("load_evn_data",description="加载生成接口测试用例时的所需要的环境数据的工具")
-def load_evn_data():
+@tool("load_evn_data", description="加载生成接口测试用例时的所需要的环境数据的工具")
+def load_evn_data(environment_id: int = 0):
     precoditions = []
     additional_info = {
         "project": "p2p金融项目",
         "module": "登录模块",
         "notice": "对于不能重复使用的数据，请使用工具随机生成数据",
     }
-    # 全局环境数据
-    file_path = BASE_DIR + r"\test_data\Tools.py"
-    test_env_data = {
-        "base_url": "http://121.43.169.97:8081",
-        "headers": {
-            "Content-Type": "application/json"
-        },
-        # 环境变量
-        "envs": {
-            "correct_username": "13012341231",
-            "correct_password": "test123",
-        },
-        "global_func": open(file_path, "r", encoding="utf-8").read(),
-        "db": [
-            {
-                "name": "P2P",
-                "type": "mysql",
-                "config": {
-                    "host": "121.43.169.97",
-                    "port": 3306,
-                    "user": "student",
-                    "password": "P2P_student_2023"
+    if environment_id:
+        import asyncio
+
+        from service.core.database import close_db, init_db
+        from service.test_environment.variable.assembler import TestEnvDataAssembler
+
+        async def _load():
+            await init_db()
+            try:
+                return await TestEnvDataAssembler.get_test_env_data(
+                    environment_id,
+                    use_snapshot=True,
+                    merge_debug=True,
+                )
+            finally:
+                await close_db()
+
+        test_env_data = asyncio.run(_load())
+    else:
+        file_path = BASE_DIR + r"\test_data\Tools.py"
+        test_env_data = {
+            "base_url": "http://121.43.169.97:8081",
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "envs": {
+                "correct_username": "13012341231",
+                "correct_password": "test123",
+            },
+            "global_func": open(file_path, "r", encoding="utf-8").read(),
+            "db": [
+                {
+                    "name": "P2P",
+                    "type": "mysql",
+                    "config": {
+                        "host": "121.43.169.97",
+                        "port": 3306,
+                        "user": "student",
+                        "password": "P2P_student_2023"
+                    }
                 }
-            }
-        ]
-    }
-    # config = {"configurable": {"thread_id": "1"}}
+            ]
+        }
     return {"precoditions": precoditions,
             "additional_info": additional_info,
             "test_env_data": test_env_data}

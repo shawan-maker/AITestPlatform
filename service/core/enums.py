@@ -7,6 +7,17 @@ class ConfigType(str, Enum):
     secret = "secret"
 
 
+class DbType(str, Enum):
+    mysql = "mysql"
+    sqlserver = "sqlserver"
+    oracle = "oracle"
+
+
+class DebugVarSource(str, Enum):
+    engine = "engine"
+    manual = "manual"
+
+
 class RagType(str, Enum):
     requirement = "requirement"
     api = "api"
