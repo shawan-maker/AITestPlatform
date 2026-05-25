@@ -83,7 +83,6 @@ class UserProjectMembership(BaseModel):
     project_name: str
     role: int
     role_label: str
-    member_status: int
 
 
 class UserDetail(BaseModel):

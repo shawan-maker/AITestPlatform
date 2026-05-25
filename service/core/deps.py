@@ -2,9 +2,11 @@ from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 
 from service.core.config import API_V1_PREFIX
+from service.core.enums import ProjectMemberRole
 from service.core.exceptions import AppException
 from service.core.redis import is_token_revoked, is_user_token_invalidated
 from service.core.security import assert_token_type, decode_token
+from service.project.models import Project, ProjectMember
 from service.user.models import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{API_V1_PREFIX}/auth/login")
@@ -43,3 +45,51 @@ async def get_current_super_admin(
     if not user.is_super_admin:
         raise AppException("需要超级管理员权限", 403)
     return user
+
+
+async def get_project_or_404(project_id: int) -> Project:
+    project = await Project.get_or_none(id=project_id).prefetch_related("owner")
+    if project is None:
+        raise AppException("项目不存在", 404)
+    return project
+
+
+async def get_project_membership(
+    project_id: int,
+    user: User = Depends(get_current_active_user),
+) -> ProjectMember | None:
+    if user.is_super_admin:
+        return None
+    membership = await ProjectMember.get_or_none(
+        project_id=project_id,
+        user_id=user.id,
+    )
+    if membership is None:
+        raise AppException("无权访问该项目", 403)
+    return membership
+
+
+async def require_project_access(
+    project_id: int,
+    user: User = Depends(get_current_active_user),
+) -> tuple[Project, ProjectMember | None]:
+    project = await get_project_or_404(project_id)
+    membership = await get_project_membership(project_id, user)
+    return project, membership
+
+
+async def require_project_owner_or_super_admin(
+    project_id: int,
+    user: User = Depends(get_current_active_user),
+) -> tuple[Project, User]:
+    project = await get_project_or_404(project_id)
+    if user.is_super_admin:
+        return project, user
+    membership = await ProjectMember.get_or_none(
+        project_id=project_id,
+        user_id=user.id,
+        role=ProjectMemberRole.owner.value,
+    )
+    if membership is None:
+        raise AppException("需要项目所有者或超级管理员权限", 403)
+    return project, user

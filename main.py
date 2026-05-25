@@ -31,7 +31,7 @@ app.include_router(api_router, prefix=API_V1_PREFIX)
 async def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(
         status_code=exc.code if 400 <= exc.code < 600 else 400,
-        content={"code": exc.code, "message": exc.message, "data": None},
+        content={"code": exc.code, "message": exc.message, "data": exc.data},
     )
 
 

@@ -52,7 +52,6 @@ class UserService:
                 project_name=membership.project.name,
                 role=membership.role,
                 role_label=project_member_role_label(membership.role),
-                member_status=membership.status,
             )
             for membership in memberships
         ]
