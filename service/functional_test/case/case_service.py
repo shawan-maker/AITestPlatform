@@ -20,7 +20,7 @@ from service.functional_test.case.schemas import (
     PaginatedCases,
     TestPointBrief,
 )
-from service.functional_test.case.suite_guard import assert_case_deletable, assert_cases_deletable
+from service.functional_test.case.suite_guard import auto_remove_relations_for_cases
 from service.project.models import ProjectModule
 from service.user.models import User
 
@@ -202,13 +202,7 @@ class CaseService:
     async def delete(cls, user: User, case_id: int) -> None:
         case = await cls._get_case_or_404(case_id)
         await ensure_case_editor(case.project_id, user)
-        suite_names = await assert_case_deletable(case_id)
-        if suite_names:
-            raise AppException(
-                "用例已被测试套件引用，无法删除",
-                409,
-                data={"suite_names": suite_names},
-            )
+        await auto_remove_relations_for_cases([case_id])
         await case.delete()
 
     @classmethod
@@ -311,24 +305,16 @@ class CaseService:
 
     @classmethod
     async def batch_delete(cls, user: User, data: CaseBatchDeleteRequest) -> CaseBatchResult:
-        blocked = await assert_cases_deletable(data.case_ids)
         failures: list[BatchOperationFailure] = []
         success_count = 0
         for case_id in data.case_ids:
-            if case_id in blocked:
-                failures.append(
-                    BatchOperationFailure(
-                        case_id=case_id,
-                        reason=f"已被套件引用: {', '.join(blocked[case_id])}",
-                    )
-                )
-                continue
             case = await FunctionalCase.get_or_none(id=case_id)
             if case is None:
                 failures.append(BatchOperationFailure(case_id=case_id, reason="用例不存在"))
                 continue
             try:
                 await ensure_case_editor(case.project_id, user)
+                await auto_remove_relations_for_cases([case_id])
                 await case.delete()
                 success_count += 1
             except AppException as exc:

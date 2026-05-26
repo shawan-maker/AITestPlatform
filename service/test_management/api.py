@@ -1,5 +1,11 @@
 from fastapi import APIRouter
 
+from service.test_management.picker.picker_api import router as picker_router
+from service.test_management.suite.suite_api import router as suite_router
+from service.test_management.task.task_api import router as task_router
+
 router = APIRouter(prefix="/test-management", tags=["测试管理"])
 
-# TODO: 测试任务、套件、套件-用例/任务-套件关系 CRUD 等接口
+router.include_router(suite_router)
+router.include_router(task_router)
+router.include_router(picker_router)

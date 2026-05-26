@@ -166,6 +166,35 @@ class RunStatus(str, Enum):
     running = "running"
     completed = "completed"
     failed = "failed"
+    cancelled = "cancelled"
+
+
+class RunMode(str, Enum):
+    serial = "serial"
+    parallel = "parallel"
+
+
+class DefectSeverity(str, Enum):
+    normal = "normal"
+    serious = "serious"
+    critical = "critical"
+
+
+class DefectPriority(str, Enum):
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class DefectStatus(str, Enum):
+    init = "init"
+    open = "open"
+    closed = "closed"
+
+
+class DefectSourceType(str, Enum):
+    api_case = "api_case"
+    functional_case = "functional_case"
 
 
 class SuiteCaseType(str, Enum):

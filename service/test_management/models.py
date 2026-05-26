@@ -1,6 +1,6 @@
 from tortoise import fields, models
 
-from service.core.enums import RunStatus, SuiteCaseType, TaskSuiteType
+from service.core.enums import RunMode, RunStatus, SuiteCaseType, TaskSuiteType
 
 
 class TestTask(models.Model):
@@ -8,9 +8,22 @@ class TestTask(models.Model):
     project = fields.ForeignKeyField(
         "models.Project", related_name="test_tasks", on_delete=fields.CASCADE
     )
+    module = fields.ForeignKeyField(
+        "models.ProjectModule",
+        related_name="test_tasks",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    environment = fields.ForeignKeyField(
+        "models.TestEnvironment",
+        related_name="test_tasks",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
     task_name = fields.CharField(max_length=255)
     description = fields.TextField(null=True)
     type = fields.CharEnumField(TaskSuiteType)
+    run_mode = fields.CharEnumField(RunMode, null=True)
     status = fields.CharEnumField(RunStatus, default=RunStatus.pending)
     created_by = fields.ForeignKeyField(
         "models.User",
@@ -23,6 +36,7 @@ class TestTask(models.Model):
 
     class Meta:
         table = "test_task"
+        unique_together = (("project_id", "task_name"),)
 
 
 class TestSuite(models.Model):
@@ -30,9 +44,22 @@ class TestSuite(models.Model):
     project = fields.ForeignKeyField(
         "models.Project", related_name="test_suites", on_delete=fields.CASCADE
     )
+    module = fields.ForeignKeyField(
+        "models.ProjectModule",
+        related_name="test_suites",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    environment = fields.ForeignKeyField(
+        "models.TestEnvironment",
+        related_name="test_suites",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
     suite_name = fields.CharField(max_length=255)
     description = fields.TextField(null=True)
     type = fields.CharEnumField(TaskSuiteType)
+    run_mode = fields.CharEnumField(RunMode, default=RunMode.serial)
     created_by = fields.ForeignKeyField(
         "models.User",
         related_name="created_test_suites",
@@ -44,6 +71,7 @@ class TestSuite(models.Model):
 
     class Meta:
         table = "test_suite"
+        unique_together = (("project_id", "suite_name"),)
 
 
 class SuiteCaseRelation(models.Model):
@@ -54,6 +82,7 @@ class SuiteCaseRelation(models.Model):
     case_type = fields.CharEnumField(SuiteCaseType)
     case_id = fields.IntField()
     case_order = fields.IntField()
+    use_dependency = fields.BooleanField(default=True)
 
     class Meta:
         table = "suite_case_relation"
@@ -72,3 +101,18 @@ class TaskSuiteRelation(models.Model):
 
     class Meta:
         table = "task_suite_relation"
+        unique_together = (("task_id", "suite_id"),)
+
+
+class TaskCaseRelation(models.Model):
+    id = fields.IntField(pk=True)
+    task = fields.ForeignKeyField(
+        "models.TestTask", related_name="case_relations", on_delete=fields.CASCADE
+    )
+    case_type = fields.CharEnumField(SuiteCaseType, default=SuiteCaseType.functional)
+    case_id = fields.IntField()
+    case_order = fields.IntField()
+
+    class Meta:
+        table = "task_case_relation"
+        unique_together = (("task_id", "case_type", "case_id"),)

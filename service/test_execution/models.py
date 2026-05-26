@@ -1,6 +1,15 @@
 from tortoise import fields, models
 
-from service.core.enums import CaseRunStatus, CaseRunType, RunStatus
+from service.core.enums import (
+    CaseRunStatus,
+    CaseRunType,
+    DefectPriority,
+    DefectSeverity,
+    DefectSourceType,
+    DefectStatus,
+    FunctionalExecResult,
+    RunStatus,
+)
 
 
 class ApiCaseRunRecord(models.Model):
@@ -8,6 +17,12 @@ class ApiCaseRunRecord(models.Model):
     suite_run = fields.ForeignKeyField(
         "models.TestSuiteRun",
         related_name="case_run_records",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    task_run = fields.ForeignKeyField(
+        "models.TestTaskRun",
+        related_name="api_case_run_records",
         null=True,
         on_delete=fields.SET_NULL,
     )
@@ -52,6 +67,12 @@ class ApiCaseRunRecord(models.Model):
     duration_ms = fields.IntField(null=True)
     log_data = fields.TextField(null=True)
     api_requests_info = fields.JSONField(null=True)
+    defect = fields.ForeignKeyField(
+        "models.TestDefect",
+        related_name="api_case_runs",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
@@ -141,3 +162,73 @@ class TestTaskRun(models.Model):
 
     class Meta:
         table = "test_task_run"
+
+
+class FunctionalCaseRunRecord(models.Model):
+    id = fields.IntField(pk=True)
+    task_run = fields.ForeignKeyField(
+        "models.TestTaskRun",
+        related_name="functional_case_run_records",
+        on_delete=fields.CASCADE,
+    )
+    functional_case = fields.ForeignKeyField(
+        "models.FunctionalCase",
+        related_name="run_records",
+        on_delete=fields.CASCADE,
+    )
+    exec_result = fields.CharEnumField(
+        FunctionalExecResult, default=FunctionalExecResult.pending
+    )
+    remark = fields.TextField(null=True)
+    defect = fields.ForeignKeyField(
+        "models.TestDefect",
+        related_name="functional_case_runs",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    triggered_by = fields.ForeignKeyField(
+        "models.User",
+        related_name="triggered_functional_case_runs",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    start_time = fields.DatetimeField(null=True, precision=6)
+    end_time = fields.DatetimeField(null=True, precision=6)
+    duration_ms = fields.IntField(null=True)
+    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+
+    class Meta:
+        table = "functional_case_run_record"
+        unique_together = (("task_run_id", "functional_case_id"),)
+
+
+class TestDefect(models.Model):
+    id = fields.IntField(pk=True)
+    project = fields.ForeignKeyField(
+        "models.Project", related_name="test_defects", on_delete=fields.CASCADE
+    )
+    module = fields.ForeignKeyField(
+        "models.ProjectModule",
+        related_name="test_defects",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    title = fields.CharField(max_length=255)
+    steps = fields.TextField(null=True)
+    severity = fields.CharEnumField(DefectSeverity, default=DefectSeverity.normal)
+    priority = fields.CharEnumField(DefectPriority, default=DefectPriority.medium)
+    status = fields.CharEnumField(DefectStatus, default=DefectStatus.init)
+    external_key = fields.CharField(max_length=128, null=True)
+    source_type = fields.CharEnumField(DefectSourceType)
+    source_run_id = fields.IntField(null=True)
+    source_case_id = fields.IntField(null=True)
+    created_by = fields.ForeignKeyField(
+        "models.User",
+        related_name="created_test_defects",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+
+    class Meta:
+        table = "test_defect"
