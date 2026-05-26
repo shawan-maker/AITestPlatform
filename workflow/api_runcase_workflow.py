@@ -137,7 +137,7 @@ class APIRuncaseGeneratorWorkflow:
         #     precoditions_api_doc = db.cursor.fetchall()
         #     precoditions_api_doc = [] if precoditions_api_doc is None else precoditions_api_doc
         #     print("前置依赖接口数据如下：", other_api)
-        precoditions_api_doc = []
+        precoditions_api_doc = state.get("precoditions_api_doc") or []
         writer(f"获取的前置依赖接口包括：{precoditions_api_doc}")
         writer("【执行节点结束】 1、获取测试环境数据(测试数据、工具函数、测试文件、前置依赖接口)")
         # 5、返回测试环境数据

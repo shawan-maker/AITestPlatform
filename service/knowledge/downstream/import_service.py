@@ -1,15 +1,9 @@
-import json
-from pathlib import Path
 from typing import Literal
 
-from service.api_test.models import ApiInterface
-from service.core.config import BASE_DIR
-from service.core.enums import (
-    ActualParseRoute,
-    ApiInterfaceSource,
-    KnowledgeDocType,
-    ParseStatus,
-)
+from service.api_test.interface.import_service import ImportService as ApiTestImportService
+from service.api_test.interface.models import ApiInterfaceCatalog
+from service.api_test.interface.schemas import ImportConfirmItem, ImportConfirmRequest
+from service.core.enums import KnowledgeDocType, ParseStatus
 from service.core.exceptions import AppException
 from service.knowledge.document.permissions import ensure_document_editor
 from service.knowledge.document.version_service import VersionService
@@ -17,10 +11,10 @@ from service.knowledge.downstream.schemas import ImportInterfacesResult
 from service.project.models import ProjectModule
 from service.user.models import User
 
-_API_VERSION = 1
-
 
 class ImportService:
+    """Thin proxy → api_test.interface.import_service (legacy knowledge path)."""
+
     @classmethod
     async def import_interfaces(
         cls,
@@ -29,6 +23,8 @@ class ImportService:
         version_id: int,
         module_id: int,
         import_mode: Literal["skip", "upsert"] = "skip",
+        *,
+        catalog_id: int | None = None,
     ) -> ImportInterfacesResult:
         document = await ensure_document_editor(document_id, user)
         if document.doc_type != KnowledgeDocType.api_doc:
@@ -45,86 +41,48 @@ class ImportService:
         ).exists():
             raise AppException("项目模块不存在", 404)
 
-        parse_path = Path(BASE_DIR) / version.parse_result_path
-        if not parse_path.is_file():
-            raise AppException("解析结果文件不存在", 404)
-
-        raw = parse_path.read_text(encoding="utf-8")
-        items = json.loads(raw) if raw.strip() else []
-        if not isinstance(items, list):
-            raise AppException("解析结果格式无效", 400)
-
-        source = cls._resolve_source(version)
-        project_id = document.project_id
-        created = updated = skipped = 0
-        interface_ids: list[int] = []
-
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            fields = cls._map_item(item, source, document.id, module_id, project_id)
-            if fields is None:
-                continue
-
-            existing = await ApiInterface.get_or_none(
-                project_id=project_id,
-                method=fields["method"],
-                path=fields["path"],
-                version=_API_VERSION,
+        resolved_catalog_id = catalog_id
+        if resolved_catalog_id is None:
+            default_cat = await ApiInterfaceCatalog.get_or_none(
+                project_id=document.project_id, parent_id=None, name="默认"
             )
-            if existing is not None:
-                if import_mode == "skip":
-                    skipped += 1
-                    interface_ids.append(existing.id)
-                    continue
-                for key, value in fields.items():
-                    setattr(existing, key, value)
-                await existing.save()
-                updated += 1
-                interface_ids.append(existing.id)
-            else:
-                iface = await ApiInterface.create(**fields, version=_API_VERSION)
-                created += 1
-                interface_ids.append(iface.id)
+            if default_cat is None:
+                default_cat = await ApiInterfaceCatalog.create(
+                    project_id=document.project_id,
+                    name="默认",
+                    level=1,
+                )
+            resolved_catalog_id = default_cat.id
 
-        return ImportInterfacesResult(
-            created=created,
-            updated=updated,
-            skipped=skipped,
-            interface_ids=interface_ids,
+        items_raw = ApiTestImportService._load_parse_items(version.parse_result_path)
+        items = [
+            ImportConfirmItem(
+                method=(i.get("method") or "").upper(),
+                path=i.get("path") or "",
+                summary=i.get("summary"),
+                parameters=i.get("parameters"),
+                request_body=i.get("requestBody"),
+                responses=i.get("responses"),
+            )
+            for i in items_raw
+            if i.get("method") and i.get("path")
+        ]
+
+        result = await ApiTestImportService.confirm(
+            user,
+            ImportConfirmRequest(
+                project_id=document.project_id,
+                catalog_id=resolved_catalog_id,
+                module_id=module_id,
+                document_id=document_id,
+                version_id=version_id,
+                mode=import_mode,
+                items=items,
+            ),
         )
-
-    @staticmethod
-    def _resolve_source(version) -> ApiInterfaceSource:
-        if version.actual_parse_route == ActualParseRoute.openapi:
-            return ApiInterfaceSource.openapi
-        return ApiInterfaceSource.swagger
-
-    @staticmethod
-    def _map_item(
-        item: dict,
-        source: ApiInterfaceSource,
-        source_document_id: int,
-        module_id: int,
-        project_id: int,
-    ) -> dict | None:
-        path = item.get("path") or ""
-        method = (item.get("method") or "").upper()
-        if not path or not method:
-            return None
-        summary = item.get("summary")
-        if summary is not None:
-            summary = str(summary)[:255]
-        return {
-            "project_id": project_id,
-            "module_id": module_id,
-            "method": method,
-            "path": path,
-            "summary": summary,
-            "parameters": item.get("parameters")
-            or {"header": [], "path": [], "query": []},
-            "request_body": item.get("requestBody"),
-            "responses": item.get("responses") or [],
-            "source": source,
-            "source_document_id": source_document_id,
-        }
+        return ImportInterfacesResult(
+            created=result.created,
+            updated=result.updated,
+            skipped=result.skipped,
+            interface_ids=result.interface_ids,
+        )

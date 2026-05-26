@@ -1,5 +1,15 @@
 from fastapi import APIRouter
 
+from service.api_test.catalog.catalog_api import router as catalog_router
+from service.api_test.case.case_api import router as case_router
+from service.api_test.debug.debug_api import router as debug_router
+from service.api_test.dependency.dependency_api import router as dependency_router
+from service.api_test.interface.interface_api import router as interface_router
+
 router = APIRouter(prefix="/api-test", tags=["接口测试"])
 
-# TODO: 接口、依赖组、基础用例、可执行用例 CRUD 等接口
+router.include_router(catalog_router)
+router.include_router(interface_router)
+router.include_router(debug_router)
+router.include_router(dependency_router)
+router.include_router(case_router)

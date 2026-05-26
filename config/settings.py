@@ -31,3 +31,5 @@ llm = ChatOpenAI(model_name=os.getenv("LLM_MODEL"),
 MAX_GENERATOR_COUNT = 3
 # 配置生成可执行接口用例的批次大小
 MAX_BATCH_SIZE = 5
+# 基础用例覆盖率不足时，complete_basecase 最大补充生成次数
+MAX_BASECASE_REGENERATE_COUNT = 1

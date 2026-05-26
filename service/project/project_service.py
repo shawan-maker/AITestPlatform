@@ -3,6 +3,7 @@ import asyncio
 from tortoise.transactions import in_transaction
 
 from service.ai_generation.models import AIGenerationSession
+from service.api_test.interface.models import ApiInterfaceCatalog
 from service.api_test.models import ApiBaseCase, ApiInterface, ApiTestCase
 from service.core.enums import ProjectMemberRole, project_member_role_label
 from service.core.exceptions import AppException
@@ -31,6 +32,7 @@ BLOCKER_MODELS: list[tuple[type, str]] = [
     (KnowledgeDocument, "knowledge_documents"),
     (RequirementDoc, "requirement_docs"),
     (FunctionalCase, "functional_cases"),
+    (ApiInterfaceCatalog, "api_interface_catalogs"),
     (ApiInterface, "api_interfaces"),
     (ApiBaseCase, "api_base_cases"),
     (ApiTestCase, "api_test_cases"),

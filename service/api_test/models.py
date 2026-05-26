@@ -1,47 +1,21 @@
+"""Re-export ORM models for Tortoise and backward-compatible imports."""
+
 from tortoise import fields, models
 
+from service.api_test.interface.models import (
+    ApiInterface,
+    ApiInterfaceCatalog,
+    ApiInterfaceDebugTemplate,
+)
 from service.core.enums import (
     ApiBaseCaseStatus,
-    ApiInterfaceSource,
+    ApiCaseKind,
     ApiTestCaseType,
+    DependencyInferenceSource,
     ExecStatus,
     ReviewStatus,
     SourceType,
 )
-
-
-class ApiInterface(models.Model):
-    id = fields.IntField(pk=True)
-    project = fields.ForeignKeyField(
-        "models.Project", related_name="api_interfaces", on_delete=fields.CASCADE
-    )
-    module = fields.ForeignKeyField(
-        "models.ProjectModule",
-        related_name="api_interfaces",
-        null=True,
-        on_delete=fields.SET_NULL,
-    )
-    method = fields.CharField(max_length=10)
-    path = fields.CharField(max_length=255)
-    summary = fields.CharField(max_length=255, null=True)
-    parameters = fields.JSONField()
-    request_body = fields.JSONField(null=True)
-    responses = fields.JSONField()
-    source = fields.CharEnumField(ApiInterfaceSource, default=ApiInterfaceSource.manual)
-    source_document = fields.ForeignKeyField(
-        "models.KnowledgeDocument",
-        related_name="imported_api_interfaces",
-        null=True,
-        on_delete=fields.SET_NULL,
-    )
-    version = fields.IntField(default=1)
-    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
-    updated_at = fields.DatetimeField(auto_now=True, precision=6)
-
-    class Meta:
-        table = "api_interface"
-        unique_together = (("project_id", "method", "path", "version"),)
-        indexes = (("project_id", "summary"),)
 
 
 class ApiDependencyGroup(models.Model):
@@ -55,6 +29,12 @@ class ApiDependencyGroup(models.Model):
         related_name="api_dependency_groups",
         null=True,
         on_delete=fields.SET_NULL,
+    )
+    target_api = fields.OneToOneField(
+        "models.ApiInterface",
+        related_name="dependency_group",
+        null=True,
+        on_delete=fields.CASCADE,
     )
     description = fields.TextField(null=True)
     created_by = fields.ForeignKeyField(
@@ -90,10 +70,15 @@ class ApiDependency(models.Model):
     seq = fields.SmallIntField(default=1)
     param_map = fields.JSONField(null=True)
     required = fields.BooleanField(default=True)
+    inference_source = fields.CharEnumField(
+        DependencyInferenceSource, default=DependencyInferenceSource.manual
+    )
+    confidence = fields.FloatField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
         table = "api_dependency"
+        unique_together = (("dependency_group_id", "seq"),)
 
 
 class ApiBaseCase(models.Model):
@@ -150,11 +135,19 @@ class ApiTestCase(models.Model):
         on_delete=fields.SET_NULL,
     )
     title = fields.CharField(max_length=255)
+    case_kind = fields.CharEnumField(ApiCaseKind, default=ApiCaseKind.main)
+    sort_order = fields.IntField(default=0)
     case_payload = fields.JSONField()
     type = fields.CharEnumField(ApiTestCaseType, default=ApiTestCaseType.api)
     review_status = fields.CharEnumField(ReviewStatus, default=ReviewStatus.init)
     exec_status = fields.CharEnumField(ExecStatus, default=ExecStatus.pending)
     generation_count = fields.IntField(default=1)
+    default_file = fields.ForeignKeyField(
+        "models.EnvUploadedFile",
+        related_name="api_test_cases",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
     environment = fields.ForeignKeyField(
         "models.TestEnvironment",
         related_name="generated_api_test_cases",
@@ -177,12 +170,30 @@ class ApiTestCase(models.Model):
     created_by = fields.ForeignKeyField(
         "models.User", related_name="created_api_test_cases", on_delete=fields.RESTRICT
     )
+    updated_by = fields.ForeignKeyField(
+        "models.User",
+        related_name="updated_api_test_cases",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
         table = "api_test_case"
+        unique_together = (("interface_id", "title"),)
         indexes = (
             ("project_id", "module_id", "exec_status"),
-            ("interface_id",),
+            ("interface_id", "case_kind"),
         )
+
+
+__all__ = [
+    "ApiInterfaceCatalog",
+    "ApiInterface",
+    "ApiInterfaceDebugTemplate",
+    "ApiDependencyGroup",
+    "ApiDependency",
+    "ApiBaseCase",
+    "ApiTestCase",
+]

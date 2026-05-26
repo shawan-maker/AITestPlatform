@@ -6,6 +6,19 @@ from service.test_environment.file.resolver import FileResolver
 from service.test_environment.variable.assembler import TestEnvDataAssembler
 
 
+async def load_test_env_data(
+    environment_id: int,
+    *,
+    use_snapshot: bool = True,
+    merge_debug: bool = True,
+) -> dict:
+    return await TestEnvDataAssembler.get_test_env_data(
+        environment_id,
+        use_snapshot=use_snapshot,
+        merge_debug=merge_debug,
+    )
+
+
 def load_test_env_data_plain(
     environment_id: int,
     *,

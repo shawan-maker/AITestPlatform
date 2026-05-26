@@ -126,6 +126,22 @@ class ApiTestCaseType(str, Enum):
     business = "business"
 
 
+class ApiCaseKind(str, Enum):
+    precondition = "precondition"
+    main = "main"
+
+
+class DependencyInferenceSource(str, Enum):
+    auto_rule = "auto_rule"
+    auto_ai = "auto_ai"
+    manual = "manual"
+
+
+class CaseRunType(str, Enum):
+    debug = "debug"
+    suite = "suite"
+
+
 class ReviewStatus(str, Enum):
     init = "init"
     success = "success"

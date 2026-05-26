@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field
 
 from config.prompts.api_workflow.api_verify_courage_prompt import api_coverage_check_prompt
 from config.prompts.api_workflow.complete_api_basecase_prompt import complete_api_basecase_prompt
-from config.settings import llm
+from config.settings import MAX_BASECASE_REGENERATE_COUNT, llm
 from config.prompts.api_workflow.api_basecase_generator_prompt import api_basecase_generator_prompt
 from langchain_core.output_parsers import JsonOutputParser
 from typing import List,Annotated
@@ -41,9 +41,10 @@ class StateNode(TypedDict):
     project_name: str  # 项目名称
     module_name: str  # 模块名称
     precoditions: list[str]  # 前置执行依赖接口的调用顺序
-    api_cases: Annotated[List,operator.add]  # 生成的测试用例
+    api_cases: Annotated[List, operator.add]  # 生成的测试用例
     api_cases_check_report: str  # 覆盖率验证报告
     env_config: dict  # 测试环境配置
+    basecase_regenerate_count: int  # 已执行的补充生成次数
 
 class BaseCaseModel(BaseModel):
     name: str = Field(description="测试用例名称")
@@ -99,8 +100,9 @@ class ApiBaseCaseGeneratorWorkflow:
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
         resp = safe_structure_parser(complete_api_basecase_prompt,llm,parser,{"api_doc":api_doc,"precoditions":precoditions,"api_cases":api_cases,"api_cases_check_report":api_cases_check_report})
         writer("【执行节点完成】 3、补充生成api基础测试用例：")
-        # 3、返回基础的测试用例
-        return {"api_cases": resp}
+        count = state.get("basecase_regenerate_count", 0) + 1
+        writer(f"基础用例补充生成次数：{count}/{MAX_BASECASE_REGENERATE_COUNT}")
+        return {"api_cases": resp, "basecase_regenerate_count": count}
 
     # 1.4、输出所有的测试点
     def output_basecase(self,state: StateNode):
@@ -113,12 +115,19 @@ class ApiBaseCaseGeneratorWorkflow:
         return {}
 
     # 1.5 路由分发的节点
-    def route_dispatch(self,state: StateNode):
+    def route_dispatch(self, state: StateNode):
         """路由分发的节点"""
-        if "已经覆盖全部测试点" in "\n".join(state["api_cases_check_report"]):
+        report = state.get("api_cases_check_report") or []
+        count = state.get("basecase_regenerate_count", 0)
+        if "已经覆盖全部测试点" in "\n".join(report):
             return "output_basecase"
-        else:
-            return "complete_basecase"
+        if count >= MAX_BASECASE_REGENERATE_COUNT:
+            writer = get_stream_writer()
+            writer(
+                f"已达基础用例最大补充生成次数({MAX_BASECASE_REGENERATE_COUNT})，停止补充"
+            )
+            return "output_basecase"
+        return "complete_basecase"
 
     def create_basecase_workflow(self):
         """创建工作流"""

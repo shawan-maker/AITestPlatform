@@ -1,6 +1,6 @@
 from tortoise import fields, models
 
-from service.core.enums import CaseRunStatus, RunStatus
+from service.core.enums import CaseRunStatus, CaseRunType, RunStatus
 
 
 class ApiCaseRunRecord(models.Model):
@@ -12,8 +12,18 @@ class ApiCaseRunRecord(models.Model):
         on_delete=fields.SET_NULL,
     )
     api_case = fields.ForeignKeyField(
-        "models.ApiTestCase", related_name="run_records", on_delete=fields.CASCADE
+        "models.ApiTestCase",
+        related_name="run_records",
+        null=True,
+        on_delete=fields.CASCADE,
     )
+    interface = fields.ForeignKeyField(
+        "models.ApiInterface",
+        related_name="run_records",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    run_type = fields.CharEnumField(CaseRunType, default=CaseRunType.debug)
     environment = fields.ForeignKeyField(
         "models.TestEnvironment",
         related_name="case_run_records",
@@ -23,6 +33,12 @@ class ApiCaseRunRecord(models.Model):
     env_snapshot = fields.ForeignKeyField(
         "models.TestEnvironmentSnapshot",
         related_name="case_run_records",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    triggered_by = fields.ForeignKeyField(
+        "models.User",
+        related_name="triggered_api_case_runs",
         null=True,
         on_delete=fields.SET_NULL,
     )

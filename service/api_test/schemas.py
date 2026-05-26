@@ -1,3 +1,11 @@
-"""接口测试模块 Pydantic 模型（请求/响应）。"""
+"""Re-export commonly used schemas."""
 
-# TODO: ApiInterfaceCreate, ApiBaseCaseCreate, ApiTestCaseCreate, ApiTestCasePayload
+from service.api_test.case.schemas import CaseOut, PaginatedCases
+from service.api_test.interface.schemas import InterfaceOut, PaginatedInterfaces
+
+__all__ = [
+    "InterfaceOut",
+    "PaginatedInterfaces",
+    "CaseOut",
+    "PaginatedCases",
+]

@@ -3,27 +3,154 @@
   2、根据基础的接口用例，生成可执行的结构化接口用例
   3、保存结构化接口用例到数据库
 """
-import functools
+import io
 import json
 import operator
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from typing import Annotated, Any, List, TypedDict
 
-from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
-from langgraph.constants import START, END
+from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.types import Send
-from pydantic import BaseModel, Field
-from typing import TypedDict, Optional, List, Annotated
-from langgraph.checkpoint.memory import InMemorySaver
 
 from config.settings import BASE_DIR, MAX_BATCH_SIZE
+from service.core.enums import ReviewStatus
 from utils.logger.logger import _ThreadSafeStdout
 from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow, StateNode
 from workflow.api_runcase_workflow import APIRuncaseGeneratorWorkflow, APIState
-checkpointer=InMemorySaver()
+
+checkpointer = InMemorySaver()
+
+
+@dataclass
+class BaseCasePreRunResult:
+    """单条基础用例经 APIRuncaseGeneratorWorkflow 预执行后的结果。"""
+
+    index: int
+    api_case: dict
+    review_status: ReviewStatus
+    error: str | None = None
+
+
+def _normalize_pre_run_output(result: dict, base_case: dict) -> tuple[dict, ReviewStatus]:
+    review_raw = result.get("review_status") or ReviewStatus.init.value
+    try:
+        review = ReviewStatus(review_raw)
+    except ValueError:
+        review = ReviewStatus.error
+
+    api_case = result.get("api_case") or {}
+    if isinstance(api_case, list) and api_case:
+        api_case = api_case[0]
+    if not isinstance(api_case, dict):
+        api_case = {"title": base_case.get("name"), "steps": base_case.get("steps")}
+    return api_case, review
+
+
+def concurrent_pre_run_base_cases(
+    base_cases: list[dict],
+    *,
+    api_doc: str,
+    indices: list[int] | None = None,
+    precoditions_api_doc: list | None = None,
+    environment_id: int = 0,
+    project_id: int | str | None = None,
+    test_env_data: dict | None = None,
+    additional_info: dict | None = None,
+    generator_count: int = 0,
+    config: dict[str, Any] | RunnableConfig | None = None,
+    max_workers: int | None = None,
+) -> list[BaseCasePreRunResult]:
+    """ThreadPoolExecutor 并发预执行基础用例（共享入口，供主工作流与 api_test confirm 复用）。"""
+    if not base_cases:
+        return []
+
+    if indices is None:
+        indices = list(range(len(base_cases)))
+    if len(indices) != len(base_cases):
+        raise ValueError("indices 长度须与 base_cases 一致")
+
+    run_config = config or {"configurable": {"thread_id": "api-runcase-concurrent"}}
+    workers = max_workers or MAX_BATCH_SIZE
+
+    _safe_stdout = _ThreadSafeStdout(sys.stdout)
+    sys.stdout = _safe_stdout
+    task_outputs: dict[Any, tuple[io.StringIO, int, dict]] = {}
+
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_list = []
+            for batch_idx, (orig_idx, base_case) in enumerate(zip(indices, base_cases)):
+                workflow = APIRuncaseGeneratorWorkflow().create_runcase_workflow()
+                buf = io.StringIO()
+                invoke_input: dict[str, Any] = {
+                    "base_case": base_case,
+                    "api_doc": api_doc,
+                    "environment_id": environment_id,
+                    "generator_count": generator_count,
+                }
+                if precoditions_api_doc is not None:
+                    invoke_input["precoditions_api_doc"] = precoditions_api_doc
+                if project_id is not None:
+                    invoke_input["project"] = str(project_id)
+                if test_env_data is not None:
+                    invoke_input["test_env_data"] = test_env_data
+                if additional_info is not None:
+                    invoke_input["additional_info"] = additional_info
+
+                invoke_kwargs = {"input": invoke_input, "config": run_config}
+
+                def _run_with_buffer(wf, kwargs, buffer, _batch_idx=batch_idx):
+                    _safe_stdout.set_buffer(buffer)
+                    return wf.invoke(**kwargs)
+
+                future = executor.submit(
+                    _run_with_buffer, workflow, invoke_kwargs, buf
+                )
+                task_outputs[future] = (buf, orig_idx, base_case)
+                future_list.append(future)
+
+            results: list[BaseCasePreRunResult] = []
+            for pos, future in enumerate(future_list, start=1):
+                buf, orig_idx, base_case = task_outputs[future]
+                try:
+                    raw = future.result()
+                    api_case, review = _normalize_pre_run_output(raw, base_case)
+                    results.append(
+                        BaseCasePreRunResult(
+                            index=orig_idx,
+                            api_case=api_case,
+                            review_status=review,
+                        )
+                    )
+                except Exception as exc:
+                    results.append(
+                        BaseCasePreRunResult(
+                            index=orig_idx,
+                            api_case={
+                                "title": base_case.get("name"),
+                                "steps": base_case.get("steps"),
+                            },
+                            review_status=ReviewStatus.error,
+                            error=str(exc),
+                        )
+                    )
+
+                task_log = buf.getvalue()
+                if task_log.strip():
+                    print(
+                        f"\n{'=' * 20} 预执行任务 {pos}/{len(future_list)} 输出 {'=' * 20}"
+                    )
+                    print(task_log, end="")
+    finally:
+        sys.stdout = _safe_stdout._original
+
+    return results
 
 
 class mainState(TypedDict):
@@ -59,80 +186,21 @@ class APICaseGeneratorMainWorkflow:
         return {"base_cases":basecase_state.get("api_cases")}
 
     # 2、根据基础的接口用例，生成可执行结构化接口用例
-    def generator_api_structure_runcase(self,state:mainState,config: RunnableConfig):
-        """
-        并发执行的节点 — 使用多线程并发 生成可执行的接口测试用例
-        使用 _ThreadSafeStdout 替换 sys.stdout 实现线程级输出隔离（含 per-task buffer 隔离）
-        """
-        import io
-
+    def generator_api_structure_runcase(self, state: mainState, config: RunnableConfig):
+        """并发预执行：复用 concurrent_pre_run_base_cases。"""
         writer = get_stream_writer()
         writer("【开始执行主流程节点】 2、生成可执行结构化接口用例：")
-
-        # 创建线程安全的 stdout 替换实例
-        _safe_stdout = _ThreadSafeStdout(sys.stdout)
-        # 全局替换 stdout（所有线程的 print/logging 都会走这里）
-        sys.stdout = _safe_stdout
-
-        # 用于收集每个任务的输出 {future: StringIO}
-        task_outputs = {}
-
-        try:
-            # 创建线程池(设置线程池的最大工作线程数为MAX_BATCH_SIZE)
-            with ThreadPoolExecutor(max_workers=MAX_BATCH_SIZE) as executor:
-                future_list = []
-                # 提交任务到线程池
-                for idx, base_case in enumerate(state.get("base_cases", [])):
-                    # 为每个任务创建独立的子工作流
-                    workflow = APIRuncaseGeneratorWorkflow().create_runcase_workflow()
-
-                    # ★ 为每个任务创建独立的 buffer
-                    buf = io.StringIO()
-
-                    # ★ 构造 invoke 参数（state + config）
-                    invoke_kwargs = {
-                        "input": {
-                            "base_case": base_case,
-                            "api_doc": state.get("api_doc"),
-                            "additional_info": state.get("additional_info"),
-                            "test_env_data": state.get("test_env_data"),
-                            "environment_id": state.get("environment_id") or 0,
-                            "generator_count": state.get("generator_count",0)
-                        },
-                        "config": config,
-                    }
-
-                    # ★ 用 wrapper 包裹：先设 buffer → 执行 → 记录 buffer
-                    def _run_with_buffer(wf, kwargs, buffer, task_idx):
-                        _safe_stdout.set_buffer(buffer)  # 关键：绑定当前线程的 buffer
-                        try:
-                            return wf.invoke(**kwargs)
-                        finally:
-                            pass  # buffer 保持，直到主线程读取
-
-                    future = executor.submit(_run_with_buffer, workflow, invoke_kwargs, buf, idx)
-                    task_outputs[future] = buf  # 记录 buffer 以便后续读取
-                    # 将返回的Future对象添加到列表中
-                    future_list.append(future)
-
-                # 等待线程池中的所有任务执行完毕，获取每个任务的返回结果
-                result = []
-                for future in future_list:
-                    api_case = future.result().get("api_case")
-                    result.append(api_case)
-
-                    # ★ 按顺序输出每个任务的完整日志（有序!）
-                    buf = task_outputs[future]
-                    task_log = buf.getvalue()
-                    if task_log.strip():
-                        print(f"\n{'='*20} 任务 {future_list.index(future)+1}/{len(future_list)} 输出 {'='*20}")
-                        print(task_log, end="")
-        finally:
-            # ★ 恢复原始 stdout（确保无论成功/异常都恢复）
-            sys.stdout = _safe_stdout._original
-
+        results = concurrent_pre_run_base_cases(
+            state.get("base_cases") or [],
+            api_doc=state.get("api_doc") or "",
+            environment_id=state.get("environment_id") or 0,
+            test_env_data=state.get("test_env_data"),
+            additional_info=state.get("additional_info"),
+            generator_count=state.get("generator_count") or 0,
+            config=config,
+        )
         writer("【执行主流程节点完成】 2、生成可执行结构化接口用例")
-        return {"api_run_cases": result}
+        return {"api_run_cases": [r.api_case for r in results]}
 
     # 3、保存结构化接口用例到数据库
     def save_api_runcase_to_db(self,state:mainState):

@@ -40,7 +40,7 @@ class ModuleService:
         blockers: list[str] = []
         if await RequirementDoc.filter(module_id=module_id).exists():
             blockers.append("需求文档")
-        if await ApiInterface.filter(module_id=module_id).exists():
+        if await ApiInterface.filter(module_id=module_id, is_current=True).exists():
             blockers.append("接口定义")
         if await KnowledgeDocument.filter(module_id=module_id).exists():
             blockers.append("知识库文档")
