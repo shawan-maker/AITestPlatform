@@ -107,7 +107,6 @@ class RagGateway:
                 manager = await cls._get_manager(workspace_key)
                 await manager.delete_document(rag_doc_id)
         except Exception:
-            # 删除 RAG 索引失败不阻断主流程
             return
 
     @classmethod

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from service.core.enums import ActualParseRoute, KnowledgeDocType, ParseMode
-from service.knowledge.file_rules import API_SPEC_EXTENSIONS, detect_api_spec_kind
+from service.knowledge.rules.file_rules import API_SPEC_EXTENSIONS, detect_api_spec_kind
 
 MULTIMODAL_EXTENSIONS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp"}
 

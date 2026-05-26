@@ -1,6 +1,6 @@
 from service.core.enums import KnowledgeDocType, RagType
 from service.core.exceptions import AppException
-from service.knowledge.models import KnowledgeWorkspace
+from service.knowledge.document.models import KnowledgeWorkspace
 from service.project.models import Project
 
 

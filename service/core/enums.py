@@ -72,6 +72,19 @@ class RequirementStatus(str, Enum):
     changed = "changed"
 
 
+class RequirementSourceType(str, Enum):
+    knowledge = "knowledge"
+    manual = "manual"
+
+
+class FunctionalExecResult(str, Enum):
+    pending = "pending"
+    passed = "passed"
+    failed = "failed"
+    blocked = "blocked"
+    skipped = "skipped"
+
+
 class SourceType(str, Enum):
     manual = "manual"
     ai = "ai"

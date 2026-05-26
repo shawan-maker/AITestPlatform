@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from service.core.config import BASE_DIR, KNOWLEDGE_UPLOAD_ROOT
-from service.core.exceptions import AppException
-from service.knowledge.models import KnowledgeDocumentVersion
+from service.knowledge.document.models import KnowledgeDocumentVersion
 
 
 class KnowledgeStorage:

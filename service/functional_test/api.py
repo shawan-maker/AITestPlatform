@@ -1,5 +1,9 @@
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/functional", tags=["功能测试"])
+from service.functional_test.case.api import router as case_router
+from service.functional_test.requirement.api import router as requirement_router
 
-# TODO: 需求、测试点、功能用例 CRUD 等接口
+router = APIRouter(prefix="/functional")
+
+router.include_router(requirement_router)
+router.include_router(case_router)

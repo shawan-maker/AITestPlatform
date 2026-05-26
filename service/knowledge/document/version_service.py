@@ -1,11 +1,11 @@
 from service.core.enums import IndexStatus
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
-from service.knowledge.index_worker import IndexWorker
-from service.knowledge.models import KnowledgeDocument, KnowledgeDocumentVersion
-from service.knowledge.permissions import ensure_document_editor, ensure_document_viewer
-from service.knowledge.schemas import KnowledgeVersionBrief, PaginatedKnowledgeVersions
-from service.knowledge.storage import KnowledgeStorage
+from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
+from service.knowledge.document.permissions import ensure_document_editor, ensure_document_viewer
+from service.knowledge.document.schemas import KnowledgeVersionBrief, PaginatedKnowledgeVersions
+from service.knowledge.document.storage import KnowledgeStorage
+from service.knowledge.pipeline.index_worker import IndexWorker
 from service.user.models import User
 
 _PROCESSING_STATUSES = {IndexStatus.indexing, IndexStatus.parsing}

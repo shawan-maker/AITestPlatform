@@ -1,6 +1,6 @@
 from service.core.deps import get_project_or_404
 from service.core.exceptions import AppException
-from service.knowledge.models import KnowledgeDocument
+from service.knowledge.document.models import KnowledgeDocument
 from service.project.permissions import ensure_project_editor, ensure_project_viewer
 from service.user.models import User
 

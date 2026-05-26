@@ -11,9 +11,9 @@ from service.core.enums import (
     ParseStatus,
 )
 from service.core.exceptions import AppException
-from service.knowledge.permissions import ensure_document_editor
-from service.knowledge.schemas import ImportInterfacesResult
-from service.knowledge.version_service import VersionService
+from service.knowledge.document.permissions import ensure_document_editor
+from service.knowledge.document.version_service import VersionService
+from service.knowledge.downstream.schemas import ImportInterfacesResult
 from service.project.models import ProjectModule
 from service.user.models import User
 

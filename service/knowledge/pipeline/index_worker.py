@@ -10,11 +10,11 @@ from service.core.enums import (
     KnowledgeDocType,
     ParseStatus,
 )
-from service.knowledge.models import KnowledgeDocument, KnowledgeDocumentVersion
-from service.knowledge.parse_router import resolve_parse_route
-from service.knowledge.rag_gateway import RagGateway
-from service.knowledge.requirement_sync import sync_requirement_doc
-from service.knowledge.storage import KnowledgeStorage
+from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
+from service.knowledge.document.storage import KnowledgeStorage
+from service.knowledge.downstream.requirement_sync import sync_requirement_candidate
+from service.knowledge.pipeline.rag_gateway import RagGateway
+from service.knowledge.rules.parse_router import resolve_parse_route
 from utils.parser.openapi_document_parser import parse_openapi_file
 from utils.parser.swagger_document_parser import parse_swagger_file
 
@@ -128,7 +128,7 @@ class IndexWorker:
         await cls._activate_version(version, document)
 
         if document.doc_type == KnowledgeDocType.requirement:
-            await sync_requirement_doc(document, version)
+            await sync_requirement_candidate(document, version)
 
     @classmethod
     async def _process_swagger(

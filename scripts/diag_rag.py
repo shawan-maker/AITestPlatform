@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 
 async def main() -> None:
-    from service.knowledge.rag_gateway import RagGateway
+    from service.knowledge.pipeline.rag_gateway import RagGateway
 
     print("=== RAG 诊断 ===")
     print("remote_available:", RagGateway.is_remote_available())

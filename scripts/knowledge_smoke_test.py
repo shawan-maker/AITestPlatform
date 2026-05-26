@@ -190,7 +190,20 @@ def _run(client: TestClient) -> None:
     print("detail ok")
 
     if index_status == "indexed":
-        print("requirement sync ok (indexed via remote RAG)")
+        cand_resp = client.get(
+            f"/api/v1/functional/requirements/candidates?project_id={project_id}",
+            headers=headers,
+        )
+        assert cand_resp.status_code == 200, cand_resp.text
+        candidates = cand_resp.json()["data"]
+        assert candidates["total"] >= 1, candidates
+        matched = [
+            c
+            for c in candidates["items"]
+            if c.get("source_document_id") == document_id
+        ]
+        assert matched, "indexed requirement should create candidate"
+        print("requirement candidate sync ok", matched[0]["id"])
 
     _run_phase_d_api_import(client, headers, project_id, module_id)
 

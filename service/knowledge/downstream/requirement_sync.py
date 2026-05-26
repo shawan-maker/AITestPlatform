@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 
 from service.core.enums import IndexStatus
-from service.functional_test.models import RequirementDoc
-from service.knowledge.models import KnowledgeDocument, KnowledgeDocumentVersion
-from service.knowledge.storage import KnowledgeStorage
+from service.functional_test.models import RequirementCandidate
+from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
+from service.knowledge.document.storage import KnowledgeStorage
 
-_PREVIEW_LEN = 500
+_PREVIEW_LEN = 8000
 
 
 def _text_preview(version: KnowledgeDocumentVersion) -> str | None:
@@ -22,15 +22,15 @@ def _text_preview(version: KnowledgeDocumentVersion) -> str | None:
         return None
 
 
-async def sync_requirement_doc(
+async def sync_requirement_candidate(
     document: KnowledgeDocument,
     version: KnowledgeDocumentVersion,
-) -> RequirementDoc:
+) -> RequirementCandidate:
     title = f"{document.title} ({version.version_label})"
     description = _text_preview(version)
     now = datetime.now(timezone.utc)
 
-    existing = await RequirementDoc.get_or_none(
+    existing = await RequirementCandidate.get_or_none(
         source_document_id=document.id,
         source_document_version_id=version.id,
     )
@@ -51,7 +51,7 @@ async def sync_requirement_doc(
         )
         return existing
 
-    return await RequirementDoc.create(
+    return await RequirementCandidate.create(
         project_id=document.project_id,
         module_id=document.module_id,
         title=title,

@@ -10,7 +10,7 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
 from config.settings import BASE_DIR
-from service.knowledge.rag_gateway import RagGateway
+from service.knowledge.pipeline.rag_gateway import RagGateway
 from utils.parser.api_document_ai_parser import APIDocumentParser
 from workflow.api_case_main_workflow import APICaseGeneratorMainWorkflow
 from workflow.case_generator_workflow import GenerateTestCases

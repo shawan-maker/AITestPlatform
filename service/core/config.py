@@ -21,6 +21,7 @@ APP_VERSION: str = "0.1.0"
 MAX_UPLOAD_BYTES: int = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
 KNOWLEDGE_UPLOAD_ROOT: Path = BASE_DIR / "rag" / "document"
 KNOWLEDGE_PARSE_ROOT: Path = BASE_DIR / "rag" / "parsed"
+MAX_COMPLETE_TEST_POINTS: int = int(os.getenv("MAX_COMPLETE_TEST_POINTS", "1"))
 
 TORTOISE_ORM = {
     "connections": {"default": DATABASE_URL},

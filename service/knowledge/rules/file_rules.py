@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-from service.core.config import KNOWLEDGE_UPLOAD_ROOT
 from service.core.enums import IndexStatus, KnowledgeDocType, ParseMode
 from service.core.exceptions import AppException
 

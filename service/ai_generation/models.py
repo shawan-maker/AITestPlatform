@@ -27,6 +27,8 @@ class AIGenerationSession(models.Model):
     prompt_hash = fields.CharField(max_length=64, null=True)
     status = fields.CharEnumField(SessionStatus, default=SessionStatus.pending)
     error_message = fields.TextField(null=True)
+    output_payload = fields.JSONField(null=True)
+    user_prompt = fields.TextField(null=True)
     created_by = fields.ForeignKeyField(
         "models.User", related_name="ai_generation_sessions", on_delete=fields.RESTRICT
     )

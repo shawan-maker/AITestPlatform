@@ -3,20 +3,20 @@ from service.core.deps import get_project_or_404
 from service.core.enums import IndexStatus, KnowledgeDocType
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
-from service.knowledge.file_rules import FileRules, sha256_hex
-from service.knowledge.models import KnowledgeDocument, KnowledgeDocumentVersion
-from service.knowledge.permissions import ensure_document_editor, ensure_document_viewer
-from service.knowledge.schemas import (
+from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
+from service.knowledge.document.permissions import ensure_document_editor, ensure_document_viewer
+from service.knowledge.document.schemas import (
     KnowledgeDocumentBrief,
     KnowledgeDocumentDetail,
     KnowledgeDocumentListQuery,
     PaginatedKnowledgeDocuments,
 )
-from service.knowledge.index_worker import IndexWorker
-from service.knowledge.rag_gateway import RagGateway
-from service.knowledge.storage import KnowledgeStorage
-from service.knowledge.version_service import VersionService, version_label_from_seq
-from service.knowledge.workspace_service import WorkspaceService
+from service.knowledge.document.storage import KnowledgeStorage
+from service.knowledge.document.version_service import VersionService, version_label_from_seq
+from service.knowledge.document.workspace_service import WorkspaceService
+from service.knowledge.pipeline.index_worker import IndexWorker
+from service.knowledge.pipeline.rag_gateway import RagGateway
+from service.knowledge.rules.file_rules import FileRules, sha256_hex
 from service.project.models import ProjectMember, ProjectModule
 from service.project.permissions import ensure_project_editor, ensure_project_viewer
 from service.user.models import User
