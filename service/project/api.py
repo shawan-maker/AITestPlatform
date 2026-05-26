@@ -3,15 +3,20 @@ from fastapi import APIRouter, Depends, Query
 from service.core.deps import (
     get_current_active_user,
     get_current_super_admin,
+    require_project_editor,
     require_project_owner_or_super_admin,
+    require_project_viewer,
 )
 from service.core.response import success
+from service.project.module_service import ModuleService
 from service.project.project_service import ProjectService
 from service.project.schemas import (
     ProjectCreateRequest,
     ProjectListQuery,
     ProjectMemberAddRequest,
     ProjectMemberUpdateRequest,
+    ProjectModuleCreateRequest,
+    ProjectModuleUpdateRequest,
     ProjectOwnerTransferRequest,
     ProjectUpdateRequest,
 )
@@ -131,3 +136,51 @@ async def transfer_project_owner(
 ):
     result = await ProjectService.transfer_owner(super_admin, project_id, data)
     return success(data=result, message="项目所有者已转移")
+
+
+@router.get("/{project_id}/modules", summary="项目模块列表")
+async def list_project_modules(
+    project_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    _: tuple = Depends(require_project_viewer),
+    user: User = Depends(get_current_active_user),
+):
+    data = await ModuleService.list_modules(
+        user, project_id, page=page, page_size=page_size
+    )
+    return success(data=data)
+
+
+@router.post("/{project_id}/modules", summary="新增项目模块")
+async def create_project_module(
+    project_id: int,
+    data: ProjectModuleCreateRequest,
+    _: tuple = Depends(require_project_editor),
+    user: User = Depends(get_current_active_user),
+):
+    result = await ModuleService.create_module(user, project_id, data)
+    return success(data=result, message="模块创建成功")
+
+
+@router.patch("/{project_id}/modules/{module_id}", summary="编辑项目模块")
+async def update_project_module(
+    project_id: int,
+    module_id: int,
+    data: ProjectModuleUpdateRequest,
+    _: tuple = Depends(require_project_editor),
+    user: User = Depends(get_current_active_user),
+):
+    result = await ModuleService.update_module(user, project_id, module_id, data)
+    return success(data=result, message="模块更新成功")
+
+
+@router.delete("/{project_id}/modules/{module_id}", summary="删除项目模块")
+async def delete_project_module(
+    project_id: int,
+    module_id: int,
+    _: tuple = Depends(require_project_editor),
+    user: User = Depends(get_current_active_user),
+):
+    await ModuleService.delete_module(user, project_id, module_id)
+    return success(message="模块已删除")

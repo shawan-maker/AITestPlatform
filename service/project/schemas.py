@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from service.core.pagination import Paginated
+
 
 class ProjectCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="项目名称")
@@ -94,3 +96,49 @@ class ProjectDetail(ProjectBrief):
 
 class ProjectDeleteBlockers(BaseModel):
     blockers: dict[str, int]
+
+
+class ProjectModuleCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1024)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("模块名称不能为空")
+        return stripped
+
+
+class ProjectModuleUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=1024)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("模块名称不能为空")
+        return stripped
+
+    @model_validator(mode="after")
+    def at_least_one_field(self):
+        if self.name is None and self.description is None:
+            raise ValueError("至少提供 name 或 description 之一")
+        return self
+
+
+class ProjectModuleBrief(BaseModel):
+    id: int
+    project_id: int
+    name: str
+    description: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+PaginatedProjectModules = Paginated[ProjectModuleBrief]

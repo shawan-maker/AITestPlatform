@@ -32,9 +32,36 @@ class KnowledgeDocType(str, Enum):
 class IndexStatus(str, Enum):
     pending = "pending"
     indexing = "indexing"
+    parsing = "parsing"
     indexed = "indexed"
     failed = "failed"
     na = "na"
+
+
+class ParseMode(str, Enum):
+    openapi = "openapi"
+    swagger = "swagger"
+    ai = "ai"
+
+
+class ParseStatus(str, Enum):
+    pending = "pending"
+    parsing = "parsing"
+    parsed = "parsed"
+    failed = "failed"
+
+
+class ActualParseRoute(str, Enum):
+    ai_text = "ai_text"
+    ai_multimodal = "ai_multimodal"
+    swagger = "swagger"
+    openapi = "openapi"
+    auto_text = "auto_text"
+
+
+class RagBackend(str, Enum):
+    rag_client = "rag_client"
+    rag_manager = "rag_manager"
 
 
 class RequirementStatus(str, Enum):

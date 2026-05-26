@@ -17,7 +17,7 @@ from service.test_environment.file.schemas import (
 from service.test_environment.file.storage_backend import get_storage_backend
 from service.user.models import User
 
-UPLOAD_ROOT = BASE_DIR / "uploads" / "env"
+UPLOAD_ROOT = BASE_DIR / "test_data" / "files"
 
 
 class UploadedFileService:

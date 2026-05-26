@@ -10,26 +10,11 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
 from config.settings import BASE_DIR
-from rag.ragManager import RAGManager
-from rag.rag_api import RAGClient
+from service.knowledge.rag_gateway import RagGateway
 from utils.parser.api_document_ai_parser import APIDocumentParser
 from workflow.api_case_main_workflow import APICaseGeneratorMainWorkflow
 from workflow.case_generator_workflow import GenerateTestCases
 from concurrent.futures import ThreadPoolExecutor
-# ============================================================
-# 🔑 单例缓存 —— 避免每次工具调用都创建新的 RAGManager 实例
-# ============================================================
-_rag_instances = {}  # {project_name: RAGManager实例}
-_rag_client_instance = None # RAGClient 单例
-
-
-# ================================rag安全调用执行方法========================================================
-def _get_or_create_rag(project_name: str) -> RAGManager:
-    """获取或创建 RAGManager 单例"""
-    if project_name not in _rag_instances:
-        _rag_instances[project_name] = RAGManager()
-    return _rag_instances[project_name]
-
 
 # ============================================================
 # 🔑 持久化事件循环 —— 解决 Lock 绑定不同循环的问题
@@ -58,24 +43,6 @@ def _run_async_safely(coro):
     # 设置超时防止死锁（5分钟）
     return future.result(timeout=300)
 
-async def rag_search(project, req_desc: str):
-    """去知识库中检索内容"""
-    # 🔑 用单例而不是每次 new
-    rag_manager = _get_or_create_rag(project)
-    await rag_manager.init_rag(project)
-    result = await rag_manager.query(req_desc)
-    return result
-
-# async def rag_search(project,req_desc: str):
-#     """去知识库中检索内容"""
-#     # 初始化自定义RAGManager类的对象
-#     rag_manager = RAGManager()
-#     # 初始化rag对象
-#     await rag_manager.init_rag(project)
-#     # 搜索需求文档中的具体内容
-#     result = await rag_manager.query(req_desc)
-#     # 将检索的需求文档，保存到state中
-#     return result
 
 # ================================生成手工/功能测试用例的工具========================================================
 @tool("search_requirement",description="基于需求文档检索的工具")
@@ -88,7 +55,7 @@ def search_requirement(project_name,query:str):
     """
     writer = get_stream_writer()
     writer("开始执行【检索需求的工具】")
-    result = _run_async_safely(rag_search(project_name, query))
+    result = _run_async_safely(RagGateway.query(project_name, query))
     print("rag检索的需求文档内容为：",result)
     writer("【检索需求工具】执行完成 ")
     return result
@@ -119,15 +86,8 @@ def generate_testcases(project_name:str, module_id:str,requirement:str,config: R
     return response.get("test_cases",[])
 
 # ================================生成接口/自动化测试用例的工具========================================================
-def _get_or_create_rag_client() -> RAGClient:
-    """获取或创建 RAGClient 单例"""
-    global _rag_client_instance
-    if _rag_client_instance is None:
-        _rag_client_instance = RAGClient()
-    return _rag_client_instance
-
 @tool("search_api_document",description="基于接口文档检索的工具")
-def search_api_document(query:str):
+def search_api_document(project_name: str, query: str):
     """
         工具作用：接口文档检索的工具，
         参数：
@@ -136,16 +96,17 @@ def search_api_document(query:str):
     """
     writer = get_stream_writer()
     writer("开始执行【接口文档检索工具】")
-    # 获取单例RAG_API
-    rag_client = _get_or_create_rag_client()
-    # 调用rag_api中定义的查询接口
-    res = rag_client.query_stream(query)
     result = ""
-    # 对流式返回结果进行打印和拼接
-    for item in res:
-        if item is not None:
-            writer(item)
-            result += item
+    if RagGateway.is_remote_available():
+        for item in RagGateway.query_stream(project_name, query):
+            if item is not None:
+                writer(item)
+                result += item
+    else:
+        chunk = _run_async_safely(RagGateway.query(project_name, query))
+        if chunk:
+            writer(chunk)
+            result += chunk
     writer("【接口文档检索工具】执行完成 ")
     return result
 
@@ -235,4 +196,6 @@ def api_document_to_cases(api_document: str,
 
 if __name__ == '__main__':
     # search_requirement.invoke(input={"project_name": "tpshop", "query": "登录功能需求"})
-    search_api_document.invoke("获取登录模块的详细接口文档")
+    search_api_document.invoke(
+        input={"project_name": "tpshop", "query": "获取登录模块的详细接口文档"}
+    )

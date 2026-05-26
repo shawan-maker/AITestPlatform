@@ -32,6 +32,9 @@ class RequirementDoc(models.Model):
         null=True,
         on_delete=fields.SET_NULL,
     )
+    # 逻辑外键 → knowledge_document_version.id
+    source_document_version_id = fields.IntField(null=True)
+    source_version_label = fields.CharField(max_length=20, null=True)
     index_status = fields.CharEnumField(IndexStatus, default=IndexStatus.na)
     indexed_at = fields.DatetimeField(null=True, precision=6)
     created_by = fields.ForeignKeyField(
