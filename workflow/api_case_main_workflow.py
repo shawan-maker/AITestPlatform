@@ -16,9 +16,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
-from langgraph.types import Send
 
 from config.settings import BASE_DIR, MAX_BATCH_SIZE
+from service.ai_generation.common import build_default_additional_info
 from service.core.enums import ReviewStatus
 from utils.logger.logger import _ThreadSafeStdout
 from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow, StateNode
@@ -155,9 +155,7 @@ def concurrent_pre_run_base_cases(
 
 class mainState(TypedDict):
     api_doc: str  # API接口文档
-    project_name: str  # 项目名称
     environment_id: int  # 测试环境 ID，>0 时从平台加载 test_env_data
-    module_name: str  # 模块名称
     precoditions: list[str]  # 前置执行依赖接口的调用顺序
     base_cases: List  # 生成的测试用例（所有用例 - 列表）
     base_case: dict # 生成的基础测试用例（单个用例 - 预执行）
@@ -230,131 +228,15 @@ class APICaseGeneratorMainWorkflow:
         # 3、返回工作流
         return builder.compile(checkpointer=checkpointer)
 
-# 主工作流(使用 Send并发 生成可执行的接口测试用例)
-class APICaseGeneratorMainWorkflow2:
-    """
-    1、根据接口文档生成基础的接口用例
-    2、根据基础的接口用例，生成可执行结构化接口用例
-    3、保存结构化接口用例到数据库
-    """
-    # 1、根据接口文档生成基础的接口用例
-    def generator_api_basecase(self,state:mainState):
-        writer = get_stream_writer()
-        writer("【开始执行主流程节点】 1、生成api基础测试用例：")
-        workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
-        basecase_state:StateNode = workflow.invoke(
-                                    {"api_doc": state.get("api_doc"), "precoditions": state.get("precoditions")},
-                                   config=config
-                                   )
-        writer("【执行主流程节点完成】 1、生成api基础测试用例：")
-        return {"base_cases":basecase_state.get("api_cases")}
-
-    # 2、根据基础的接口用例，生成可执行结构化接口用例
-    def generator_api_structure_runcase(self,state:mainState):
-        """
-        并发执行的节点 — 每个 Send 任务独立运行在此节点中
-        通过线程本地存储区分不同任务的日志
-        """
-        writer = get_stream_writer()
-        writer("【开始执行主流程节点】 2、生成可执行结构化接口用例：")
-        workflow = APIRuncaseGeneratorWorkflow().create_runcase_workflow()
-        runcase_state: APIState = workflow.invoke(
-                                     {"base_case": state.get("base_case"),
-                                      "api_doc": state.get("api_doc"),
-                                      "additional_info": state.get("additional_info"),
-                                      "test_env_data": state.get("test_env_data"),
-                                      "environment_id": state.get("environment_id") or 0,
-                                      "generator_count": state.get("generator_count")
-                                      },
-                                     config=config
-                                 )
-        writer("【执行主流程节点完成】 2、生成可执行结构化接口用例")
-        api_case = runcase_state.get("api_case")
-        return {"api_run_cases": [api_case]}
-
-    # 3、对所有基础用例进行任务拆分，分别进行结构化用例生成
-    def api_case_generation_task_split(self,state:mainState):
-        """发送并发任务
-╔══════════════════════════════════════════════════════════╗
-║   方案1、使用Send，则会同时执行所有任务，可能触发AGI限流          ║
-║   方案2：Send + 分批次循环 在当前 LangGraph 中【无法实现】      ║
-║                                                          ║
-║   原因不是代码写法问题，而是 LangGraph 图结构的                 ║
-║   【根本性设计限制】：                                       ║
-║                                                          ║
-║   • 条件边函数能返回 Send → 但不能成为路由目标                 ║
-║   • 普通节点能成为路由目标 → 但不能返回 Send                   ║
-║   • 两者互斥，无法同时具备                                   ║
-║                                                          ║
-║   唯一可行方案3：                                           ║
-║   ────────────────────                                   ║
-║   【单节点内 ThreadPoolExecutor 并发】                      ║
-║   用 Python 线程池替代 LangGraph Send 做 fan-out            ║
-║   用条件边(str→节点)实现循环                                 ║
-║                                                          ║
-╚══════════════════════════════════════════════════════════╝
-        """
-
-        # BATCH_SIZE = MAX_BATCH_SIZE
-        # all_cases = state.get("base_cases", [])
-        # # 1、计算当前批次
-        # # ★ 唯一需要的：已处理了多少条 → 自然知道该处理第几批了
-        # processed = len(state.get("api_run_cases", []))
-        # batch = all_cases[processed: processed + BATCH_SIZE]
-        # if not batch:
-        #     # 所有批次已处理完毕
-        #     return [END]
-        # 2、分批次创建并发任务
-        task_list = []
-        # for base_case in batch:
-        for base_case in state.get("base_cases", []):
-            task_list.append(
-                Send('generator_api_structure_runcase',{
-                    "base_case": base_case,
-                    "api_doc": state.get("api_doc"),
-                    "additional_info": state.get("additional_info"),
-                    "test_env_data": state.get("test_env_data"),
-                    "environment_id": state.get("environment_id") or 0,
-                    "generator_count": 0
-                })
-            )
-        return task_list
-
-    # 4、保存结构化接口用例到数据库
-    def save_api_runcase_to_db(self,state:mainState):
-        writer = get_stream_writer()
-        writer("【开始执行主流程节点】 4、保存结构化接口用例到数据库：")
-        # 保存结构化接口用例到数据库
-        writer("【执行主流程节点完成】 4、保存结构化接口用例到数据库：")
-        return {"api_run_cases": state.get("api_run_cases")}
-
-    # # 5、检查是否还有剩余批次
-    # def check_remaining_batches(self, state: mainState):
-    #     """检查是否还有剩余批次"""
-    #     all_cases = state.get("base_cases", [])
-    #     processed_count = len(state.get("api_run_cases", []))
-    #
-    #     if processed_count < len(all_cases):
-    #         return "api_case_generation_task_split"  # 继续下一批
-    #     else:
-    #         return "save_api_runcase_to_db"  # 全部完成
-
-    # 6、创建主工作流
-    def create_main_workflow(self):
-        # 1、添加节点
-        builder = StateGraph(mainState)
-        builder.add_node("generator_api_basecase",self.generator_api_basecase)
-        builder.add_node("generator_api_structure_runcase",self.generator_api_structure_runcase)
-        builder.add_node("save_api_runcase_to_db",self.save_api_runcase_to_db)
-        # 2、对执行节点进行编排
-        builder.add_edge(START, "generator_api_basecase")
-        builder.add_conditional_edges("generator_api_basecase", self.api_case_generation_task_split,["generator_api_structure_runcase"])
-        builder.add_edge("generator_api_structure_runcase", "save_api_runcase_to_db")
-        builder.add_edge("save_api_runcase_to_db", END)
-        # 3、返回工作流
-        return builder.compile(checkpointer=checkpointer)
 
 if __name__ == '__main__':
+    import sys
+
+    from service.core import config as core_config
+
+    if not core_config.AITESTPLATFORM_ALLOW_WORKFLOW_MAIN:
+        print("Set AITESTPLATFORM_ALLOW_WORKFLOW_MAIN=1 to run this workflow demo")
+        sys.exit(0)
     api_doc = """[
         {
             "path": "/member/public/login",
@@ -448,11 +330,7 @@ if __name__ == '__main__':
         }
     ]
     """
-    additional_info = {
-        "project": "p2p金融项目",
-        "module": "登录模块",
-        "notice": "对于不能重复使用的数据，请使用工具随机生成数据",
-    }
+    additional_info = build_default_additional_info()
     # 全局环境数据
     file_path = BASE_DIR + r"\test_data\Tools.py"
     test_env_data = {

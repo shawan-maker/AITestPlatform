@@ -39,8 +39,6 @@ checkpointer=InMemorySaver()
 # 定义工作流的数据状态
 class StateNode(TypedDict):
     api_doc: str  # API接口文档
-    project_name: str  # 项目名称
-    module_name: str  # 模块名称
     precoditions: list[str]  # 前置执行依赖接口的调用顺序
     user_prompt: str | None  # 用户附加要求
     api_cases: Annotated[List, operator.add]  # 生成的测试用例
@@ -187,6 +185,13 @@ class ApiBaseCaseGeneratorWorkflow:
         return graph
 
 if __name__ == '__main__':
+    import sys
+
+    from service.core import config as core_config
+
+    if not core_config.AITESTPLATFORM_ALLOW_WORKFLOW_MAIN:
+        print("Set AITESTPLATFORM_ALLOW_WORKFLOW_MAIN=1 to run this workflow demo")
+        sys.exit(0)
     api_doc = """[
     {
         "path": "/member/public/login",
@@ -284,7 +289,6 @@ if __name__ == '__main__':
     res = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow().stream({"api_doc":api_doc,"precoditions":[]},
                             config=config,
                             stream_mode=["messages","custom"],
-                            context={"project_name":"1","module_id":"1"}
                             )
     print("=========================")
     # for chunk in res:

@@ -9,10 +9,12 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
-from config.settings import BASE_DIR
+
+from langchain_core.runnables import RunnableConfig
 from service.knowledge.pipeline.rag_gateway import RagGateway
 from utils.parser.api_document_ai_parser import APIDocumentParser
-from workflow.api_case_main_workflow import APICaseGeneratorMainWorkflow
+from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
+from workflow.api_case_main_workflow import concurrent_pre_run_base_cases
 from workflow.case_generator_workflow import GenerateTestCases
 from concurrent.futures import ThreadPoolExecutor
 
@@ -78,8 +80,6 @@ def generate_testcases(project_name:str, module_id:str,requirement:str,config: R
     response = workflow.invoke({"requirement": requirement},
                             subgraphs=True,
                             config=config,
-                            # stream_mode=["messages","custom"],
-                            context={"project_name":project_name,"module_id":module_id}
                             )
     writer("【基于需求文档生成用例的服务】工具执行完毕")
     # 返回生成测试用例结果
@@ -112,59 +112,38 @@ def search_api_document(project_name: str, query: str):
 
 # 补充api测试用例生成所需要的环境数据的工具
 @tool("load_evn_data", description="加载生成接口测试用例时的所需要的环境数据的工具")
-def load_evn_data(environment_id: int = 0):
+def load_evn_data(environment_id: int):
+    """加载平台测试环境数据；environment_id 为 test_environment 表主键。"""
+    if not environment_id or environment_id <= 0:
+        raise ValueError(
+            "load_evn_data 需要有效的 environment_id（平台测试环境 ID，>0）"
+        )
     precoditions = []
-    additional_info = {
-        "project": "p2p金融项目",
-        "module": "登录模块",
-        "notice": "对于不能重复使用的数据，请使用工具随机生成数据",
+    additional_info = build_default_additional_info()
+    import asyncio
+
+    from service.core.database import close_db, init_db
+    from service.test_environment.variable.assembler import TestEnvDataAssembler
+
+    async def _load():
+        await init_db()
+        try:
+            return await TestEnvDataAssembler.get_test_env_data(
+                environment_id,
+                use_snapshot=True,
+                merge_debug=True,
+            )
+        finally:
+            await close_db()
+
+    test_env_data = dict(asyncio.run(_load()))
+    test_env_data["environment_id"] = environment_id
+    return {
+        "precoditions": precoditions,
+        "additional_info": additional_info,
+        "test_env_data": test_env_data,
+        "environment_id": environment_id,
     }
-    if environment_id:
-        import asyncio
-
-        from service.core.database import close_db, init_db
-        from service.test_environment.variable.assembler import TestEnvDataAssembler
-
-        async def _load():
-            await init_db()
-            try:
-                return await TestEnvDataAssembler.get_test_env_data(
-                    environment_id,
-                    use_snapshot=True,
-                    merge_debug=True,
-                )
-            finally:
-                await close_db()
-
-        test_env_data = asyncio.run(_load())
-    else:
-        file_path = BASE_DIR + r"\test_data\Tools.py"
-        test_env_data = {
-            "base_url": "http://121.43.169.97:8081",
-            "headers": {
-                "Content-Type": "application/json"
-            },
-            "envs": {
-                "correct_username": "13012341231",
-                "correct_password": "test123",
-            },
-            "global_func": open(file_path, "r", encoding="utf-8").read(),
-            "db": [
-                {
-                    "name": "P2P",
-                    "type": "mysql",
-                    "config": {
-                        "host": "121.43.169.97",
-                        "port": 3306,
-                        "user": "student",
-                        "password": "P2P_student_2023"
-                    }
-                }
-            ]
-        }
-    return {"precoditions": precoditions,
-            "additional_info": additional_info,
-            "test_env_data": test_env_data}
 
 # 基于接口文档生成接口测试用例的工具
 @tool("api_document_to_cases",description="基于接口文档生成接口测试用例的工具")
@@ -172,27 +151,40 @@ def api_document_to_cases(api_document: str,
                           config: RunnableConfig,
                           precoditions: list = None,
                           additional_info: dict = None,
-                          test_env_data: dict = None
+                          test_env_data: dict = None,
+                          environment_id: int = 0,
                           ):
     """
-    基于知识库查询出来的接口文档，生成接口测试用例
-    :param api_document: 搜索出的接口文档
-    :param precoditions: 前置依赖接口
-    :param additional_info: 额外信息
-    :param test_env_data: 测试环境数据
-    :param config: checkpointer记忆的线程id配置
-    :return:
+    基于知识库查询出来的接口文档，生成接口测试用例（与 HTTP confirm 路径一致的两阶段流程）。
     """
-    # 1、将接口文档转换为生成接口测试用例所需的json格式
+    env_id = environment_id or (test_env_data or {}).get("environment_id") or 0
+    if env_id <= 0:
+        raise ValueError(
+            "api_document_to_cases 需要有效的 environment_id（请先调用 load_evn_data）"
+        )
+
     res = APIDocumentParser().api_parser(api_document)
     api_doc = json.dumps(res, ensure_ascii=False, indent=4)
-    # 2、基于json格式的json文档生成接口测试用例
-    workflow = APICaseGeneratorMainWorkflow().create_main_workflow()
-    res = workflow.invoke(
-        {"api_doc": api_doc, "precoditions": precoditions, "additional_info": additional_info, "test_env_data": test_env_data},
-        config=config
-        )
-    return res.get("api_run_cases")
+
+    base_workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
+    base_state = base_workflow.invoke(
+        {"api_doc": api_doc, "precoditions": precoditions or []},
+        config=config,
+    )
+    base_cases = base_state.get("api_cases") or []
+    if not base_cases:
+        return []
+
+    info = additional_info or build_default_additional_info()
+    pre_results = concurrent_pre_run_base_cases(
+        base_cases,
+        api_doc=api_doc,
+        environment_id=env_id,
+        test_env_data=test_env_data,
+        additional_info=info,
+        config=config,
+    )
+    return [r.api_case for r in pre_results]
 
 if __name__ == '__main__':
     # search_requirement.invoke(input={"project_name": "tpshop", "query": "登录功能需求"})

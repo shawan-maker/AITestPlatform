@@ -1,4 +1,4 @@
-"""测试管理模块 HTTP 联调脚本。用法: python scripts/test_management_smoke_test.py"""
+"""测试执行模块 HTTP 联调脚本。用法: python scripts/test_execution_smoke_test.py"""
 
 import sys
 import time
@@ -10,6 +10,8 @@ sys.path.insert(0, str(ROOT))
 from fastapi.testclient import TestClient  # noqa: E402
 
 from main import app  # noqa: E402
+
+_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
 
 
 def _login(client: TestClient, username: str, password: str) -> str:
@@ -28,7 +30,7 @@ def _auth_headers(token: str) -> dict:
 def _create_min_env(client: TestClient, headers: dict, project_id: int) -> int:
     cat_resp = client.post(
         f"/api/v1/env/catalogs?project_id={project_id}",
-        json={"name": "tm-smoke-catalog"},
+        json={"name": "exec-smoke-catalog"},
         headers=headers,
     )
     assert cat_resp.status_code == 200, cat_resp.text
@@ -36,7 +38,7 @@ def _create_min_env(client: TestClient, headers: dict, project_id: int) -> int:
 
     env_resp = client.post(
         f"/api/v1/env/environments?project_id={project_id}",
-        json={"env_name": "tm_smoke_env", "catalog_id": catalog_id},
+        json={"env_name": "exec_smoke_env", "catalog_id": catalog_id},
         headers=headers,
     )
     assert env_resp.status_code == 200, env_resp.text
@@ -59,14 +61,36 @@ def _create_min_env(client: TestClient, headers: dict, project_id: int) -> int:
     return environment_id
 
 
+def _poll_suite_progress(
+    client: TestClient,
+    headers: dict,
+    run_id: int,
+    *,
+    timeout_sec: float = 30.0,
+) -> dict:
+    deadline = time.time() + timeout_sec
+    last = {}
+    while time.time() < deadline:
+        resp = client.get(
+            f"/api/v1/test-execution/runs/suite-runs/{run_id}/progress",
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        last = resp.json()["data"]
+        if last.get("status") in _TERMINAL_STATUSES:
+            return last
+        time.sleep(0.3)
+    return last
+
+
 def _run(client: TestClient) -> None:
     token = _login(client, "admin", "123456")
     headers = _auth_headers(token)
 
-    project_name = f"TMSmoke_{int(time.time())}"
+    project_name = f"ExecSmoke_{int(time.time())}"
     proj_resp = client.post(
         "/api/v1/projects",
-        json={"name": project_name, "description": "test management smoke"},
+        json={"name": project_name, "description": "test execution smoke"},
         headers=headers,
     )
     assert proj_resp.status_code == 200, proj_resp.text
@@ -80,8 +104,7 @@ def _run(client: TestClient) -> None:
         "/api/v1/test-management/suites",
         json={
             "project_id": project_id,
-            "suite_name": "api_smoke_suite",
-            "description": "smoke",
+            "suite_name": "exec_smoke_suite",
             "type": "api",
             "environment_id": environment_id,
             "run_mode": "serial",
@@ -92,68 +115,33 @@ def _run(client: TestClient) -> None:
     suite_id = suite_resp.json()["data"]["id"]
     print("suite ok", suite_id)
 
-    task_resp = client.post(
-        "/api/v1/test-management/tasks",
-        json={
-            "project_id": project_id,
-            "task_name": "api_smoke_task",
-            "description": "smoke",
-            "type": "api",
-            "environment_id": environment_id,
-            "run_mode": "serial",
-        },
+    trigger = client.post(
+        f"/api/v1/test-execution/runs/suites/{suite_id}",
         headers=headers,
     )
-    assert task_resp.status_code == 200, task_resp.text
-    task_id = task_resp.json()["data"]["id"]
-    print("task ok", task_id)
+    assert trigger.status_code == 200, trigger.text
+    run_id = trigger.json()["data"]["suite_run_id"]
+    print("trigger ok", run_id)
 
-    suites_list = client.get(
-        f"/api/v1/test-management/suites?project_id={project_id}",
+    progress = _poll_suite_progress(client, headers, run_id)
+    print("progress", progress.get("status"), progress.get("percent"))
+    assert progress.get("status") in _TERMINAL_STATUSES, progress
+
+    history = client.get(
+        f"/api/v1/test-execution/runs/suites/{suite_id}/history",
         headers=headers,
     )
-    assert suites_list.status_code == 200, suites_list.text
-    assert suites_list.json()["data"]["total"] >= 1
+    assert history.status_code == 200, history.text
+    assert history.json()["data"]["total"] >= 1
 
-    suite_detail = client.get(
-        f"/api/v1/test-management/suites/{suite_id}",
+    report = client.get(
+        f"/api/v1/test-execution/runs/suite-runs/{run_id}/report",
         headers=headers,
     )
-    assert suite_detail.status_code == 200, suite_detail.text
+    assert report.status_code == 200, report.text
 
-    task_detail = client.get(
-        f"/api/v1/test-management/tasks/{task_id}",
-        headers=headers,
-    )
-    assert task_detail.status_code == 200, task_detail.text
-
-    picker_api = client.get(
-        f"/api/v1/test-management/pickers/api-cases?project_id={project_id}",
-        headers=headers,
-    )
-    assert picker_api.status_code == 200, picker_api.text
-
-    picker_func = client.get(
-        f"/api/v1/test-management/pickers/functional-cases?project_id={project_id}",
-        headers=headers,
-    )
-    assert picker_func.status_code == 200, picker_func.text
-
-    picker_suites = client.get(
-        f"/api/v1/test-management/pickers/suites?project_id={project_id}&type=api",
-        headers=headers,
-    )
-    assert picker_suites.status_code == 200, picker_suites.text
-
-    suite_cases = client.get(
-        f"/api/v1/test-management/suites/{suite_id}/cases",
-        headers=headers,
-    )
-    assert suite_cases.status_code == 200, suite_cases.text
-
-    client.delete(f"/api/v1/test-management/tasks/{task_id}", headers=headers)
     client.delete(f"/api/v1/test-management/suites/{suite_id}", headers=headers)
-    print("test_management_smoke_test: OK")
+    print("test_execution_smoke_test: OK")
 
 
 if __name__ == "__main__":

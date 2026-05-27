@@ -87,9 +87,9 @@ def main() -> None:
         assert fill.status_code == 200, fill.text
 
         preview = client.post(
-            f"/api/v1/api-test/interfaces/{interface_id}/cases/generate-preview",
+            "/api/v1/ai-generation/api/generate-from-interface",
             headers=headers,
-            json={"user_prompt": "smoke"},
+            json={"interface_id": interface_id, "user_prompt": "smoke"},
         )
         assert preview.status_code == 200, preview.text
         session_id = preview.json()["data"]["session_id"]
@@ -107,12 +107,13 @@ def main() -> None:
         if environment_id:
             selected = list(range(min(2, len(base_cases))))
             confirm = client.post(
-                f"/api/v1/api-test/interfaces/{interface_id}/cases/confirm",
+                "/api/v1/ai-generation/api/confirm",
                 headers=headers,
                 json={
                     "session_id": session_id,
                     "selected_indexes": selected,
                     "environment_id": environment_id,
+                    "interface_id": interface_id,
                 },
             )
             assert confirm.status_code == 200, confirm.text

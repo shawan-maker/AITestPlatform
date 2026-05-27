@@ -1,7 +1,7 @@
 import pytest
 
 from service.ai_generation.models import AIGenerationSession
-from service.api_test.case.generation_service import GenerationService
+from service.api_test.case.generation_service import ApiCaseGenerationService
 from service.api_test.case.schemas import ApiConfirmRequest, PreviewFromDocRequest
 from service.api_test.interface.interface_service import InterfaceService
 from service.api_test.interface.models import ApiInterface
@@ -16,7 +16,7 @@ async def test_preview_from_doc_creates_session(api_gen_context):
     project_id = api_gen_context["project_id"]
     doc = "Path: /preview/doc\nMethod: POST\n接口描述: test"
 
-    result = await GenerationService.preview_from_doc(
+    result = await ApiCaseGenerationService.preview_from_doc(
         user,
         PreviewFromDocRequest(
             project_id=project_id,
@@ -28,7 +28,7 @@ async def test_preview_from_doc_creates_session(api_gen_context):
     assert result.session_id
     assert len(result.base_cases) >= 1
 
-    session = await GenerationService.get_session(user, result.session_id)
+    session = await ApiCaseGenerationService.get_session(user, result.session_id)
     assert session.status == SessionStatus.success
     assert session.output_payload is not None
     assert session.output_payload["api_doc"] == doc
@@ -47,12 +47,12 @@ async def test_confirm_from_doc_creates_interface(api_gen_context):
     environment_id = api_gen_context["environment_id"]
     doc = "Path: /agent/create\nMethod: POST\n接口描述: create from doc"
 
-    preview = await GenerationService.preview_from_doc(
+    preview = await ApiCaseGenerationService.preview_from_doc(
         user,
         PreviewFromDocRequest(project_id=project_id, api_doc_text=doc),
     )
 
-    result = await GenerationService.confirm_session(
+    result = await ApiCaseGenerationService.confirm_session(
         user,
         ApiConfirmRequest(
             session_id=preview.session_id,
@@ -97,13 +97,13 @@ async def test_confirm_from_doc_method_path_conflict_409(api_gen_context):
         ),
     )
 
-    preview = await GenerationService.preview_from_doc(
+    preview = await ApiCaseGenerationService.preview_from_doc(
         user,
         PreviewFromDocRequest(project_id=project_id, api_doc_text=doc),
     )
 
     with pytest.raises(AppException) as exc:
-        await GenerationService.confirm_session(
+        await ApiCaseGenerationService.confirm_session(
             user,
             ApiConfirmRequest(
                 session_id=preview.session_id,

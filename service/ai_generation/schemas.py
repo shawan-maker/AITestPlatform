@@ -4,17 +4,16 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from service.ai_generation.session_schemas import (
+    AIGenerationPreviewUpdateRequest,
+    AIGenerationSessionOut,
+)
 from service.api_test.case.schemas import (
     ApiConfirmRequest,
     ApiConfirmResult,
-    ApiGenerationSessionOut,
-    ApiSessionPreviewUpdateRequest,
     GeneratePreviewResult,
 )
-from service.functional_test.case.schemas import (
-    GenerationSaveResult,
-    GenerationSessionOut,
-)
+from service.functional_test.case.schemas import GenerationSaveResult
 
 
 class PromptTemplateItem(BaseModel):
@@ -59,8 +58,16 @@ class ApiGenerateFromDocRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
 
 
+# Backward-compatible aliases
+GenerationSessionOut = AIGenerationSessionOut
+ApiGenerationSessionOut = AIGenerationSessionOut
+ApiSessionPreviewUpdateRequest = AIGenerationPreviewUpdateRequest
+
+
 __all__ = [
     "AgentMetaOut",
+    "AIGenerationPreviewUpdateRequest",
+    "AIGenerationSessionOut",
     "ApiConfirmRequest",
     "ApiConfirmResult",
     "ApiGenerateFromDocRequest",

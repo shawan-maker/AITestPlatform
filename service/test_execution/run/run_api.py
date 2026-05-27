@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 
 from service.core.deps import get_current_active_user
 from service.core.response import success
 from service.test_execution.run.cancel_service import CancelService
 from service.test_execution.run.progress_service import ProgressService
+from service.test_execution.run.suite_runner import SuiteRunner
+from service.test_execution.run.task_runner import TaskRunner
 from service.test_execution.run.trigger_service import TriggerService
 from service.user.models import User
 
@@ -13,18 +15,22 @@ router = APIRouter(prefix="/runs", tags=["测试执行-运行"])
 @router.post("/suites/{suite_id}", summary="触发套件执行")
 async def trigger_suite_run(
     suite_id: int,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_active_user),
 ):
     data = await TriggerService.trigger_suite(user, suite_id)
+    background_tasks.add_task(SuiteRunner.run, data.suite_run_id)
     return success(data=data, message="套件执行已启动")
 
 
 @router.post("/tasks/{task_id}", summary="触发 API/UI 任务执行")
 async def trigger_task_run(
     task_id: int,
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_active_user),
 ):
     data = await TriggerService.trigger_api_task(user, task_id)
+    background_tasks.add_task(TaskRunner.run_api_task, data.task_run_id)
     return success(data=data, message="任务执行已启动")
 
 

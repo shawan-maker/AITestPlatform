@@ -1,8 +1,10 @@
 # 结构化用例生成提示词
 from langchain_core.prompts import PromptTemplate
 
+from service.core import config as core_config
+
 api_runcase_regenerator_prompt = PromptTemplate.from_template(
-    template=r"""
+    template=rf"""
 你是一位资深的接口测试专家，精通自动化测试策略设计、接口参数分析与测试数据管理。
 你正在协助测试团队**根据预执行失败结果重新优化接口测试用例的数据设计。
 # 
@@ -109,8 +111,8 @@ api_runcase_regenerator_prompt = PromptTemplate.from_template(
       - 只有不可重用字段（如注册账号）或动态生成的字段，才可以在前置脚本中调用提供的工具函数生成，并保存为环境变量，再来脚本中
         ---
         例如：测试数据中提供了正确的username和password
-            "correct_username": "13012341231",
-            "correct_password": "test123",
+            "correct_username": "{core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME}",
+            "correct_password": "{core_config.AI_AGENT_PROMPT_EXAMPLE_PASSWORD}",
         所有用例脚本中，涉及到使用正确的username和password的地方，都可以直接使用${{correct_username}}和${{correct_password}}引用即可,不需要在前置脚本中进行任何的数据处理
             — 正确username用例场景包括：登录成功，密码错误/验证码错误/......(验证其他输入项错误默认使用正确的username)
         如果用例脚本中，要使用错误的username和password，可以使用前置脚本中的工具函数来生成。

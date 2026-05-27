@@ -4,7 +4,7 @@ import pytest
 
 from service.core.enums import GenType, SessionStatus
 from service.core.exceptions import AppException
-from service.functional_test.case.generation_service import GenerationService
+from service.functional_test.case.generation_service import FunctionalCaseGenerationService
 from service.functional_test.case.schemas import (
     GenerationSaveRequest,
     GenerationSessionCreateRequest,
@@ -16,7 +16,7 @@ class TestValidateCreateInput:
     async def test_rejects_no_input_path(self):
         data = GenerationSessionCreateRequest(project_id=1)
         with pytest.raises(AppException) as exc:
-            await GenerationService._validate_create_input(data)
+            await FunctionalCaseGenerationService._validate_create_input(data)
         assert exc.value.code == 400
         assert "至少提供一个" in exc.value.message
 
@@ -28,7 +28,7 @@ class TestValidateCreateInput:
             knowledge_document_id=10,
         )
         with pytest.raises(AppException) as exc:
-            await GenerationService._validate_create_input(data)
+            await FunctionalCaseGenerationService._validate_create_input(data)
         assert exc.value.code == 400
         assert "不能同时提供" in exc.value.message
 
@@ -40,19 +40,19 @@ class TestValidateCreateInput:
             knowledge_document_id=10,
         )
         with pytest.raises(AppException) as exc:
-            await GenerationService._validate_create_input(data)
+            await FunctionalCaseGenerationService._validate_create_input(data)
         assert exc.value.code == 400
         assert "不能同时提供" in exc.value.message
 
     @pytest.mark.asyncio
     async def test_accepts_knowledge_document_id_only(self):
         data = GenerationSessionCreateRequest(project_id=1, knowledge_document_id=10)
-        await GenerationService._validate_create_input(data)
+        await FunctionalCaseGenerationService._validate_create_input(data)
 
     @pytest.mark.asyncio
     async def test_accepts_requirement_text_only(self):
         data = GenerationSessionCreateRequest(project_id=1, requirement_text="req body")
-        await GenerationService._validate_create_input(data)
+        await FunctionalCaseGenerationService._validate_create_input(data)
 
 
 class TestSaveCasesWithoutRequirement:
@@ -88,7 +88,7 @@ class TestSaveCasesWithoutRequirement:
 
         with (
             patch.object(
-                GenerationService,
+                FunctionalCaseGenerationService,
                 "_get_session_or_404",
                 new=AsyncMock(return_value=session),
             ),
@@ -120,7 +120,7 @@ class TestSaveCasesWithoutRequirement:
                 ),
             ),
         ):
-            result = await GenerationService.save_cases(user, 99, data)
+            result = await FunctionalCaseGenerationService.save_cases(user, 99, data)
 
         mock_tp_create.assert_not_called()
         mock_case_create.assert_called_once()

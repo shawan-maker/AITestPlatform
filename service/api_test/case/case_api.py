@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 
 from service.api_test.case.case_service import CaseService
-from service.api_test.case.generation_service import GenerationService
+from service.api_test.case.generation_service import ApiCaseGenerationService
 from service.api_test.case.schemas import (
     ApiSessionPreviewUpdateRequest,
     CaseBatchDeleteRequest,
@@ -19,51 +19,76 @@ from service.user.models import User
 router = APIRouter(tags=["接口测试-用例"])
 
 
-@router.post("/interfaces/{interface_id}/cases/generate-preview", summary="生成预览")
+@router.post(
+    "/interfaces/{interface_id}/cases/generate-preview",
+    summary="生成预览",
+    deprecated=True,
+    tags=["legacy-case-generation"],
+)
 async def generate_preview(
     interface_id: int,
     body: GeneratePreviewRequest,
     user: User = Depends(get_current_active_user),
 ):
-    data = await GenerationService.preview(user, interface_id, body)
+    data = await ApiCaseGenerationService.preview(user, interface_id, body)
     return success(data=data)
 
 
-@router.post("/case-generation/preview-from-doc", summary="从文档生成预览")
+@router.post(
+    "/case-generation/preview-from-doc",
+    summary="从文档生成预览",
+    deprecated=True,
+    tags=["legacy-case-generation"],
+)
 async def preview_from_doc(
     body: PreviewFromDocRequest,
     user: User = Depends(get_current_active_user),
 ):
-    data = await GenerationService.preview_from_doc(user, body)
+    data = await ApiCaseGenerationService.preview_from_doc(user, body)
     return success(data=data)
 
 
-@router.get("/case-generation/sessions/{session_id}", summary="查询生成会话")
+@router.get(
+    "/case-generation/sessions/{session_id}",
+    summary="查询生成会话",
+    deprecated=True,
+    tags=["legacy-case-generation"],
+)
 async def get_generation_session(
     session_id: int,
     user: User = Depends(get_current_active_user),
 ):
-    data = await GenerationService.get_session(user, session_id)
+    data = await ApiCaseGenerationService.get_session(user, session_id)
     return success(data=data)
 
 
-@router.patch("/case-generation/sessions/{session_id}/preview", summary="编辑生成预览")
+@router.patch(
+    "/case-generation/sessions/{session_id}/preview",
+    summary="编辑生成预览",
+    deprecated=True,
+    tags=["legacy-case-generation"],
+)
 async def update_generation_preview(
     session_id: int,
     body: ApiSessionPreviewUpdateRequest,
     user: User = Depends(get_current_active_user),
 ):
-    data = await GenerationService.update_preview(user, session_id, body)
+    data = await ApiCaseGenerationService.update_preview(user, session_id, body)
     return success(data=data, message="预览已更新")
 
 
-@router.post("/interfaces/{interface_id}/cases/confirm", summary="确认生成并入库")
+@router.post(
+    "/interfaces/{interface_id}/cases/confirm",
+    summary="确认生成并入库",
+    deprecated=True,
+    tags=["legacy-case-generation"],
+)
 async def generate_confirm(
     interface_id: int,
     body: GenerateConfirmRequest,
     user: User = Depends(get_current_active_user),
 ):
-    data = await GenerationService.confirm(user, interface_id, body)
+    data = await ApiCaseGenerationService.confirm(user, interface_id, body)
     return success(data=data, message="用例生成完成")
 
 

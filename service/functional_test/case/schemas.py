@@ -13,6 +13,13 @@ from service.core.enums import (
     SourceType,
 )
 from service.core.pagination import Paginated
+from service.ai_generation.session_schemas import (
+    AIGenerationPreviewUpdateRequest,
+    AIGenerationSessionOut,
+)
+
+GenerationPreviewUpdateRequest = AIGenerationPreviewUpdateRequest
+GenerationSessionOut = AIGenerationSessionOut
 
 
 class CatalogCreateRequest(BaseModel):
@@ -166,26 +173,10 @@ class GenerationSessionCreateRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
 
 
-class GenerationPreviewUpdateRequest(BaseModel):
-    output_payload: dict[str, Any]
-
-
 class GenerationSaveRequest(BaseModel):
     catalog_id: int = Field(..., ge=1)
     case_indexes: list[int] = Field(..., min_length=1)
     requirement_id: int | None = Field(default=None, ge=1)
-
-
-class GenerationSessionOut(BaseModel):
-    id: int
-    project_id: int
-    module_id: int | None
-    status: SessionStatus
-    error_message: str | None
-    output_payload: dict[str, Any] | None
-    user_prompt: str | None
-    created_at: datetime
-    finished_at: datetime | None
 
 
 class GenerationSaveResult(BaseModel):

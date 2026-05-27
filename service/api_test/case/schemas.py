@@ -5,6 +5,13 @@ from pydantic import BaseModel, Field
 
 from service.core.enums import ApiCaseKind, ExecStatus, ReviewStatus, SessionStatus
 from service.core.pagination import Paginated
+from service.ai_generation.session_schemas import (
+    AIGenerationPreviewUpdateRequest,
+    AIGenerationSessionOut,
+)
+
+ApiGenerationSessionOut = AIGenerationSessionOut
+ApiSessionPreviewUpdateRequest = AIGenerationPreviewUpdateRequest
 
 
 class GeneratePreviewRequest(BaseModel):
@@ -61,18 +68,6 @@ class ApiConfirmResult(BaseModel):
     created_case_ids: list[int]
     run_errors: list[str] = Field(default_factory=list)
     created_interface_id: int | None = None
-
-
-class ApiGenerationSessionOut(BaseModel):
-    id: int
-    project_id: int
-    module_id: int | None
-    status: SessionStatus
-    error_message: str | None
-    output_payload: dict[str, Any] | None
-    user_prompt: str | None
-    created_at: datetime
-    finished_at: datetime | None
 
 
 class CaseUpdateRequest(BaseModel):

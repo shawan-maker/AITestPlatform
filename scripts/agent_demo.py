@@ -1,36 +1,10 @@
-import asyncio
+"""已迁移至 scripts/demos/agent_demo.py。"""
 
-from agents.case_generate_agent import AgentManage, RuntimeContext
-from agents.memory import DualMemoryManager
+import runpy
+import sys
+from pathlib import Path
 
-# ============================================================
-# Agent 演示入口（原 main.py 内容）
-# ============================================================
-
-agent = AgentManage.create_supervisor_agent()
-
-context = RuntimeContext(
-    project_name="tpshop",
-    module_id="001",
-    user_id="user001",
-    session_id="session001",
-    thread_id="thread_001",
-)
-
-
-async def main():
-    print("=======================第4步：接口文档的检索和生成功能用例=====================================")
-    result4 = AgentManage.agent_chat(
-        agent, "请给出登录接口的所有请求和响应信息，并生成接口测试用例", context
-    )
-    async for i in result4:
-        if i.get("type") == "custom":
-            print(i.get("content"), end="", flush=True)
-        elif i.get("type") == "messages":
-            print(i.get("content"), end="", flush=True)
-    print("\n=============================第5步=========================================================")
-    print(f"所有长期记忆：{DualMemoryManager().load_long_term_memories(context)}")
-
-
+_TARGET = Path(__file__).resolve().parent / "demos" / "agent_demo.py"
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.argv[0] = str(_TARGET)
+    runpy.run_path(str(_TARGET), run_name="__main__")

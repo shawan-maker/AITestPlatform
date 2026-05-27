@@ -7,12 +7,18 @@ from datetime import datetime, timezone
 
 from tortoise.transactions import in_transaction
 
-from service.ai_generation.common import compute_prompt_hash
+from service.ai_generation.common import (
+    LLM_NOT_CONFIGURED_MSG,
+    api_test_gen_use_mock,
+    build_default_additional_info,
+    compute_prompt_hash,
+    is_llm_configured,
+)
 from service.ai_generation.models import AIGenerationSession
+from service.ai_generation.session_schemas import AIGenerationSessionOut
 from service.api_test.case.schemas import (
     ApiConfirmRequest,
     ApiConfirmResult,
-    ApiGenerationSessionOut,
     ApiSessionPreviewUpdateRequest,
     BaseCasePreviewItem,
     GenerateConfirmRequest,
@@ -51,7 +57,7 @@ class _PreRunResult:
     error: str | None = None
 
 
-class GenerationService:
+class ApiCaseGenerationService:
     @classmethod
     async def _get_api_session_or_404(cls, session_id: int) -> AIGenerationSession:
         session = await AIGenerationSession.get_or_none(id=session_id)
@@ -62,8 +68,8 @@ class GenerationService:
         return session
 
     @classmethod
-    def _to_session_out(cls, session: AIGenerationSession) -> ApiGenerationSessionOut:
-        return ApiGenerationSessionOut(
+    def _to_session_out(cls, session: AIGenerationSession) -> AIGenerationSessionOut:
+        return AIGenerationSessionOut(
             id=session.id,
             project_id=session.project_id,
             module_id=session.module_id,
@@ -101,8 +107,16 @@ class GenerationService:
         )
 
         try:
-            if os.getenv("API_TEST_GEN_MOCK") == "1" or not os.getenv("LLM_BINDING_API_KEY"):
+            if api_test_gen_use_mock():
                 base_cases = cls._mock_base_cases(iface.summary or iface.path)
+            elif not is_llm_configured():
+                session.status = SessionStatus.failed
+                session.error_message = LLM_NOT_CONFIGURED_MSG
+                session.finished_at = datetime.now(timezone.utc)
+                await session.save(
+                    update_fields=["status", "error_message", "finished_at"]
+                )
+                raise AppException(LLM_NOT_CONFIGURED_MSG, 503)
             else:
                 base_cases = await asyncio.to_thread(
                     cls._invoke_basecase_workflow,
@@ -168,8 +182,16 @@ class GenerationService:
 
         precoditions: list[str] = []
         try:
-            if os.getenv("API_TEST_GEN_MOCK") == "1" or not os.getenv("LLM_BINDING_API_KEY"):
+            if api_test_gen_use_mock():
                 base_cases = cls._mock_base_cases("api-doc")
+            elif not is_llm_configured():
+                session.status = SessionStatus.failed
+                session.error_message = LLM_NOT_CONFIGURED_MSG
+                session.finished_at = datetime.now(timezone.utc)
+                await session.save(
+                    update_fields=["status", "error_message", "finished_at"]
+                )
+                raise AppException(LLM_NOT_CONFIGURED_MSG, 503)
             else:
                 base_cases = await asyncio.to_thread(
                     cls._invoke_basecase_workflow,
@@ -210,7 +232,7 @@ class GenerationService:
         return GeneratePreviewResult(session_id=session.id, base_cases=items)
 
     @classmethod
-    async def get_session(cls, user: User, session_id: int) -> ApiGenerationSessionOut:
+    async def get_session(cls, user: User, session_id: int) -> AIGenerationSessionOut:
         session = await cls._get_api_session_or_404(session_id)
         await ensure_api_viewer(session.project_id, user)
         return cls._to_session_out(session)
@@ -221,7 +243,7 @@ class GenerationService:
         user: User,
         session_id: int,
         data: ApiSessionPreviewUpdateRequest,
-    ) -> ApiGenerationSessionOut:
+    ) -> AIGenerationSessionOut:
         session = await cls._get_api_session_or_404(session_id)
         await ensure_api_viewer(session.project_id, user)
         session.output_payload = data.output_payload
@@ -398,7 +420,7 @@ class GenerationService:
 
     @staticmethod
     def _parse_api_doc(api_doc_text: str) -> dict:
-        if os.getenv("API_TEST_GEN_MOCK") == "1":
+        if api_test_gen_use_mock():
             method_match = re.search(r"Method:\s*(\w+)", api_doc_text, re.IGNORECASE)
             path_match = re.search(r"Path:\s*(\S+)", api_doc_text, re.IGNORECASE)
             return {
@@ -465,7 +487,6 @@ class GenerationService:
                 "user_prompt": user_prompt,
             },
             config=config,
-            context={"project_name": "api_test", "module_id": "0"},
         )
         cases = result.get("api_cases") or []
         if isinstance(cases, str):
@@ -482,7 +503,7 @@ class GenerationService:
         environment_id: int,
         project_id: int,
     ):
-        if os.getenv("API_TEST_GEN_MOCK") == "1" or not os.getenv("LLM_BINDING_API_KEY"):
+        if api_test_gen_use_mock():
             return [
                 _PreRunResult(
                     index=idx,
@@ -512,4 +533,5 @@ class GenerationService:
             precoditions_api_doc=precoditions_api_doc,
             environment_id=environment_id,
             project_id=project_id,
+            additional_info=build_default_additional_info(),
         )

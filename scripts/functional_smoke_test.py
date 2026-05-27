@@ -63,7 +63,7 @@ def _poll_generation_session(
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         resp = client.get(
-            f"/api/v1/functional/case-generation/sessions/{session_id}",
+            f"/api/v1/ai-generation/functional/sessions/{session_id}",
             headers=headers,
         )
         assert resp.status_code == 200, resp.text
@@ -267,10 +267,9 @@ def _run(client: TestClient) -> None:
     # optional AI generation (mock when no LLM key)
     os.environ.setdefault("FUNCTIONAL_GEN_MOCK", "1")
     gen_resp = client.post(
-        "/api/v1/functional/case-generation/sessions",
+        "/api/v1/ai-generation/functional/generate",
         json={
             "project_id": project_id,
-            "requirement_id": req_id,
             "requirement_text": "用户登录功能",
         },
         headers=headers,
@@ -280,8 +279,8 @@ def _run(client: TestClient) -> None:
     session_data = _poll_generation_session(client, headers, session_id)
     if session_data["status"] == "success":
         save_resp = client.post(
-            f"/api/v1/functional/case-generation/sessions/{session_id}/save",
-            json={"catalog_id": catalog_id, "case_indexes": [0], "requirement_id": req_id},
+            f"/api/v1/ai-generation/functional/sessions/{session_id}/save",
+            json={"catalog_id": catalog_id, "case_indexes": [0]},
             headers=headers,
         )
         assert save_resp.status_code == 200, save_resp.text

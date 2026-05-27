@@ -12,6 +12,8 @@ def compute_run_status(
 ) -> RunStatus:
     if cancelled:
         return RunStatus.cancelled
+    if total <= 0:
+        return RunStatus.completed
     if failed > 0 or error > 0:
         return RunStatus.failed
     if passed + skipped >= total and total > 0:

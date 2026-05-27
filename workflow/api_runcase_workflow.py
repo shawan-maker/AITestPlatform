@@ -29,6 +29,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from config.prompts.api_workflow.api_runcase_generator_prompt import api_runcase_generator_prompt, output_format
 from config.prompts.api_workflow.api_runcase_regenerator_prompt import api_runcase_regenerator_prompt
 from config.settings import llm, BASE_DIR, MAX_GENERATOR_COUNT
+from service.ai_generation.common import build_default_additional_info
 from utils.loader.get_script_function_list import get_module_functions
 from utils.loader.get_test_file_list import inspect_env_data
 from utils.parser.api_document_ai_parser import safe_structure_parser, _convert_to_serializable
@@ -58,8 +59,25 @@ class APIState(TypedDict):
     generator_count: int # 生成用例的次数
 
 
+def _resolve_test_env_data(state: APIState) -> dict:
+    test_env_data = state.get("test_env_data")
+    if test_env_data:
+        return test_env_data
+    environment_id = state.get("environment_id") or 0
+    if environment_id:
+        from service.test_execution.env_loader import load_test_env_data_plain
+
+        return load_test_env_data_plain(environment_id)
+    raise RuntimeError(
+        "预执行需要有效的 environment_id 或 test_env_data；请在 confirm 时指定测试环境"
+    )
+
+
 def _hardcoded_test_env_data() -> dict:
-    file_path = BASE_DIR + r"\test_data\Tools.py"
+    """仅用于 workflow __main__ 本地演示，生产路径不应调用。"""
+    from service.core.config import AI_DEMO_GLOBAL_FUNC_PATH
+
+    file_path = str(AI_DEMO_GLOBAL_FUNC_PATH)
     return {
         "base_url": "http://121.43.169.97:8081",
         "headers": {"Content-Type": "application/json"},
@@ -81,18 +99,6 @@ def _hardcoded_test_env_data() -> dict:
             }
         ],
     }
-
-
-def _resolve_test_env_data(state: APIState) -> dict:
-    environment_id = state.get("environment_id") or 0
-    if environment_id:
-        from service.test_execution.env_loader import load_test_env_data_plain
-
-        return load_test_env_data_plain(environment_id)
-    test_env_data = state.get("test_env_data")
-    if test_env_data:
-        return test_env_data
-    return _hardcoded_test_env_data()
 
 
 class APIruncaseModel(BaseModel):
@@ -126,7 +132,7 @@ class APIRuncaseGeneratorWorkflow:
         function_list = get_module_functions(test_env_data.get("global_func"))
         writer(f"获取的工具函数包括：{function_list}")
         # 3、获取测试文件
-        test_files = inspect_env_data()
+        test_files = inspect_env_data(test_env_data)
         writer(f"获取的测试文件包括：{test_files}")
         # 4、获取前置依赖接口
         # sql = 'SELECT * from api_interface WHERE project=%s AND summary IN %s'
@@ -300,6 +306,13 @@ class APIRuncaseGeneratorWorkflow:
         return builder.compile(checkpointer=checkpointer)
 
 if __name__ == '__main__':
+    import sys
+
+    from service.core import config as core_config
+
+    if not core_config.AITESTPLATFORM_ALLOW_WORKFLOW_MAIN:
+        print("Set AITESTPLATFORM_ALLOW_WORKFLOW_MAIN=1 to run this workflow demo")
+        sys.exit(0)
     base_case = [
   {
     "name": "验证账号被锁定后立即重试登录",
@@ -414,11 +427,7 @@ if __name__ == '__main__':
     }
 ]
 """
-    additional_info = {
-        "project": "p2p金融项目",
-        "module": "登录模块",
-        "notice": "对于不能重复使用的数据，请使用工具随机生成数据",
-    }
+    additional_info = build_default_additional_info()
     # 全局环境数据
     file_path = BASE_DIR + r"\test_data\Tools.py"
     test_env_data = {

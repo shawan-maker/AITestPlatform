@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 
 from service.core.enums import IndexStatus, KnowledgeDocType
 from service.core.exceptions import AppException
@@ -16,6 +17,28 @@ def format_user_prompt_section(user_prompt: str | None) -> str:
     if not user_prompt or not user_prompt.strip():
         return ""
     return f"\n## 用户附加要求\n{user_prompt.strip()}\n"
+
+
+def build_default_additional_info() -> dict[str, str]:
+    """Default additional_info for API runcase generation (configurable notice)."""
+    from service.core import config as core_config
+
+    return {"notice": core_config.AI_GENERATION_DEFAULT_NOTICE}
+
+
+def is_llm_configured() -> bool:
+    return bool(os.getenv("LLM_BINDING_API_KEY"))
+
+
+def functional_gen_use_mock() -> bool:
+    return os.getenv("FUNCTIONAL_GEN_MOCK") == "1"
+
+
+def api_test_gen_use_mock() -> bool:
+    return os.getenv("API_TEST_GEN_MOCK") == "1"
+
+
+LLM_NOT_CONFIGURED_MSG = "未配置 LLM_BINDING_API_KEY，无法执行 AI 生成"
 
 
 def compute_prompt_hash(source_text: str, user_prompt: str | None) -> str:

@@ -12,7 +12,6 @@
   1、需求文档
   2、测试点
 """
-from dataclasses import dataclass
 from typing import TypedDict, List
 
 from langchain_core.output_parsers import JsonOutputParser
@@ -20,7 +19,6 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
 from langgraph.constants import START, END
 from langgraph.graph import StateGraph
-from langgraph.runtime import Runtime
 from pydantic import BaseModel
 
 from config.prompts.workflow import generate_test_cases_prompt, verify_coverage_prompt, generate_test_points_prompt, complete_test_points_prompt
@@ -29,15 +27,6 @@ from service.ai_generation.common import format_user_prompt_section
 from service.core.config import MAX_COMPLETE_TEST_POINTS
 from utils.parser.api_document_ai_parser import safe_structure_parser
 
-
-# 测试用例生成的上下文定义
-@dataclass
-class TestCaseContext:
-    """测试用例生成的上下文定义"""
-    # 项目id
-    project_name: str
-    # 模块id
-    module_id: str
 
 # 主工作流的状态
 class State1(TypedDict):
@@ -226,7 +215,7 @@ class GenerateTestCases:
         return {"points": res["test_points"]}
 
     # 3.2 生成测试用例的节点
-    def generate_test_cases(self,state: State1,runtime: Runtime[TestCaseContext]):
+    def generate_test_cases(self, state: State1):
         """基于测试点生成测试用例"""
         writer = get_stream_writer()
         writer("【开始执行节点】 3.2 基于测试点生成测试用例：")
@@ -239,7 +228,6 @@ class GenerateTestCases:
             parser,
             {"points": state["points"], "user_prompt_section": user_prompt_section},
         )
-        writer(f"项目{runtime.context.get('project_name')}的{runtime.context.get('module_id')}模块, 生成测试用例完成" )
         writer("【执行节点完成】 3.2 基于测试点生成测试用例")
         return {"test_cases": resp}
 
@@ -260,6 +248,13 @@ class GenerateTestCases:
 
 
 if __name__ == '__main__':
+    import sys
+
+    from service.core import config as core_config
+
+    if not core_config.AITESTPLATFORM_ALLOW_WORKFLOW_MAIN:
+        print("Set AITESTPLATFORM_ALLOW_WORKFLOW_MAIN=1 to run this workflow demo")
+        sys.exit(0)
     input_requirement = """功能说明文档：
 #### 📌 F1.1 用户注册
 ##### 🧩 功能背景
@@ -288,7 +283,6 @@ if __name__ == '__main__':
                             subgraphs=True,
                             config=config,
                             stream_mode=["messages","custom"],
-                            context={"project_name":"1","module_id":"1"}
                             )
     print("=========================")
     # for chunk in res:

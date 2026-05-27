@@ -1,15 +1,15 @@
 from service.ai_generation.models import AIGenerationSession
 from service.ai_generation.permissions import ensure_agent_editor, ensure_agent_viewer
 from service.ai_generation.schemas import (
+    AIGenerationSessionOut,
     ApiConfirmRequest,
     ApiConfirmResult,
     ApiGenerateFromDocRequest,
     ApiGenerateFromInterfaceRequest,
-    ApiGenerationSessionOut,
     ApiSessionPreviewUpdateRequest,
     GeneratePreviewResult,
 )
-from service.api_test.case.generation_service import GenerationService as ApiGenerationService
+from service.api_test.case.generation_service import ApiCaseGenerationService
 from service.api_test.case.schemas import (
     GeneratePreviewRequest,
     PreviewFromDocRequest,
@@ -28,7 +28,7 @@ class ApiAgentService:
     ) -> GeneratePreviewResult:
         iface = await InterfaceService._get_current_or_404(body.interface_id)
         await ensure_agent_viewer(iface.project_id, user)
-        return await ApiGenerationService.preview(
+        return await ApiCaseGenerationService.preview(
             user,
             body.interface_id,
             GeneratePreviewRequest(
@@ -44,7 +44,7 @@ class ApiAgentService:
         body: ApiGenerateFromDocRequest,
     ) -> GeneratePreviewResult:
         await ensure_agent_viewer(body.project_id, user)
-        return await ApiGenerationService.preview_from_doc(
+        return await ApiCaseGenerationService.preview_from_doc(
             user,
             PreviewFromDocRequest(
                 project_id=body.project_id,
@@ -59,8 +59,8 @@ class ApiAgentService:
         cls,
         user: User,
         session_id: int,
-    ) -> ApiGenerationSessionOut:
-        return await ApiGenerationService.get_session(user, session_id)
+    ) -> AIGenerationSessionOut:
+        return await ApiCaseGenerationService.get_session(user, session_id)
 
     @classmethod
     async def update_preview(
@@ -68,8 +68,8 @@ class ApiAgentService:
         user: User,
         session_id: int,
         body: ApiSessionPreviewUpdateRequest,
-    ) -> ApiGenerationSessionOut:
-        return await ApiGenerationService.update_preview(user, session_id, body)
+    ) -> AIGenerationSessionOut:
+        return await ApiCaseGenerationService.update_preview(user, session_id, body)
 
     @classmethod
     async def confirm(
@@ -81,4 +81,4 @@ class ApiAgentService:
         if session is None:
             raise AppException("生成会话不存在", 404)
         await ensure_agent_editor(session.project_id, user)
-        return await ApiGenerationService.confirm_session(user, body)
+        return await ApiCaseGenerationService.confirm_session(user, body)

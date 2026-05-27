@@ -4,7 +4,13 @@ from datetime import datetime, timezone
 
 from tortoise.transactions import in_transaction
 
-from service.ai_generation.common import compute_prompt_hash, load_knowledge_requirement_text
+from service.ai_generation.common import (
+    LLM_NOT_CONFIGURED_MSG,
+    compute_prompt_hash,
+    functional_gen_use_mock,
+    is_llm_configured,
+    load_knowledge_requirement_text,
+)
 from service.ai_generation.models import AIGenerationSession
 from service.core.enums import (
     FunctionalCaseType,
@@ -19,12 +25,12 @@ from service.functional_test.case.catalog_service import CatalogService
 from service.functional_test.case.case_service import CaseService
 from service.functional_test.case.models import FunctionalCase, FunctionalTestPoint
 from service.functional_test.permissions import ensure_case_editor, ensure_case_viewer
+from service.ai_generation.session_schemas import AIGenerationSessionOut
 from service.functional_test.case.schemas import (
     GenerationPreviewUpdateRequest,
     GenerationSaveRequest,
     GenerationSaveResult,
     GenerationSessionCreateRequest,
-    GenerationSessionOut,
 )
 from service.functional_test.requirement.models import RequirementDoc
 from service.project.models import ProjectModule
@@ -48,7 +54,7 @@ def _parse_priority(value) -> int:
         return 3
 
 
-class GenerationService:
+class FunctionalCaseGenerationService:
     @classmethod
     async def _get_session_or_404(cls, session_id: int) -> AIGenerationSession:
         session = await AIGenerationSession.get_or_none(id=session_id)
@@ -105,8 +111,8 @@ class GenerationService:
         return text, None, input_ref_type, data.requirement_id
 
     @classmethod
-    async def _to_out(cls, session: AIGenerationSession) -> GenerationSessionOut:
-        return GenerationSessionOut(
+    async def _to_out(cls, session: AIGenerationSession) -> AIGenerationSessionOut:
+        return AIGenerationSessionOut(
             id=session.id,
             project_id=session.project_id,
             module_id=session.module_id,
@@ -123,7 +129,7 @@ class GenerationService:
         cls,
         user: User,
         data: GenerationSessionCreateRequest,
-    ) -> GenerationSessionOut:
+    ) -> AIGenerationSessionOut:
         await ensure_case_viewer(data.project_id, user)
         await cls._validate_create_input(data)
         if data.module_id is not None:
@@ -166,8 +172,16 @@ class GenerationService:
         session.status = SessionStatus.running
         await session.save(update_fields=["status"])
         try:
-            if os.getenv("FUNCTIONAL_GEN_MOCK") == "1" or not os.getenv("LLM_BINDING_API_KEY"):
+            if functional_gen_use_mock():
                 payload = cls._mock_payload(requirement_text)
+            elif not is_llm_configured():
+                session.status = SessionStatus.failed
+                session.error_message = LLM_NOT_CONFIGURED_MSG
+                session.finished_at = datetime.now(timezone.utc)
+                await session.save(
+                    update_fields=["status", "error_message", "finished_at"]
+                )
+                return
             else:
                 payload = await asyncio.to_thread(
                     cls._invoke_workflow, requirement_text, user_prompt
@@ -222,7 +236,6 @@ class GenerationService:
         result = graph.invoke(
             {"requirement": requirement_text, "user_prompt": user_prompt},
             config=config,
-            context={"project_name": "functional", "module_id": "0"},
         )
         points = result.get("points") or []
         cases = result.get("test_cases") or []
@@ -233,7 +246,7 @@ class GenerationService:
         return {"test_points": points, "cases": cases}
 
     @classmethod
-    async def get_session(cls, user: User, session_id: int) -> GenerationSessionOut:
+    async def get_session(cls, user: User, session_id: int) -> AIGenerationSessionOut:
         session = await cls._get_session_or_404(session_id)
         await ensure_case_viewer(session.project_id, user)
         return await cls._to_out(session)
@@ -244,7 +257,7 @@ class GenerationService:
         user: User,
         session_id: int,
         data: GenerationPreviewUpdateRequest,
-    ) -> GenerationSessionOut:
+    ) -> AIGenerationSessionOut:
         session = await cls._get_session_or_404(session_id)
         await ensure_case_viewer(session.project_id, user)
         session.output_payload = data.output_payload

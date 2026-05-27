@@ -1,4 +1,3 @@
-import asyncio
 from datetime import datetime, timezone
 
 from service.core.enums import RunStatus, SuiteCaseType, TaskSuiteType
@@ -6,10 +5,14 @@ from service.core.exceptions import AppException
 from service.test_execution.models import TestSuiteRun, TestTaskRun
 from service.test_execution.run.run_lock import check_suite_not_running, check_task_not_running_api
 from service.test_execution.run.schemas import TriggerRunOut
-from service.test_execution.run.suite_runner import SuiteRunner
 from service.test_execution.run.task_runner import TaskRunner
 from service.test_execution.shared.env_snapshot_helper import create_env_snapshot
-from service.test_management.models import TaskSuiteRelation, TestSuite, TestTask
+from service.test_management.models import (
+    SuiteCaseRelation,
+    TaskSuiteRelation,
+    TestSuite,
+    TestTask,
+)
 from service.test_management.permissions import ensure_tm_editor
 from service.user.models import User
 
@@ -40,7 +43,6 @@ class TriggerService:
             total_cases=total_cases,
             start_time=datetime.now(timezone.utc),
         )
-        asyncio.create_task(SuiteRunner.run(suite_run.id))
         return TriggerRunOut(suite_run_id=suite_run.id, status=RunStatus.running)
 
     @classmethod
@@ -70,5 +72,4 @@ class TriggerService:
             total_cases=total_cases,
             start_time=datetime.now(timezone.utc),
         )
-        asyncio.create_task(TaskRunner.run_api_task(task_run.id))
         return TriggerRunOut(task_run_id=task_run.id, status=RunStatus.running)
