@@ -3,6 +3,8 @@ from tortoise import fields, models
 from service.core.enums import (
     CaseRunStatus,
     CaseRunType,
+    DefectCategory,
+    DefectHistoryAction,
     DefectPriority,
     DefectSeverity,
     DefectSourceType,
@@ -218,6 +220,10 @@ class TestDefect(models.Model):
     severity = fields.CharEnumField(DefectSeverity, default=DefectSeverity.normal)
     priority = fields.CharEnumField(DefectPriority, default=DefectPriority.medium)
     status = fields.CharEnumField(DefectStatus, default=DefectStatus.init)
+    defect_category = fields.CharEnumField(
+        DefectCategory, default=DefectCategory.other
+    )
+    root_cause = fields.TextField(null=True)
     external_key = fields.CharField(max_length=128, null=True)
     source_type = fields.CharEnumField(DefectSourceType)
     source_run_id = fields.IntField(null=True)
@@ -228,7 +234,70 @@ class TestDefect(models.Model):
         null=True,
         on_delete=fields.SET_NULL,
     )
+    assignee = fields.ForeignKeyField(
+        "models.User",
+        related_name="assigned_test_defects",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+    updated_at = fields.DatetimeField(auto_now=True, precision=6)
+    updated_by = fields.ForeignKeyField(
+        "models.User",
+        related_name="updated_test_defects",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
 
     class Meta:
         table = "test_defect"
+        indexes = (
+            ("project_id", "status"),
+            ("project_id", "created_at"),
+            ("assignee_id",),
+        )
+
+
+class TestDefectComment(models.Model):
+    id = fields.IntField(pk=True)
+    defect = fields.ForeignKeyField(
+        "models.TestDefect",
+        related_name="comments",
+        on_delete=fields.CASCADE,
+    )
+    content = fields.TextField()
+    created_by = fields.ForeignKeyField(
+        "models.User",
+        related_name="test_defect_comments",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+
+    class Meta:
+        table = "test_defect_comment"
+        indexes = (("defect_id", "created_at"),)
+
+
+class TestDefectHistory(models.Model):
+    id = fields.IntField(pk=True)
+    defect = fields.ForeignKeyField(
+        "models.TestDefect",
+        related_name="history_records",
+        on_delete=fields.CASCADE,
+    )
+    action = fields.CharEnumField(DefectHistoryAction)
+    field_name = fields.CharField(max_length=64, null=True)
+    old_value = fields.TextField(null=True)
+    new_value = fields.TextField(null=True)
+    operator = fields.ForeignKeyField(
+        "models.User",
+        related_name="test_defect_history_ops",
+        null=True,
+        on_delete=fields.SET_NULL,
+    )
+    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+
+    class Meta:
+        table = "test_defect_history"
+        indexes = (("defect_id", "created_at"),)

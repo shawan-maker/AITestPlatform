@@ -1,6 +1,12 @@
 from pydantic import BaseModel, Field
 
-from service.core.enums import DefectPriority, DefectSeverity, DefectSourceType, DefectStatus
+from service.core.enums import (
+    DefectCategory,
+    DefectPriority,
+    DefectSeverity,
+    DefectSourceType,
+    DefectStatus,
+)
 
 
 class DefectCreateRequest(BaseModel):
@@ -10,6 +16,10 @@ class DefectCreateRequest(BaseModel):
     steps: str | None = None
     severity: DefectSeverity = DefectSeverity.normal
     priority: DefectPriority = DefectPriority.medium
+    defect_category: DefectCategory | None = None
+    root_cause: str | None = None
+    assignee_id: int | None = Field(default=None, ge=1)
+    comment: str | None = None
     source_type: DefectSourceType
     source_run_id: int | None = None
     source_case_id: int | None = None
@@ -29,4 +39,5 @@ class DefectOut(BaseModel):
     severity: DefectSeverity
     priority: DefectPriority
     status: DefectStatus
+    defect_category: DefectCategory
     external_key: str | None = None

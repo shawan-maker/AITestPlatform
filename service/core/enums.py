@@ -186,15 +186,34 @@ class DefectPriority(str, Enum):
     low = "low"
 
 
+class DefectCategory(str, Enum):
+    functional = "functional"
+    performance = "performance"
+    ui = "ui"
+    compatibility = "compatibility"
+    security = "security"
+    other = "other"
+
+
 class DefectStatus(str, Enum):
     init = "init"
     open = "open"
+    in_progress = "in_progress"
+    resolved = "resolved"
     closed = "closed"
 
 
 class DefectSourceType(str, Enum):
     api_case = "api_case"
     functional_case = "functional_case"
+    manual = "manual"
+
+
+class DefectHistoryAction(str, Enum):
+    status_change = "status_change"
+    field_update = "field_update"
+    comment_added = "comment_added"
+    created = "created"
 
 
 class SuiteCaseType(str, Enum):

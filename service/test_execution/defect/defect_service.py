@@ -1,4 +1,4 @@
-from service.core.enums import DefectSourceType, DefectStatus
+from service.core.enums import DefectCategory, DefectSourceType
 from service.core.exceptions import AppException
 from service.test_execution.defect.schemas import (
     DefectBatchLinkRequest,
@@ -6,45 +6,106 @@ from service.test_execution.defect.schemas import (
     DefectOut,
 )
 from service.test_execution.models import ApiCaseRunRecord, FunctionalCaseRunRecord, TestDefect
+from service.test_management.defect.category_mapper import (
+    infer_category_from_api_case,
+    infer_category_from_functional,
+)
+from service.test_management.defect.defect_writer import DefectWriter
 from service.test_management.permissions import ensure_tm_editor
 from service.user.models import User
 
 
-class DefectService:
+class RunDefectService:
     @classmethod
-    async def create(cls, user: User, data: DefectCreateRequest) -> DefectOut:
-        await ensure_tm_editor(data.project_id, user)
-        defect = await TestDefect.create(
-            project_id=data.project_id,
-            module_id=data.module_id,
-            title=data.title,
-            steps=data.steps,
-            severity=data.severity,
-            priority=data.priority,
-            status=DefectStatus.init,
-            source_type=data.source_type,
-            source_run_id=data.source_run_id,
-            source_case_id=data.source_case_id,
-            created_by_id=user.id,
-        )
+    async def _infer_category(cls, data: DefectCreateRequest) -> DefectCategory:
+        if data.source_type == DefectSourceType.functional_case and data.source_case_id:
+            from service.functional_test.case.models import FunctionalCase
+
+            case = await FunctionalCase.get_or_none(id=data.source_case_id)
+            if case:
+                test_point_type: str | None = None
+                if case.test_point_id:
+                    await case.fetch_related("test_point")
+                    if case.test_point:
+                        test_point_type = case.test_point.type
+                return infer_category_from_functional(
+                    test_point_type=test_point_type,
+                    dimension=case.dimension,
+                    case_type=case.type,
+                )
+        if data.source_type == DefectSourceType.api_case:
+            return infer_category_from_api_case()
+        return DefectCategory.other
+
+    @classmethod
+    async def _resolve_module_id(
+        cls, data: DefectCreateRequest, project_id: int
+    ) -> int | None:
+        if data.module_id is not None:
+            return data.module_id
+        if data.source_case_id and data.source_type == DefectSourceType.functional_case:
+            from service.functional_test.case.models import FunctionalCase
+
+            case = await FunctionalCase.get_or_none(id=data.source_case_id)
+            if case and case.project_id == project_id:
+                return case.module_id
+        if data.source_case_id and data.source_type == DefectSourceType.api_case:
+            from service.api_test.models import ApiTestCase
+
+            case = await ApiTestCase.get_or_none(id=data.source_case_id)
+            if case and case.project_id == project_id:
+                return case.module_id
+        return None
+
+    @classmethod
+    async def _link_run_records(
+        cls, defect_id: int, data: DefectCreateRequest
+    ) -> None:
         if data.case_run_id:
             record = await ApiCaseRunRecord.get_or_none(id=data.case_run_id)
             if record is None:
                 raise AppException("API 用例运行记录不存在", 404)
-            record.defect_id = defect.id
+            record.defect_id = defect_id
             await record.save(update_fields=["defect_id"])
         if data.functional_run_id:
-            frecord = await FunctionalCaseRunRecord.get_or_none(id=data.functional_run_id)
+            frecord = await FunctionalCaseRunRecord.get_or_none(
+                id=data.functional_run_id
+            )
             if frecord is None:
                 raise AppException("功能用例运行记录不存在", 404)
-            frecord.defect_id = defect.id
+            frecord.defect_id = defect_id
             await frecord.save(update_fields=["defect_id"])
+
+    @classmethod
+    async def create(cls, user: User, data: DefectCreateRequest) -> DefectOut:
+        await ensure_tm_editor(data.project_id, user)
+        defect_category = data.defect_category or await cls._infer_category(data)
+        module_id = await cls._resolve_module_id(data, data.project_id)
+
+        defect = await DefectWriter.create_from_run(
+            user,
+            project_id=data.project_id,
+            module_id=module_id,
+            title=data.title,
+            defect_category=defect_category,
+            steps=data.steps,
+            severity=data.severity,
+            priority=data.priority,
+            root_cause=data.root_cause,
+            assignee_id=data.assignee_id,
+            comment=data.comment,
+            source_type=data.source_type,
+            source_run_id=data.source_run_id,
+            source_case_id=data.source_case_id,
+        )
+        await cls._link_run_records(defect.id, data)
         return DefectOut(
             id=defect.id,
             title=defect.title,
             severity=defect.severity,
             priority=defect.priority,
             status=defect.status,
+            defect_category=defect.defect_category,
             external_key=defect.external_key,
         )
 
@@ -81,12 +142,11 @@ class DefectService:
                 project_id=project_id, external_key=data.external_key
             ).first()
             if defect is None:
-                defect = await TestDefect.create(
+                defect = await DefectWriter.create_batch_stub(
+                    user,
                     project_id=project_id,
                     title=data.external_key or "批量关联缺陷",
-                    source_type=DefectSourceType.api_case,
-                    external_key=data.external_key,
-                    created_by_id=user.id,
+                    external_key=data.external_key or "",
                 )
 
         linked = 0
@@ -95,3 +155,7 @@ class DefectService:
             await record.save(update_fields=["defect_id"])
             linked += 1
         return {"defect_id": defect.id, "linked_count": linked}
+
+
+# 兼容旧引用
+DefectService = RunDefectService
