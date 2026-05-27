@@ -16,7 +16,7 @@ prompt = PromptTemplate.from_template(
          {{"type":"功能测试","dimension":"边界测试","test_point":"用户名为空，登录失败"}},
          {{"type":"功能测试","dimension":"异常测试","test_point":"用户名为空，登录失败"}}
       ]
-    """)
+    {user_prompt_section}""")
 
 
 

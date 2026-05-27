@@ -100,5 +100,6 @@ complete_api_basecase_prompt = PromptTemplate.from_template(
   }}
 ]
 ```
+{user_prompt_section}
 """
 )

@@ -34,5 +34,6 @@ prompt = PromptTemplate.from_template(
         ]
     输入测试点：
     {points}
+    {user_prompt_section}
     '''
 )

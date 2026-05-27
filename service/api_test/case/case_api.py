@@ -3,11 +3,13 @@ from fastapi import APIRouter, Depends, Query
 from service.api_test.case.case_service import CaseService
 from service.api_test.case.generation_service import GenerationService
 from service.api_test.case.schemas import (
+    ApiSessionPreviewUpdateRequest,
     CaseBatchDeleteRequest,
     CaseDebugRunRequest,
     CaseUpdateRequest,
     GenerateConfirmRequest,
     GeneratePreviewRequest,
+    PreviewFromDocRequest,
 )
 from service.core.deps import get_current_active_user
 from service.core.enums import ApiCaseKind
@@ -25,6 +27,34 @@ async def generate_preview(
 ):
     data = await GenerationService.preview(user, interface_id, body)
     return success(data=data)
+
+
+@router.post("/case-generation/preview-from-doc", summary="从文档生成预览")
+async def preview_from_doc(
+    body: PreviewFromDocRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await GenerationService.preview_from_doc(user, body)
+    return success(data=data)
+
+
+@router.get("/case-generation/sessions/{session_id}", summary="查询生成会话")
+async def get_generation_session(
+    session_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    data = await GenerationService.get_session(user, session_id)
+    return success(data=data)
+
+
+@router.patch("/case-generation/sessions/{session_id}/preview", summary="编辑生成预览")
+async def update_generation_preview(
+    session_id: int,
+    body: ApiSessionPreviewUpdateRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await GenerationService.update_preview(user, session_id, body)
+    return success(data=data, message="预览已更新")
 
 
 @router.post("/interfaces/{interface_id}/cases/confirm", summary="确认生成并入库")

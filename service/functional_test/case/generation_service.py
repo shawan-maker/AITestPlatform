@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from tortoise.transactions import in_transaction
 
+from service.ai_generation.common import compute_prompt_hash, load_knowledge_requirement_text
 from service.ai_generation.models import AIGenerationSession
 from service.core.enums import (
     FunctionalCaseType,
@@ -75,6 +76,35 @@ class GenerationService:
         return doc.title
 
     @classmethod
+    async def _validate_create_input(cls, data: GenerationSessionCreateRequest) -> None:
+        has_req_id = data.requirement_id is not None
+        has_req_text = bool(data.requirement_text and data.requirement_text.strip())
+        has_knowledge = data.knowledge_document_id is not None
+        if not (has_req_id or has_req_text or has_knowledge):
+            raise AppException(
+                "requirement_id、requirement_text 或 knowledge_document_id 至少提供一个",
+                400,
+            )
+        if has_req_text and has_knowledge:
+            raise AppException("requirement_text 与 knowledge_document_id 不能同时提供", 400)
+        if has_req_id and has_knowledge:
+            raise AppException("requirement_id 与 knowledge_document_id 不能同时提供", 400)
+
+    @classmethod
+    async def _resolve_session_requirement_text(
+        cls,
+        data: GenerationSessionCreateRequest,
+    ) -> tuple[str, int | None, InputRefType | None, int | None]:
+        if data.knowledge_document_id is not None:
+            text = await load_knowledge_requirement_text(
+                data.knowledge_document_id, data.project_id
+            )
+            return text, data.knowledge_document_id, None, None
+        text = await cls._resolve_requirement_text(data.requirement_id, data.requirement_text)
+        input_ref_type = InputRefType.requirement if data.requirement_id else None
+        return text, None, input_ref_type, data.requirement_id
+
+    @classmethod
     async def _to_out(cls, session: AIGenerationSession) -> GenerationSessionOut:
         return GenerationSessionOut(
             id=session.id,
@@ -94,7 +124,8 @@ class GenerationService:
         user: User,
         data: GenerationSessionCreateRequest,
     ) -> GenerationSessionOut:
-        await ensure_case_editor(data.project_id, user)
+        await ensure_case_viewer(data.project_id, user)
+        await cls._validate_create_input(data)
         if data.module_id is not None:
             exists = await ProjectModule.filter(
                 id=data.module_id, project_id=data.project_id
@@ -102,24 +133,33 @@ class GenerationService:
             if not exists:
                 raise AppException("项目模块不存在", 404)
 
-        requirement_text = await cls._resolve_requirement_text(
-            data.requirement_id, data.requirement_text
+        requirement_text, knowledge_document_id, input_ref_type, input_ref_id = (
+            await cls._resolve_session_requirement_text(data)
         )
         session = await AIGenerationSession.create(
             project_id=data.project_id,
             module_id=data.module_id,
             gen_type=GenType.functional,
-            input_ref_type=InputRefType.requirement if data.requirement_id else None,
-            input_ref_id=data.requirement_id,
+            input_ref_type=input_ref_type,
+            input_ref_id=input_ref_id,
+            knowledge_document_id=knowledge_document_id,
+            prompt_hash=compute_prompt_hash(requirement_text, data.user_prompt),
             status=SessionStatus.pending,
             user_prompt=data.user_prompt,
             created_by_id=user.id,
         )
-        asyncio.create_task(cls._run_workflow(session.id, requirement_text))
+        asyncio.create_task(
+            cls._run_workflow(session.id, requirement_text, data.user_prompt)
+        )
         return await cls._to_out(session)
 
     @classmethod
-    async def _run_workflow(cls, session_id: int, requirement_text: str) -> None:
+    async def _run_workflow(
+        cls,
+        session_id: int,
+        requirement_text: str,
+        user_prompt: str | None,
+    ) -> None:
         session = await AIGenerationSession.get_or_none(id=session_id)
         if session is None:
             return
@@ -129,7 +169,9 @@ class GenerationService:
             if os.getenv("FUNCTIONAL_GEN_MOCK") == "1" or not os.getenv("LLM_BINDING_API_KEY"):
                 payload = cls._mock_payload(requirement_text)
             else:
-                payload = await asyncio.to_thread(cls._invoke_workflow, requirement_text)
+                payload = await asyncio.to_thread(
+                    cls._invoke_workflow, requirement_text, user_prompt
+                )
             session.status = SessionStatus.success
             session.output_payload = payload
             session.finished_at = datetime.now(timezone.utc)
@@ -172,13 +214,13 @@ class GenerationService:
         }
 
     @staticmethod
-    def _invoke_workflow(requirement_text: str) -> dict:
+    def _invoke_workflow(requirement_text: str, user_prompt: str | None) -> dict:
         from workflow.case_generator_workflow import GenerateTestCases
 
         graph = GenerateTestCases().create_workflow()
         config = {"configurable": {"thread_id": "functional-gen"}}
         result = graph.invoke(
-            {"requirement": requirement_text},
+            {"requirement": requirement_text, "user_prompt": user_prompt},
             config=config,
             context={"project_name": "functional", "module_id": "0"},
         )
@@ -204,7 +246,7 @@ class GenerationService:
         data: GenerationPreviewUpdateRequest,
     ) -> GenerationSessionOut:
         session = await cls._get_session_or_404(session_id)
-        await ensure_case_editor(session.project_id, user)
+        await ensure_case_viewer(session.project_id, user)
         session.output_payload = data.output_payload
         await session.save(update_fields=["output_payload"])
         return await cls._to_out(session)
@@ -253,7 +295,7 @@ class GenerationService:
                 item = cases[idx]
                 if not isinstance(item, dict):
                     raise AppException(f"用例预览数据格式错误: index={idx}", 400)
-                tp = point_map.get(idx) or (list(point_map.values())[0] if point_map else None)
+                tp = point_map.get(idx) if requirement_id else None
                 case = await FunctionalCase.create(
                     project_id=session.project_id,
                     module_id=session.module_id,

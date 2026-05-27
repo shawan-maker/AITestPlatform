@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from config.prompts.workflow import generate_test_cases_prompt, verify_coverage_prompt, generate_test_points_prompt, complete_test_points_prompt
 from config.settings import llm
+from service.ai_generation.common import format_user_prompt_section
 from service.core.config import MAX_COMPLETE_TEST_POINTS
 from utils.parser.api_document_ai_parser import safe_structure_parser
 
@@ -43,6 +44,8 @@ class State1(TypedDict):
     """主工作流的状态"""
     # 输入需求文档
     requirement: str
+    # 用户附加要求
+    user_prompt: str | None
     # 输出测试点
     points: List[dict]
     # 输出测试用例
@@ -52,6 +55,7 @@ class State1(TypedDict):
 class State2(TypedDict):
     """子工作流的状态"""
     input_requirement: str
+    user_prompt: str | None
     test_points: list[dict]
     coverage_report: str
     complete_round: int
@@ -88,12 +92,18 @@ class GeneratePoints(BaseModel):
         writer("【开始执行节点】 1、基于需求生成测试点：")
         # 1、获取输入的需求文档
         input_requirement = state["input_requirement"]
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 2、编写提示词
         prompt = generate_test_points_prompt.prompt
         # 配置测试点解释器
         parser = JsonOutputParser(pydantic_schema=List[TestPointModel])
         # 3、调用大模型，生成测试点
-        resp = safe_structure_parser(prompt,llm,parser,{"document": input_requirement})
+        resp = safe_structure_parser(
+            prompt,
+            llm,
+            parser,
+            {"document": input_requirement, "user_prompt_section": user_prompt_section},
+        )
         # 4、获取大模型调用的结果并返回
         writer(f"【执行节点完成】 1、基于需求生成测试点：{len(resp)}")
         return {"test_points": resp}
@@ -104,11 +114,18 @@ class GeneratePoints(BaseModel):
         """验证测试点覆盖率"""
         writer = get_stream_writer()
         writer("【开始执行节点】 2、验证测试点覆盖率：")
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 1、编写提示词
         prompt = verify_coverage_prompt.prompt
         # 2、调用大模型，校验测试点覆盖率
         chain = prompt | llm
-        resp = chain.invoke({"document": state["input_requirement"], "test_points": state["test_points"]})
+        resp = chain.invoke(
+            {
+                "document": state["input_requirement"],
+                "test_points": state["test_points"],
+                "user_prompt_section": user_prompt_section,
+            }
+        )
         coverage_report = resp.content.split("\n")
         writer("【执行节点完成】 2、验证测试点覆盖率：")
         # 3、获取大模型调用的结果并返回
@@ -120,12 +137,23 @@ class GeneratePoints(BaseModel):
         """对未覆盖的测试点补全"""
         writer = get_stream_writer()
         writer("【开始执行节点】 3、对未覆盖的测试点补全：")
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 1、编写提示词
         prompt = complete_test_points_prompt.prompt
         # 配置测试点解释器
         parser = JsonOutputParser(pydantic_schema=List[TestPointModel])
         # 2、调用大模型，补全测试点
-        resp =safe_structure_parser(prompt,llm,parser,{"document": state["input_requirement"], "test_points": state["test_points"], "coverage_report": state["coverage_report"]})
+        resp = safe_structure_parser(
+            prompt,
+            llm,
+            parser,
+            {
+                "document": state["input_requirement"],
+                "test_points": state["test_points"],
+                "coverage_report": state["coverage_report"],
+                "user_prompt_section": user_prompt_section,
+            },
+        )
         writer(f"【执行节点完成】 3、对未覆盖的测试点补全,总数量为：{len(resp)}")
         # 获取补充前的测试点（确保是列表类型）
         existing = state.get("test_points", [])
@@ -187,7 +215,11 @@ class GenerateTestCases:
         writer("【开始执行节点】 3.1 创建测试点：")
         # 1、调用子工作流
         res = self.sub_graph.invoke(
-            {"input_requirement": state["requirement"], "complete_round": 0}
+            {
+                "input_requirement": state["requirement"],
+                "user_prompt": state.get("user_prompt"),
+                "complete_round": 0,
+            }
         )
         writer("【执行节点完成】 3.1 创建测试点")
         # 2、获取子工作流的结果并返回给父工作流
@@ -198,9 +230,15 @@ class GenerateTestCases:
         """基于测试点生成测试用例"""
         writer = get_stream_writer()
         writer("【开始执行节点】 3.2 基于测试点生成测试用例：")
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         prompt = generate_test_cases_prompt.prompt
         parser = JsonOutputParser(pydantic_schema=List[TestCaseModel])
-        resp = safe_structure_parser(prompt, llm, parser, {"points": state["points"]})
+        resp = safe_structure_parser(
+            prompt,
+            llm,
+            parser,
+            {"points": state["points"], "user_prompt_section": user_prompt_section},
+        )
         writer(f"项目{runtime.context.get('project_name')}的{runtime.context.get('module_id')}模块, 生成测试用例完成" )
         writer("【执行节点完成】 3.2 基于测试点生成测试用例")
         return {"test_cases": resp}

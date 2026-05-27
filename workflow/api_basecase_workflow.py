@@ -31,6 +31,7 @@ from config.prompts.api_workflow.api_basecase_generator_prompt import api_baseca
 from langchain_core.output_parsers import JsonOutputParser
 from typing import List,Annotated
 
+from service.ai_generation.common import format_user_prompt_section
 from utils.parser.api_document_ai_parser import safe_structure_parser
 
 checkpointer=InMemorySaver()
@@ -41,6 +42,7 @@ class StateNode(TypedDict):
     project_name: str  # 项目名称
     module_name: str  # 模块名称
     precoditions: list[str]  # 前置执行依赖接口的调用顺序
+    user_prompt: str | None  # 用户附加要求
     api_cases: Annotated[List, operator.add]  # 生成的测试用例
     api_cases_check_report: str  # 覆盖率验证报告
     env_config: dict  # 测试环境配置
@@ -62,9 +64,19 @@ class ApiBaseCaseGeneratorWorkflow:
         writer("【开始执行节点】 1、生成api基础测试用例：")
         api_doc = state.get("api_doc")
         precoditions = state.get("precoditions")
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
-        resp = safe_structure_parser(api_basecase_generator_prompt,llm,parser,{"api_doc":api_doc,"precoditions":precoditions})
+        resp = safe_structure_parser(
+            api_basecase_generator_prompt,
+            llm,
+            parser,
+            {
+                "api_doc": api_doc,
+                "precoditions": precoditions,
+                "user_prompt_section": user_prompt_section,
+            },
+        )
         writer("【执行节点完成】 1、生成api基础测试用例：")
         # 3、返回基础的测试用例
         return {"api_cases": resp}
@@ -78,9 +90,17 @@ class ApiBaseCaseGeneratorWorkflow:
         api_doc = state.get("api_doc")
         precoditions = state.get("precoditions")
         api_cases = state.get("api_cases")
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 2、调用AI模型生成基础的测试用例
         chain = api_coverage_check_prompt | llm
-        resp = chain.invoke({"api_doc":api_doc,"precoditions":precoditions,"api_cases":api_cases})
+        resp = chain.invoke(
+            {
+                "api_doc": api_doc,
+                "precoditions": precoditions,
+                "api_cases": api_cases,
+                "user_prompt_section": user_prompt_section,
+            }
+        )
         coverage_report = resp.content.split("\n")
         writer("【执行节点完成】 2、验证api基础测试用例覆盖率：")
         # 3、返回覆盖率的验证报告
@@ -96,9 +116,21 @@ class ApiBaseCaseGeneratorWorkflow:
         precoditions = state.get("precoditions")
         api_cases = state.get("api_cases")
         api_cases_check_report = state.get("api_cases_check_report")
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
-        resp = safe_structure_parser(complete_api_basecase_prompt,llm,parser,{"api_doc":api_doc,"precoditions":precoditions,"api_cases":api_cases,"api_cases_check_report":api_cases_check_report})
+        resp = safe_structure_parser(
+            complete_api_basecase_prompt,
+            llm,
+            parser,
+            {
+                "api_doc": api_doc,
+                "precoditions": precoditions,
+                "api_cases": api_cases,
+                "api_cases_check_report": api_cases_check_report,
+                "user_prompt_section": user_prompt_section,
+            },
+        )
         writer("【执行节点完成】 3、补充生成api基础测试用例：")
         count = state.get("basecase_regenerate_count", 0) + 1
         writer(f"基础用例补充生成次数：{count}/{MAX_BASECASE_REGENERATE_COUNT}")

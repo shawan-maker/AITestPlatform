@@ -161,6 +161,7 @@ class GenerationSessionCreateRequest(BaseModel):
     project_id: int = Field(..., ge=1)
     requirement_id: int | None = Field(default=None, ge=1)
     requirement_text: str | None = None
+    knowledge_document_id: int | None = Field(default=None, ge=1)
     user_prompt: str | None = None
     module_id: int | None = Field(default=None, ge=1)
 

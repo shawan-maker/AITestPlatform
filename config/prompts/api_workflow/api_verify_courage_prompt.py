@@ -75,6 +75,7 @@ api_coverage_check_prompt = PromptTemplate.from_template(
 3. 无效/冗余用例：
    - ...
 ---
+{user_prompt_section}
 """
 )
 

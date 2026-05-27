@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from service.core.enums import ApiCaseKind, ExecStatus, ReviewStatus
+from service.core.enums import ApiCaseKind, ExecStatus, ReviewStatus, SessionStatus
 from service.core.pagination import Paginated
 
 
@@ -35,6 +35,44 @@ class GenerateConfirmResult(BaseModel):
     created_base_case_ids: list[int]
     created_case_ids: list[int]
     run_errors: list[str] = Field(default_factory=list)
+
+
+class PreviewFromDocRequest(BaseModel):
+    project_id: int = Field(..., ge=1)
+    api_doc_text: str = Field(..., min_length=1)
+    user_prompt: str | None = None
+    module_id: int | None = Field(default=None, ge=1)
+
+
+class ApiSessionPreviewUpdateRequest(BaseModel):
+    output_payload: dict[str, Any]
+
+
+class ApiConfirmRequest(BaseModel):
+    session_id: int = Field(..., ge=1)
+    selected_indexes: list[int] = Field(..., min_length=1)
+    environment_id: int = Field(..., ge=1)
+    catalog_id: int | None = Field(default=None, ge=1)
+    interface_id: int | None = Field(default=None, ge=1)
+
+
+class ApiConfirmResult(BaseModel):
+    created_base_case_ids: list[int]
+    created_case_ids: list[int]
+    run_errors: list[str] = Field(default_factory=list)
+    created_interface_id: int | None = None
+
+
+class ApiGenerationSessionOut(BaseModel):
+    id: int
+    project_id: int
+    module_id: int | None
+    status: SessionStatus
+    error_message: str | None
+    output_payload: dict[str, Any] | None
+    user_prompt: str | None
+    created_at: datetime
+    finished_at: datetime | None
 
 
 class CaseUpdateRequest(BaseModel):
