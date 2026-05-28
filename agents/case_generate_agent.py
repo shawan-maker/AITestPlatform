@@ -25,8 +25,14 @@ from langgraph_supervisor import create_supervisor
 
 from config.prompts.agents import case_generate_agent_prompt, api_case_generate_agent_prompt, main_agent_prompt
 from config.settings import llm
-from mcp_tools.tools import search_requirement, generate_testcases, search_api_document, api_document_to_cases, \
-    load_evn_data
+from mcp_tools.tools import (
+    search_requirement,
+    generate_testcases,
+    search_api_document,
+    generate_base_cases,
+    api_document_to_cases,
+    load_evn_data,
+)
 # 引入双记忆系统模块：DualMemoryManager（管理读写逻辑）+ RuntimeContext（运行时上下文）
 from agents.memory.manager import DualMemoryManager, RuntimeContext
 
@@ -55,7 +61,7 @@ class AgentManage:
         agent = create_react_agent(
             name="api_case_generate_agent",
             model=llm,
-            tools=[search_api_document,load_evn_data,api_document_to_cases],
+            tools=[search_api_document, generate_base_cases],
             prompt=api_case_generate_agent_prompt.prompt,
             checkpointer=memory.checkpointer,
         )
@@ -76,45 +82,37 @@ class AgentManage:
         return supervisor
 
     @staticmethod
-    def agent_chat(agent, query: str, context: RuntimeContext):
+    def agent_chat(agent, query: str, context: RuntimeContext, run_config: dict | None = None):
         """Agent 对话入口 —— 整合双记忆系统的完整对话流程
         
-        流程概览：
-          Step 1: 准备消息（自动处理长期记忆注入 + 去重控制）
-          Step 2: 流式调用 Agent（checkeeper 自动管理本会话内短期多轮）
-          Step 3: 后台异步保存长期记忆摘要（每轮都执行，不阻塞主流程）
-        
-        Args:
-            agent:   已编译的 supervisor 或子 agent 实例
-            query:   用户本轮输入
-            context: 运行上下文（包含 project/module/user/session/thread 维度信息）
-        
         Yields:
-            {"type": "custom" | "messages", "content": str} 格式的流式输出块
+            {"type": "custom" | "messages" | "tool_call", "content": str, "tool_name": optional}
         """
         memory = DualMemoryManager()
 
-        # ========== Step 1: 准备输入消息（含长期记忆注入） ==========
-        # 内部逻辑：按 thread_id 判断是否需要注入 → 加载 InMemoryStore 历史 → 组装 SystemMessage
         input_data = asyncio.run(memory.prepare_messages(context, query))
 
-        # ========== Step 2: 执行 Agent 流式响应 ==========
+        config = run_config or {"configurable": {"thread_id": context.thread_id}}
+        if "configurable" not in config:
+            config["configurable"] = {"thread_id": context.thread_id}
+        elif "thread_id" not in config["configurable"]:
+            config["configurable"]["thread_id"] = context.thread_id
+
         response = agent.stream(
             input=input_data,
             subgraphs=True,
-            stream_mode=["messages", "custom","tool_call"],
-            config={"configurable": {"thread_id": context.thread_id}},
+            stream_mode=["messages", "custom", "tool_call"],
+            config=config,
             context={
                 "project_name": context.project_name,
-                "module_id": context.module_id
-            }
+                "module_id": context.module_id,
+            },
         )
 
-        result_parts = []       # 收集完整回答内容，用于后续保存
+        result_parts = []
         for chunk in response:
             if chunk[1] == "custom":
                 raw_data = chunk[2]
-                # ★ 类型安全处理：custom 类型可能是 str 或 list
                 if isinstance(raw_data, list):
                     content = "".join(str(item) for item in raw_data)
                 else:
@@ -125,12 +123,14 @@ class AgentManage:
                 content = chunk[2][0].content
                 result_parts.append(content)
                 yield {"type": "messages", "content": content}
+            elif chunk[1] == "tool_call":
+                tool_chunk = chunk[2]
+                tool_name = getattr(tool_chunk, "name", None) or str(tool_chunk)
+                content = str(tool_chunk)
+                yield {"type": "tool_call", "content": content, "tool_name": tool_name}
 
-        # ========== Step 3: 后台异步保存长期记忆 ==========
         full_result = "".join(result_parts)
         if full_result.strip():
-            # 流式输出已收集完毕，使用 asyncio.run 执行保存（无需事件循环）
-            # 内部流程：LLM提取摘要 → 失败则降级兜底 → 写入 InMemoryStore
             asyncio.run(memory.save_after_turn(context, query, full_result))
 
 

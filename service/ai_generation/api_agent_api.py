@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 
 from service.ai_generation.api_agent_service import ApiAgentService
 from service.ai_generation.schemas import (
     ApiConfirmRequest,
+    ApiCreateSessionRequest,
     ApiGenerateFromDocRequest,
     ApiGenerateFromInterfaceRequest,
     ApiSessionPreviewUpdateRequest,
 )
+from service.ai_generation.session_schemas import AgentMessageRequest
 from service.core.deps import get_current_active_user
 from service.core.response import success
 from service.user.models import User
@@ -14,21 +17,21 @@ from service.user.models import User
 router = APIRouter(prefix="/api", tags=["AI 智能体-接口用例"])
 
 
-@router.post("/generate-from-interface", summary="从已有接口生成用例预览")
-async def api_generate_from_interface(
-    body: ApiGenerateFromInterfaceRequest,
+@router.post("/sessions", summary="创建接口用例 Agent 会话")
+async def api_create_session(
+    body: ApiCreateSessionRequest,
     user: User = Depends(get_current_active_user),
 ):
-    data = await ApiAgentService.generate_from_interface(user, body)
-    return success(data=data)
+    data = await ApiAgentService.create_session(user, body)
+    return success(data=data, message="会话已创建")
 
 
-@router.post("/generate-from-doc", summary="从接口文档生成用例预览")
-async def api_generate_from_doc(
-    body: ApiGenerateFromDocRequest,
+@router.get("/sessions", summary="接口用例 Agent 历史会话列表")
+async def api_list_sessions(
+    project_id: int = Query(..., ge=1),
     user: User = Depends(get_current_active_user),
 ):
-    data = await ApiAgentService.generate_from_doc(user, body)
+    data = await ApiAgentService.list_sessions(user, project_id)
     return success(data=data)
 
 
@@ -38,6 +41,28 @@ async def api_get_session(
     user: User = Depends(get_current_active_user),
 ):
     data = await ApiAgentService.get_session(user, session_id)
+    return success(data=data)
+
+
+@router.post("/sessions/{session_id}/messages", summary="发送消息（SSE 流式）")
+async def api_post_message(
+    session_id: int,
+    body: AgentMessageRequest,
+    user: User = Depends(get_current_active_user),
+):
+    stream = ApiAgentService.stream_message(user, session_id, body)
+    return StreamingResponse(stream, media_type="text/event-stream")
+
+
+@router.get("/sessions/{session_id}/messages", summary="回放会话消息")
+async def api_list_messages(
+    session_id: int,
+    from_sequence: int = Query(1, ge=1),
+    user: User = Depends(get_current_active_user),
+):
+    data = await ApiAgentService.list_messages(
+        user, session_id, from_sequence=from_sequence
+    )
     return success(data=data)
 
 
@@ -58,3 +83,29 @@ async def api_confirm(
 ):
     data = await ApiAgentService.confirm(user, body)
     return success(data=data, message="用例生成完成")
+
+
+@router.post(
+    "/generate-from-interface",
+    summary="[deprecated] 从已有接口生成用例预览",
+    deprecated=True,
+)
+async def api_generate_from_interface(
+    body: ApiGenerateFromInterfaceRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await ApiAgentService.generate_from_interface(user, body)
+    return success(data=data)
+
+
+@router.post(
+    "/generate-from-doc",
+    summary="[deprecated] 从接口文档生成用例预览",
+    deprecated=True,
+)
+async def api_generate_from_doc(
+    body: ApiGenerateFromDocRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await ApiAgentService.generate_from_doc(user, body)
+    return success(data=data)

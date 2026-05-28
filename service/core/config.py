@@ -69,6 +69,10 @@ AITESTPLATFORM_ALLOW_WORKFLOW_MAIN: bool = (
     os.getenv("AITESTPLATFORM_ALLOW_WORKFLOW_MAIN", "").strip() == "1"
 )
 
+AI_AGENT_SESSION_HISTORY_LIMIT: int = int(
+    os.getenv("AI_AGENT_SESSION_HISTORY_LIMIT", "10")
+)
+
 TORTOISE_ORM = {
     "connections": {"default": DATABASE_URL},
     "apps": {

@@ -56,11 +56,16 @@ async def api_gen_context(db, admin_user):
         "environment_id": env.id,
     }
     yield ctx
-    from service.ai_generation.models import AIGenerationSession
+    from service.ai_generation.models import AIGenerationMessage, AIGenerationSession
     from service.api_test.models import ApiBaseCase, ApiTestCase
 
     await ApiTestCase.filter(project_id=project.id).delete()
     await ApiBaseCase.filter(project_id=project.id).delete()
+    session_ids = await AIGenerationSession.filter(project_id=project.id).values_list(
+        "id", flat=True
+    )
+    if session_ids:
+        await AIGenerationMessage.filter(session_id__in=session_ids).delete()
     await AIGenerationSession.filter(project_id=project.id).delete()
     from service.api_test.interface.models import ApiInterface
 
@@ -146,13 +151,18 @@ async def agent_context(db, admin_user):
     }
     yield ctx
 
-    from service.ai_generation.models import AIGenerationSession
+    from service.ai_generation.models import AIGenerationMessage, AIGenerationSession
     from service.api_test.models import ApiBaseCase, ApiTestCase
     from service.functional_test.case.models import FunctionalCase
 
     await FunctionalCase.filter(project_id=project.id).delete()
     await ApiTestCase.filter(project_id=project.id).delete()
     await ApiBaseCase.filter(project_id=project.id).delete()
+    session_ids = await AIGenerationSession.filter(project_id=project.id).values_list(
+        "id", flat=True
+    )
+    if session_ids:
+        await AIGenerationMessage.filter(session_id__in=session_ids).delete()
     await AIGenerationSession.filter(project_id=project.id).delete()
     await ApiInterface.filter(project_id=project.id).delete()
     await ProjectMember.filter(project_id=project.id).delete()

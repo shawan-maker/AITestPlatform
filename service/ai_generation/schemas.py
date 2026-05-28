@@ -26,6 +26,25 @@ class AgentMetaOut(BaseModel):
     functional_prompt_templates: list[PromptTemplateItem]
     api_prompt_templates: list[PromptTemplateItem]
     single_interface_only: bool = True
+    history_limit: int = 10
+
+
+class FunctionalCreateSessionRequest(BaseModel):
+    project_id: int = Field(..., ge=1)
+    requirement_text: str | None = None
+    knowledge_document_id: int | None = Field(default=None, ge=1)
+    user_prompt: str | None = None
+    module_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, max_length=200)
+
+
+class ApiCreateSessionRequest(BaseModel):
+    project_id: int = Field(..., ge=1)
+    interface_id: int | None = Field(default=None, ge=1)
+    api_doc_text: str | None = None
+    user_prompt: str | None = None
+    module_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, max_length=200)
 
 
 class FunctionalGenerateRequest(BaseModel):
@@ -66,6 +85,7 @@ ApiSessionPreviewUpdateRequest = AIGenerationPreviewUpdateRequest
 
 __all__ = [
     "AgentMetaOut",
+    "ApiCreateSessionRequest",
     "AIGenerationPreviewUpdateRequest",
     "AIGenerationSessionOut",
     "ApiConfirmRequest",
@@ -74,6 +94,7 @@ __all__ = [
     "ApiGenerateFromInterfaceRequest",
     "ApiGenerationSessionOut",
     "ApiSessionPreviewUpdateRequest",
+    "FunctionalCreateSessionRequest",
     "FunctionalGenerateRequest",
     "FunctionalPreviewUpdateRequest",
     "FunctionalSaveRequest",

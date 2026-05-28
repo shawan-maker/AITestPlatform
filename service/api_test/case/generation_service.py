@@ -15,6 +15,7 @@ from service.ai_generation.common import (
     is_llm_configured,
 )
 from service.ai_generation.models import AIGenerationSession
+from service.ai_generation.session_lifecycle import session_to_out
 from service.ai_generation.session_schemas import AIGenerationSessionOut
 from service.api_test.case.schemas import (
     ApiConfirmRequest,
@@ -42,6 +43,7 @@ from service.core.enums import (
     InputRefType,
     ReviewStatus,
     SessionStatus,
+    SourceChannel,
     SourceType,
 )
 from service.core.exceptions import AppException
@@ -69,17 +71,7 @@ class ApiCaseGenerationService:
 
     @classmethod
     def _to_session_out(cls, session: AIGenerationSession) -> AIGenerationSessionOut:
-        return AIGenerationSessionOut(
-            id=session.id,
-            project_id=session.project_id,
-            module_id=session.module_id,
-            status=session.status,
-            error_message=session.error_message,
-            output_payload=session.output_payload,
-            user_prompt=session.user_prompt,
-            created_at=session.created_at,
-            finished_at=session.finished_at,
-        )
+        return session_to_out(session)
 
     @classmethod
     async def preview(
@@ -103,6 +95,7 @@ class ApiCaseGenerationService:
             status=SessionStatus.running,
             user_prompt=data.user_prompt,
             prompt_hash=compute_prompt_hash(api_doc, data.user_prompt),
+            source_channel=SourceChannel.interface_detail,
             created_by_id=user.id,
         )
 
@@ -177,6 +170,7 @@ class ApiCaseGenerationService:
             status=SessionStatus.running,
             user_prompt=data.user_prompt,
             prompt_hash=compute_prompt_hash(api_doc_text, data.user_prompt),
+            source_channel=SourceChannel.interface_detail,
             created_by_id=user.id,
         )
 

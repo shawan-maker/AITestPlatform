@@ -25,6 +25,7 @@ from service.functional_test.case.catalog_service import CatalogService
 from service.functional_test.case.case_service import CaseService
 from service.functional_test.case.models import FunctionalCase, FunctionalTestPoint
 from service.functional_test.permissions import ensure_case_editor, ensure_case_viewer
+from service.ai_generation.session_lifecycle import session_to_out
 from service.ai_generation.session_schemas import AIGenerationSessionOut
 from service.functional_test.case.schemas import (
     GenerationPreviewUpdateRequest,
@@ -112,17 +113,7 @@ class FunctionalCaseGenerationService:
 
     @classmethod
     async def _to_out(cls, session: AIGenerationSession) -> AIGenerationSessionOut:
-        return AIGenerationSessionOut(
-            id=session.id,
-            project_id=session.project_id,
-            module_id=session.module_id,
-            status=session.status,
-            error_message=session.error_message,
-            output_payload=session.output_payload,
-            user_prompt=session.user_prompt,
-            created_at=session.created_at,
-            finished_at=session.finished_at,
-        )
+        return session_to_out(session)
 
     @classmethod
     async def create_session(

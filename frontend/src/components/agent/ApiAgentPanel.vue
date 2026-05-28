@@ -1,104 +1,100 @@
 <template>
-  <div class="api-agent-panel">
-    <el-form label-width="120px">
-      <el-form-item :label="t('page.agent.mode')">
-        <el-radio-group v-model="mode">
-          <el-radio value="interface">{{ t('page.agent.fromInterface') }}</el-radio>
-          <el-radio value="doc">{{ t('page.agent.fromDoc') }}</el-radio>
-        </el-radio-group>
-      </el-form-item>
-      <el-form-item v-if="mode === 'interface'" :label="t('page.apiCases.interface')">
-        <el-input-number v-model="interfaceId" :min="1" />
-      </el-form-item>
-      <template v-else>
-        <el-form-item :label="t('page.knowledge.titleCol')">
-          <el-input-number v-model="documentId" :min="1" />
-        </el-form-item>
-        <el-form-item :label="t('page.knowledge.versionNo')">
-          <el-input-number v-model="versionId" :min="1" />
-        </el-form-item>
-      </template>
-      <el-form-item :label="t('page.agent.prompt')">
-        <el-input v-model="userPrompt" type="textarea" :rows="3" :placeholder="t('page.agent.promptPlaceholder')" />
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" :loading="generating" :disabled="!canEdit" @click="generate">
-          {{ t('page.agent.generate') }}
-        </el-button>
-        <el-button v-if="sessionId" type="success" :disabled="!canEdit" @click="showConfirm = true">
-          {{ t('page.agent.confirmSave') }}
-        </el-button>
-      </el-form-item>
-    </el-form>
+  <div class="api-agent-panel agent-layout">
+    <AgentSessionSidebar
+      :title="t('page.agent.history')"
+      :sessions="sessions"
+      :active-id="activeSessionId"
+      :history-limit="historyLimit"
+      @new="showCreate = true"
+      @select="selectSession"
+    />
+    <AgentChatPanel
+      :messages="messages"
+      :streaming="streaming"
+      :streaming-text="streamingText"
+      :quick-tags="quickTags"
+      :placeholder="metaPlaceholder"
+      :disabled="!activeSessionId"
+      @send="sendMessage"
+      @stop="stopStream"
+    />
+    <ApiPreviewPanel
+      :output-payload="sessionDetail?.output_payload"
+      :catalogs="catalogs"
+      :interface-id="boundInterfaceId"
+      :can-edit="canEdit"
+      :confirming="confirming"
+      @confirm="confirmCases"
+    />
 
-    <div v-if="preview" class="preview-box">
-      <MonacoJsonEditor :model-value="previewJson" read-only :height="320" />
-    </div>
-
-    <el-dialog v-model="showConfirm" :title="t('page.agent.confirmSave')" width="480px">
-      <el-form label-width="120px">
-        <el-form-item :label="t('page.functional.catalog')" required>
-          <el-select v-model="confirmCatalogId" filterable style="width: 100%">
-            <el-option v-for="c in flatCatalogs" :key="c.id" :label="c.name" :value="c.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('page.apiCases.selectEnv')" required>
-          <EnvironmentSelect v-model="confirmEnvId" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showConfirm = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="confirming" @click="confirm">{{ t('common.confirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <CreateApiSessionDialog
+      v-model="showCreate"
+      :loading="creating"
+      :initial-interface-id="initialInterfaceId"
+      @submit="createSession"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import {
   confirmApiGeneration,
-  generateApiFromDoc,
-  generateApiFromInterface,
+  createApiSession,
   getApiSession,
+  getMeta,
+  listApiMessages,
+  listApiSessions,
+  streamApiMessage,
 } from '@/api/aiGeneration'
 import { getApiCatalogTree } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
-import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
-import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
+import AgentSessionSidebar from '@/components/agent/AgentSessionSidebar.vue'
+import AgentChatPanel from '@/components/agent/AgentChatPanel.vue'
+import ApiPreviewPanel from '@/components/agent/ApiPreviewPanel.vue'
+import CreateApiSessionDialog from '@/components/agent/CreateApiSessionDialog.vue'
+
+const props = defineProps({
+  autoNew: { type: Boolean, default: false },
+  initialInterfaceId: { type: Number, default: null },
+})
 
 const { t } = useI18n()
-const { projectId, withProjectParams } = useProjectScope()
+const route = useRoute()
+const { withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 
-const mode = ref('interface')
-const interfaceId = ref(null)
-const documentId = ref(null)
-const versionId = ref(null)
-const userPrompt = ref('')
-const sessionId = ref(null)
-const preview = ref(null)
-const generating = ref(false)
-const showConfirm = ref(false)
+const sessions = ref([])
+const activeSessionId = ref(null)
+const sessionDetail = ref(null)
+const messages = ref([])
+const streaming = ref(false)
+const streamingText = ref('')
+const showCreate = ref(false)
+const creating = ref(false)
 const confirming = ref(false)
-const confirmCatalogId = ref(null)
-const confirmEnvId = ref(null)
 const catalogs = ref([])
-let pollTimer = null
+const meta = ref(null)
+const boundInterfaceId = ref(null)
+let abortController = null
+let tempMsgId = 0
 
-const previewJson = computed(() => JSON.stringify(preview.value ?? {}, null, 2))
+const historyLimit = computed(() => meta.value?.history_limit ?? 10)
+const quickTags = computed(() => meta.value?.api_prompt_templates ?? [])
+const metaPlaceholder = computed(() => quickTags.value[0]?.placeholder ?? '')
 
-const flatCatalogs = computed(() => {
-  const out = []
-  function walk(nodes) {
-    nodes.forEach((n) => { out.push(n); if (n.children) walk(n.children) })
+async function loadMeta() {
+  try {
+    const res = await getMeta()
+    meta.value = res.data.data
+  } catch {
+    meta.value = null
   }
-  walk(catalogs.value)
-  return out
-})
+}
 
 async function loadCatalogs() {
   const params = withProjectParams()
@@ -107,68 +103,186 @@ async function loadCatalogs() {
   catalogs.value = res.data.data?.items ?? res.data.data ?? []
 }
 
-async function generate() {
-  generating.value = true
-  try {
-    const base = { ...withProjectParams(), user_prompt: userPrompt.value || undefined }
-    const res = mode.value === 'interface'
-      ? await generateApiFromInterface({ ...base, interface_id: interfaceId.value })
-      : await generateApiFromDoc({ ...base, document_id: documentId.value, version_id: versionId.value })
-    sessionId.value = res.data.data?.session_id ?? res.data.data?.id
-    pollSession()
-  } finally {
-    generating.value = false
-  }
+async function loadSessions() {
+  const params = withProjectParams()
+  if (!params) return
+  const res = await listApiSessions(params)
+  sessions.value = res.data.data ?? []
 }
 
-function stopPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
-function pollSession() {
-  stopPoll()
-  async function tick() {
-    if (!sessionId.value) return
-    const res = await getApiSession(sessionId.value)
-    const data = res.data.data
-    preview.value = data.preview ?? data.output_payload ?? data
-    if (['ready', 'failed', 'completed'].includes(data.status)) stopPoll()
-  }
-  tick()
-  pollTimer = setInterval(tick, 2000)
-}
-
-async function confirm() {
-  if (!confirmCatalogId.value || !confirmEnvId.value) {
-    ElMessage.warning(t('validation.required'))
+async function refreshSession() {
+  if (!activeSessionId.value) {
+    sessionDetail.value = null
     return
   }
+  const res = await getApiSession(activeSessionId.value)
+  sessionDetail.value = res.data.data
+  const payload = sessionDetail.value?.output_payload ?? {}
+  boundInterfaceId.value = payload.interface_id ?? boundInterfaceId.value
+}
+
+async function loadMessages() {
+  if (!activeSessionId.value) {
+    messages.value = []
+    return
+  }
+  const res = await listApiMessages(activeSessionId.value)
+  messages.value = res.data.data ?? []
+}
+
+async function selectSession(id) {
+  if (streaming.value) stopStream()
+  activeSessionId.value = id
+  await Promise.all([refreshSession(), loadMessages()])
+}
+
+async function createSession(body) {
+  const params = withProjectParams()
+  if (!params) return
+  creating.value = true
+  try {
+    const res = await createApiSession({ ...params, ...body })
+    const session = res.data.data
+    if (body.interface_id) boundInterfaceId.value = body.interface_id
+    showCreate.value = false
+    await loadSessions()
+    await selectSession(session.id)
+    ElMessage.success(t('page.agent.sessionCreated'))
+  } finally {
+    creating.value = false
+  }
+}
+
+function stopStream() {
+  abortController?.abort()
+  abortController = null
+  streaming.value = false
+  streamingText.value = ''
+}
+
+async function sendMessage(content) {
+  if (!activeSessionId.value || streaming.value) return
+  streaming.value = true
+  streamingText.value = ''
+  abortController = new AbortController()
+
+  messages.value = [...messages.value, {
+    id: `temp-${++tempMsgId}`,
+    role: 'user',
+    content,
+    message_type: 'text',
+    sequence: messages.value.length + 1,
+  }]
+
+  try {
+    await streamApiMessage(
+      activeSessionId.value,
+      content,
+      {
+        custom: (data) => {
+          messages.value = [...messages.value, {
+            id: `temp-${++tempMsgId}`,
+            role: 'tool',
+            message_type: 'custom',
+            content: String(data),
+            sequence: messages.value.length + 1,
+          }]
+        },
+        messages: (data) => {
+          streamingText.value += String(data)
+        },
+        tool_call: (data) => {
+          messages.value = [...messages.value, {
+            id: `temp-${++tempMsgId}`,
+            role: 'tool',
+            message_type: 'tool_call',
+            tool_name: data?.name,
+            content: JSON.stringify(data?.content ?? data),
+            sequence: messages.value.length + 1,
+          }]
+        },
+        payload_updated: async () => {
+          await refreshSession()
+        },
+        error: (data) => {
+          ElMessage.error(data?.message || t('common.requestFailed'))
+        },
+        done: async () => {
+          if (streamingText.value) {
+            messages.value = [...messages.value, {
+              id: `temp-${++tempMsgId}`,
+              role: 'assistant',
+              message_type: 'text',
+              content: streamingText.value,
+              sequence: messages.value.length + 1,
+            }]
+            streamingText.value = ''
+          }
+          await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+        },
+      },
+      abortController.signal,
+    )
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      ElMessage.error(err.message || t('common.requestFailed'))
+      await loadMessages()
+    }
+  } finally {
+    streaming.value = false
+    streamingText.value = ''
+    abortController = null
+  }
+}
+
+async function confirmCases(payload) {
+  if (!activeSessionId.value) return
   confirming.value = true
   try {
-    const indexes = preview.value?.cases?.map((_, i) => i) ?? [0]
     await confirmApiGeneration({
-      session_id: sessionId.value,
-      selected_indexes: indexes,
-      environment_id: confirmEnvId.value,
-      catalog_id: confirmCatalogId.value,
-      interface_id: mode.value === 'interface' ? interfaceId.value : undefined,
+      session_id: activeSessionId.value,
+      selected_indexes: payload.selected_indexes,
+      environment_id: payload.environment_id,
+      catalog_id: payload.catalog_id,
+      interface_id: payload.interface_id ?? boundInterfaceId.value ?? undefined,
     })
     ElMessage.success(t('page.agent.saved'))
-    showConfirm.value = false
   } finally {
     confirming.value = false
   }
 }
 
-onMounted(loadCatalogs)
-onUnmounted(stopPoll)
+const resolvedInterfaceId = computed(() => {
+  const q = Number(route.query.interface_id)
+  return props.initialInterfaceId || (Number.isFinite(q) && q > 0 ? q : null)
+})
+
+watch(resolvedInterfaceId, (id) => {
+  if (id) boundInterfaceId.value = id
+}, { immediate: true })
+
+onMounted(async () => {
+  await Promise.all([loadMeta(), loadCatalogs(), loadSessions()])
+  const shouldAutoNew = props.autoNew || route.query.new === '1' || resolvedInterfaceId.value
+  if (shouldAutoNew) {
+    if (resolvedInterfaceId.value && !sessions.value.length) {
+      await createSession({ interface_id: resolvedInterfaceId.value })
+    } else {
+      showCreate.value = true
+    }
+  } else if (sessions.value.length) {
+    await selectSession(sessions.value[0].id)
+  }
+})
 </script>
 
 <style scoped lang="scss">
-.preview-box {
-  margin-top: 16px;
+.agent-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1.1fr) minmax(0, 0.9fr);
+  min-height: 520px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  overflow: hidden;
 }
 </style>

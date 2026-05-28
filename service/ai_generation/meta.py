@@ -1,4 +1,5 @@
 from service.ai_generation.schemas import AgentMetaOut, PromptTemplateItem
+from service.core import config as core_config
 
 FUNCTIONAL_PROMPT_TEMPLATES: list[PromptTemplateItem] = [
     PromptTemplateItem(
@@ -42,4 +43,5 @@ def get_agent_meta() -> AgentMetaOut:
         functional_prompt_templates=list(FUNCTIONAL_PROMPT_TEMPLATES),
         api_prompt_templates=list(API_PROMPT_TEMPLATES),
         single_interface_only=True,
+        history_limit=core_config.AI_AGENT_SESSION_HISTORY_LIMIT,
     )

@@ -9,14 +9,17 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
-
-from langchain_core.runnables import RunnableConfig
+from service.ai_generation.common import build_default_additional_info
+from service.ai_generation.payload_sync import (
+    session_id_from_config,
+    sync_api_base_payload,
+    sync_functional_payload,
+)
 from service.knowledge.pipeline.rag_gateway import RagGateway
 from utils.parser.api_document_ai_parser import APIDocumentParser
 from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
 from workflow.api_case_main_workflow import concurrent_pre_run_base_cases
 from workflow.case_generator_workflow import GenerateTestCases
-from concurrent.futures import ThreadPoolExecutor
 
 # ============================================================
 # 🔑 持久化事件循环 —— 解决 Lock 绑定不同循环的问题
@@ -74,16 +77,17 @@ def generate_testcases(project_name:str, module_id:str,requirement:str,config: R
 
     writer = get_stream_writer()
     writer("开始执行【基于需求文档生成用例的服务】工具")
-    # 创建工作流对象
     workflow = GenerateTestCases().create_workflow()
-    # 配置工作流并执行
-    response = workflow.invoke({"requirement": requirement},
-                            subgraphs=True,
-                            config=config,
-                            )
+    response = workflow.invoke(
+        {"requirement": requirement},
+        subgraphs=True,
+        config=config,
+    )
     writer("【基于需求文档生成用例的服务】工具执行完毕")
-    # 返回生成测试用例结果
-    return response.get("test_cases",[])
+    session_id = session_id_from_config(config)
+    if session_id:
+        _run_async_safely(sync_functional_payload(session_id, response))
+    return response.get("test_cases", [])
 
 # ================================生成接口/自动化测试用例的工具========================================================
 @tool("search_api_document",description="基于接口文档检索的工具")
@@ -109,6 +113,35 @@ def search_api_document(project_name: str, query: str):
             result += chunk
     writer("【接口文档检索工具】执行完成 ")
     return result
+
+@tool("generate_base_cases", description="基于接口文档生成基础接口测试用例（不含预执行）")
+def generate_base_cases(
+    api_document: str,
+    config: RunnableConfig,
+    precoditions: list | None = None,
+):
+    """仅生成 api_basecase_workflow 基础用例，写入 session output_payload。"""
+    writer = get_stream_writer()
+    writer("开始执行【生成基础接口用例】工具")
+    res = APIDocumentParser().api_parser(api_document)
+    api_doc = json.dumps(res, ensure_ascii=False, indent=4)
+    base_workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
+    base_state = base_workflow.invoke(
+        {"api_doc": api_doc, "precoditions": precoditions or []},
+        config=config,
+    )
+    base_cases = base_state.get("api_cases") or []
+    session_id = session_id_from_config(config)
+    if session_id:
+        _run_async_safely(
+            sync_api_base_payload(
+                session_id,
+                base_cases=base_cases,
+                api_doc=api_doc,
+            )
+        )
+    writer("【生成基础接口用例】工具执行完毕")
+    return base_cases
 
 # 补充api测试用例生成所需要的环境数据的工具
 @tool("load_evn_data", description="加载生成接口测试用例时的所需要的环境数据的工具")

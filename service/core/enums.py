@@ -246,6 +246,26 @@ class SessionStatus(str, Enum):
     failed = "failed"
 
 
+class SourceChannel(str, Enum):
+    agent_center = "agent_center"
+    interface_detail = "interface_detail"
+    legacy = "legacy"
+
+
+class MessageRole(str, Enum):
+    user = "user"
+    assistant = "assistant"
+    tool = "tool"
+    system = "system"
+
+
+class MessageType(str, Enum):
+    text = "text"
+    custom = "custom"
+    tool_call = "tool_call"
+    tool_result = "tool_result"
+
+
 class ProjectMemberRole(int, Enum):
     def __new__(cls, value: int, label: str):
         obj = int.__new__(cls, value)

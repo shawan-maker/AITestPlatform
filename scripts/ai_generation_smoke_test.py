@@ -33,23 +33,13 @@ def _auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def _poll_session(
-    client: TestClient,
-    headers: dict,
-    url: str,
-    *,
-    timeout_sec: float = 15.0,
-) -> dict:
-    deadline = time.time() + timeout_sec
-    data: dict = {}
-    while time.time() < deadline:
-        resp = client.get(url, headers=headers)
-        assert resp.status_code == 200, resp.text
-        data = resp.json()["data"]
-        if data.get("status") in {"success", "failed"}:
-            return data
-        time.sleep(0.3)
-    return data
+def _consume_sse(resp) -> list[str]:
+    assert resp.status_code == 200, resp.text
+    chunks: list[str] = []
+    for line in resp.iter_lines():
+        if line:
+            chunks.append(line.decode() if isinstance(line, bytes) else line)
+    return chunks
 
 
 def _run(client: TestClient) -> None:
@@ -59,6 +49,7 @@ def _run(client: TestClient) -> None:
     meta = client.get("/api/v1/ai-generation/meta", headers=headers)
     assert meta.status_code == 200, meta.text
     assert meta.json()["data"]["single_interface_only"] is True
+    assert meta.json()["data"]["history_limit"] >= 1
     print("meta ok")
 
     project_name = f"AIGenSmoke_{int(time.time())}"
@@ -70,23 +61,40 @@ def _run(client: TestClient) -> None:
     assert proj_resp.status_code == 200, proj_resp.text
     project_id = proj_resp.json()["data"]["id"]
 
-    func_resp = client.post(
-        "/api/v1/ai-generation/functional/generate",
+    func_session_resp = client.post(
+        "/api/v1/ai-generation/functional/sessions",
         json={
             "project_id": project_id,
             "requirement_text": "用户登录与权限校验",
+            "title": "登录用例",
         },
         headers=headers,
     )
-    assert func_resp.status_code == 200, func_resp.text
-    func_session_id = func_resp.json()["data"]["id"]
-    func_session = _poll_session(
-        client,
-        headers,
-        f"/api/v1/ai-generation/functional/sessions/{func_session_id}",
+    assert func_session_resp.status_code == 200, func_session_resp.text
+    func_session_id = func_session_resp.json()["data"]["id"]
+
+    sse_resp = client.post(
+        f"/api/v1/ai-generation/functional/sessions/{func_session_id}/messages",
+        json={"content": "请生成功能用例"},
+        headers=headers,
     )
-    assert func_session["status"] == "success", func_session.get("error_message")
-    print("functional generate ok", func_session_id)
+    func_chunks = _consume_sse(sse_resp)
+    assert any("event: done" in c for c in func_chunks), func_chunks
+
+    func_session = client.get(
+        f"/api/v1/ai-generation/functional/sessions/{func_session_id}",
+        headers=headers,
+    )
+    assert func_session.status_code == 200, func_session.text
+    assert func_session.json()["data"]["status"] == "success"
+    print("functional session + SSE ok", func_session_id)
+
+    func_msgs = client.get(
+        f"/api/v1/ai-generation/functional/sessions/{func_session_id}/messages",
+        headers=headers,
+    )
+    assert func_msgs.status_code == 200, func_msgs.text
+    assert len(func_msgs.json()["data"]) >= 2
 
     cat_resp = client.post(
         f"/api/v1/api-test/catalogs?project_id={project_id}",
@@ -112,22 +120,30 @@ def _run(client: TestClient) -> None:
     assert iface_resp.status_code == 200, iface_resp.text
     interface_id = iface_resp.json()["data"]["id"]
 
-    api_preview = client.post(
-        "/api/v1/ai-generation/api/generate-from-interface",
+    api_session_resp = client.post(
+        "/api/v1/ai-generation/api/sessions",
+        json={"project_id": project_id, "interface_id": interface_id},
         headers=headers,
-        json={"interface_id": interface_id, "user_prompt": "smoke"},
     )
-    assert api_preview.status_code == 200, api_preview.text
-    api_session_id = api_preview.json()["data"]["session_id"]
-    base_cases = api_preview.json()["data"]["base_cases"]
-    assert base_cases, "mock 预览应返回基础用例"
-    print("api preview ok", api_session_id)
+    assert api_session_resp.status_code == 200, api_session_resp.text
+    api_session_id = api_session_resp.json()["data"]["id"]
+
+    api_sse = client.post(
+        f"/api/v1/ai-generation/api/sessions/{api_session_id}/messages",
+        json={"content": "生成基础用例"},
+        headers=headers,
+    )
+    api_chunks = _consume_sse(api_sse)
+    assert any("event: done" in c for c in api_chunks), api_chunks
+    print("api session + SSE ok", api_session_id)
 
     api_session = client.get(
         f"/api/v1/ai-generation/api/sessions/{api_session_id}",
         headers=headers,
     )
     assert api_session.status_code == 200, api_session.text
+    base_cases = api_session.json()["data"]["output_payload"].get("base_cases") or []
+    assert base_cases, "mock 预览应返回基础用例"
 
     envs = client.get(
         f"/api/v1/env/environments?project_id={project_id}",
@@ -135,13 +151,12 @@ def _run(client: TestClient) -> None:
     )
     if envs.status_code == 200 and envs.json()["data"]["items"]:
         environment_id = envs.json()["data"]["items"][0]["id"]
-        selected = list(range(min(1, len(base_cases))))
         confirm = client.post(
             "/api/v1/ai-generation/api/confirm",
             headers=headers,
             json={
                 "session_id": api_session_id,
-                "selected_indexes": selected,
+                "selected_indexes": [0],
                 "environment_id": environment_id,
                 "interface_id": interface_id,
             },

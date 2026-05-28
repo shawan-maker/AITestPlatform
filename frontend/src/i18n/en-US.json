@@ -171,8 +171,10 @@
       "apiTab": "API Agent",
       "prompt": "Prompt",
       "promptPlaceholder": "Describe the test scenario…",
+      "chatPlaceholder": "Type a message, Ctrl+Enter to send…",
       "generate": "Generate",
-      "save": "Save",
+      "send": "Send",
+      "save": "Save to Catalog",
       "saveDialog": "Select Catalog",
       "saved": "Saved",
       "apiPlaceholder": "API Agent",
@@ -181,8 +183,34 @@
       "fromInterface": "From Interface",
       "fromDoc": "From Document",
       "confirmSave": "Confirm Save",
+      "confirmPreRun": "Confirm & Pre-run",
       "quickTags": "Quick Tags",
-      "uploadKnowledge": "Upload Knowledge"
+      "uploadKnowledge": "Upload Knowledge",
+      "newSession": "New Session",
+      "history": "History",
+      "historyHint": "Up to {limit} sessions per project; oldest removed when exceeded",
+      "noSessions": "No sessions yet",
+      "session": "Session",
+      "sessionTitle": "Title",
+      "sessionCreated": "Session created",
+      "requirement": "Requirement",
+      "requirementRequired": "Enter requirement or knowledge document ID",
+      "knowledgeDoc": "Knowledge Doc ID",
+      "apiDoc": "API Document",
+      "previewTitle": "Preview",
+      "noPreview": "No preview yet — send a message in chat",
+      "testPoints": "Test Points",
+      "cases": "Cases",
+      "selectedCases": "Selected",
+      "thinking": "Agent is thinking…",
+      "roleUser": "User",
+      "roleAssistant": "Assistant",
+      "roleTool": "Tool",
+      "roleSystem": "System",
+      "statusPending": "Pending",
+      "statusRunning": "Running",
+      "statusSuccess": "Success",
+      "statusFailed": "Failed"
     },
     "functional": {
       "title": "Manual Cases",
@@ -230,7 +258,8 @@
       "refreshDoc": "Refresh Doc",
       "preconditionCases": "Precondition Cases",
       "mainCases": "Test Cases",
-      "agentGenerate": "Agent Generate"
+      "agentGenerate": "Open Agent Center",
+      "generateCases": "Generate Test Cases"
     },
     "test": {
       "suites": { "title": "Test Suites", "create": "New Suite" },
@@ -311,7 +340,8 @@
     "selectProjectHint": "Select a project in the top-left corner to continue",
     "resetForm": "Reset",
     "openMenu": "Open menu",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "requestFailed": "Request failed"
   },
   "role": {
     "viewer": "Viewer",

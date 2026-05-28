@@ -1,15 +1,28 @@
+from collections.abc import AsyncIterator
+
+from service.ai_generation.agent_stream import AgentStreamService
 from service.ai_generation.common import load_knowledge_requirement_text
+from service.ai_generation.message_service import MessageService
 from service.ai_generation.permissions import ensure_agent_editor, ensure_agent_viewer
 from service.ai_generation.schemas import (
-    AIGenerationSessionOut,
+    FunctionalCreateSessionRequest,
     FunctionalGenerateRequest,
     FunctionalPreviewUpdateRequest,
     FunctionalSaveRequest,
     GenerationSaveResult,
 )
-from service.ai_generation.session_schemas import AIGenerationPreviewUpdateRequest
+from service.ai_generation.session_lifecycle import SessionLifecycleService, session_to_out
+from service.ai_generation.session_schemas import (
+    AIGenerationMessageOut,
+    AIGenerationSessionListItem,
+    AIGenerationSessionOut,
+    AgentMessageRequest,
+)
+from service.core.enums import GenType, SourceChannel
+from service.core.exceptions import AppException
 from service.functional_test.case.generation_service import FunctionalCaseGenerationService
 from service.functional_test.case.schemas import (
+    GenerationPreviewUpdateRequest,
     GenerationSaveRequest,
     GenerationSessionCreateRequest,
 )
@@ -18,11 +31,68 @@ from service.user.models import User
 
 class FunctionalAgentService:
     @classmethod
+    async def create_session(
+        cls,
+        user: User,
+        body: FunctionalCreateSessionRequest,
+    ) -> AIGenerationSessionOut:
+        await ensure_agent_viewer(body.project_id, user)
+        return await SessionLifecycleService.create_functional_session(
+            user,
+            project_id=body.project_id,
+            module_id=body.module_id,
+            requirement_text=body.requirement_text,
+            knowledge_document_id=body.knowledge_document_id,
+            user_prompt=body.user_prompt,
+            title=body.title,
+        )
+
+    @classmethod
+    async def list_sessions(
+        cls,
+        user: User,
+        project_id: int,
+    ) -> list[AIGenerationSessionListItem]:
+        await ensure_agent_viewer(project_id, user)
+        return await SessionLifecycleService.list_agent_sessions(
+            user, project_id=project_id, gen_type=GenType.functional
+        )
+
+    @classmethod
+    async def stream_message(
+        cls,
+        user: User,
+        session_id: int,
+        body: AgentMessageRequest,
+    ) -> AsyncIterator[str]:
+        session = await MessageService.ensure_session_access(session_id, user.id)
+        if session.gen_type != GenType.functional:
+            raise AppException("非功能用例生成会话", 400)
+        await ensure_agent_viewer(session.project_id, user)
+        async for chunk in AgentStreamService.stream_functional_message(
+            session, body.content.strip()
+        ):
+            yield chunk
+
+    @classmethod
+    async def list_messages(
+        cls,
+        user: User,
+        session_id: int,
+        *,
+        from_sequence: int = 1,
+    ) -> list[AIGenerationMessageOut]:
+        session = await MessageService.ensure_session_access(session_id, user.id)
+        await ensure_agent_viewer(session.project_id, user)
+        return await MessageService.list_messages(session, from_sequence=from_sequence)
+
+    @classmethod
     async def generate(
         cls,
         user: User,
         body: FunctionalGenerateRequest,
     ) -> AIGenerationSessionOut:
+        """Deprecated: Phase 1 一次性 generate；保留兼容旧客户端。"""
         await ensure_agent_viewer(body.project_id, user)
         if body.knowledge_document_id is not None:
             text = await load_knowledge_requirement_text(
@@ -42,7 +112,14 @@ class FunctionalAgentService:
                 user_prompt=body.user_prompt,
                 module_id=body.module_id,
             )
-        return await FunctionalCaseGenerationService.create_session(user, req)
+        out = await FunctionalCaseGenerationService.create_session(user, req)
+        from service.ai_generation.models import AIGenerationSession
+
+        session = await AIGenerationSession.get(id=out.id)
+        session.source_channel = SourceChannel.legacy
+        await session.save(update_fields=["source_channel"])
+        refreshed = await AIGenerationSession.get(id=out.id)
+        return session_to_out(refreshed)
 
     @classmethod
     async def get_session(
@@ -50,7 +127,9 @@ class FunctionalAgentService:
         user: User,
         session_id: int,
     ) -> AIGenerationSessionOut:
-        return await FunctionalCaseGenerationService.get_session(user, session_id)
+        session = await FunctionalCaseGenerationService._get_session_or_404(session_id)
+        await ensure_agent_viewer(session.project_id, user)
+        return session_to_out(session)
 
     @classmethod
     async def update_preview(
@@ -59,11 +138,15 @@ class FunctionalAgentService:
         session_id: int,
         body: FunctionalPreviewUpdateRequest,
     ) -> AIGenerationSessionOut:
-        return await FunctionalCaseGenerationService.update_preview(
+        out = await FunctionalCaseGenerationService.update_preview(
             user,
             session_id,
-            AIGenerationPreviewUpdateRequest(output_payload=body.output_payload),
+            GenerationPreviewUpdateRequest(output_payload=body.output_payload),
         )
+        from service.ai_generation.models import AIGenerationSession
+
+        session = await AIGenerationSession.get(id=out.id)
+        return session_to_out(session)
 
     @classmethod
     async def save(

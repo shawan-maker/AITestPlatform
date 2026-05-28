@@ -56,7 +56,8 @@
           </el-tab-pane>
           <el-tab-pane :label="t('page.apiCases.tabCases')" name="case">
             <div class="case-toolbar">
-              <el-button link type="primary" @click="router.push('/agent?tab=api')">{{ t('page.apiCases.agentGenerate') }}</el-button>
+              <el-button v-if="canEdit" type="primary" @click="showGenerate = true">{{ t('page.apiCases.generateCases') }}</el-button>
+              <el-button link type="primary" @click="goAgentCenter">{{ t('page.apiCases.agentGenerate') }}</el-button>
             </div>
             <h4>{{ t('page.apiCases.preconditionCases') }}</h4>
             <PaginatedTable :data="preconditionCases" :loading="casesLoading" :show-pagination="false">
@@ -92,6 +93,12 @@
       :interface-data="editingInterface"
       @saved="loadInterfaces"
     />
+    <InterfaceCaseGenerateDialog
+      v-if="selectedInterfaceId"
+      v-model="showGenerate"
+      :interface-id="selectedInterfaceId"
+      @confirmed="loadCases"
+    />
   </div>
 </template>
 
@@ -125,6 +132,7 @@ import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 import ImportInterfacesWizard from '@/components/api-test/ImportInterfacesWizard.vue'
 import InterfaceFormDrawer from '@/components/api-test/InterfaceFormDrawer.vue'
+import InterfaceCaseGenerateDialog from '@/components/agent/InterfaceCaseGenerateDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -150,6 +158,7 @@ const mainCases = ref([])
 const casesLoading = ref(false)
 const showImport = ref(false)
 const showInterfaceForm = ref(false)
+const showGenerate = ref(false)
 const editingInterface = ref(null)
 
 const depJson = computed(() => JSON.stringify(dependencies.value ?? {}, null, 2))
@@ -272,6 +281,17 @@ async function copyCurrentInterface() {
   ElMessage.success(copied?.path ? `${t('common.copy')}: ${copied.path}` : t('common.saved'))
   await loadInterfaces()
   if (copied?.id) selectedInterfaceId.value = copied.id
+}
+
+function goAgentCenter() {
+  router.push({
+    path: '/agent',
+    query: {
+      tab: 'api',
+      new: '1',
+      interface_id: selectedInterfaceId.value || undefined,
+    },
+  })
 }
 
 watch(selectedCatalogId, () => { loadInterfaces() })

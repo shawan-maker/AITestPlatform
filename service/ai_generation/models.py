@@ -1,6 +1,6 @@
 from tortoise import fields, models
 
-from service.core.enums import GenType, InputRefType, SessionStatus
+from service.core.enums import GenType, InputRefType, MessageRole, MessageType, SessionStatus, SourceChannel
 
 
 class AIGenerationSession(models.Model):
@@ -29,6 +29,10 @@ class AIGenerationSession(models.Model):
     error_message = fields.TextField(null=True)
     output_payload = fields.JSONField(null=True)
     user_prompt = fields.TextField(null=True)
+    source_channel = fields.CharEnumField(
+        SourceChannel, default=SourceChannel.agent_center
+    )
+    title = fields.CharField(max_length=200, null=True)
     created_by = fields.ForeignKeyField(
         "models.User", related_name="ai_generation_sessions", on_delete=fields.RESTRICT
     )
@@ -37,3 +41,22 @@ class AIGenerationSession(models.Model):
 
     class Meta:
         table = "ai_generation_session"
+
+
+class AIGenerationMessage(models.Model):
+    id = fields.BigIntField(pk=True)
+    session = fields.ForeignKeyField(
+        "models.AIGenerationSession",
+        related_name="messages",
+        on_delete=fields.CASCADE,
+    )
+    role = fields.CharEnumField(MessageRole)
+    message_type = fields.CharEnumField(MessageType, default=MessageType.text)
+    tool_name = fields.CharField(max_length=100, null=True)
+    content = fields.TextField()
+    sequence = fields.IntField()
+    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+
+    class Meta:
+        table = "ai_generation_message"
+        indexes = (("session_id", "sequence"),)

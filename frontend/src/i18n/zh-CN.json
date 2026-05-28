@@ -171,7 +171,9 @@
       "apiTab": "接口用例智能体",
       "prompt": "提示词",
       "promptPlaceholder": "描述要生成的测试场景…",
+      "chatPlaceholder": "输入消息，Ctrl+Enter 发送…",
       "generate": "生成",
+      "send": "发送",
       "save": "保存到目录",
       "saveDialog": "选择保存目录",
       "saved": "已保存",
@@ -181,8 +183,34 @@
       "fromInterface": "从接口",
       "fromDoc": "从文档",
       "confirmSave": "确认保存",
+      "confirmPreRun": "确认并预执行",
       "quickTags": "快捷标签",
-      "uploadKnowledge": "上传知识库"
+      "uploadKnowledge": "上传知识库",
+      "newSession": "新建会话",
+      "history": "历史会话",
+      "historyHint": "每项目最多保留 {limit} 条，超出自动删除最早会话",
+      "noSessions": "暂无会话",
+      "session": "会话",
+      "sessionTitle": "会话标题",
+      "sessionCreated": "会话已创建",
+      "requirement": "需求描述",
+      "requirementRequired": "请填写需求或选择知识库文档",
+      "knowledgeDoc": "知识库文档 ID",
+      "apiDoc": "接口文档",
+      "previewTitle": "预览",
+      "noPreview": "暂无预览，请在对话区发送消息生成",
+      "testPoints": "测试点",
+      "cases": "用例",
+      "selectedCases": "已选用例",
+      "thinking": "Agent 思考中…",
+      "roleUser": "用户",
+      "roleAssistant": "助手",
+      "roleTool": "工具",
+      "roleSystem": "系统",
+      "statusPending": "待处理",
+      "statusRunning": "生成中",
+      "statusSuccess": "成功",
+      "statusFailed": "失败"
     },
     "functional": {
       "title": "手工用例",
@@ -230,7 +258,8 @@
       "refreshDoc": "刷新文档",
       "preconditionCases": "前置依赖用例",
       "mainCases": "测试用例",
-      "agentGenerate": "智能体生成"
+      "agentGenerate": "跳转智能体中心",
+      "generateCases": "生成测试用例"
     },
     "test": {
       "suites": { "title": "测试套件", "create": "新建套件" },
@@ -311,7 +340,8 @@
     "selectProjectHint": "请在左上角选择项目以继续",
     "resetForm": "重置",
     "openMenu": "打开菜单",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "requestFailed": "请求失败"
   },
   "role": {
     "viewer": "查看者",

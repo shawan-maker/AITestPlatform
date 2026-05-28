@@ -84,6 +84,14 @@ export function batchDeleteApiCases(data) {
   return request.post('/api-test/cases/batch-delete', data)
 }
 
+export function generateCasePreview(interfaceId, data) {
+  return request.post(`/api-test/interfaces/${interfaceId}/cases/generate-preview`, data)
+}
+
+export function confirmCaseGeneration(interfaceId, data) {
+  return request.post(`/api-test/interfaces/${interfaceId}/cases/confirm`, data)
+}
+
 export function debugRunApiCase(id, data) {
   return request.post(`/api-test/cases/${id}/debug-run`, data)
 }

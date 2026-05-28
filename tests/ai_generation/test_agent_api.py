@@ -29,9 +29,12 @@ def test_agent_routes_mounted():
     paths = {route.path for route in ai_generation_router.routes}
     assert "/ai-generation/meta" in paths
     func_paths = {route.path for route in functional_agent_router.routes}
+    assert "/functional/sessions" in func_paths
+    assert "/functional/sessions/{session_id}/messages" in func_paths
     assert "/functional/generate" in func_paths
     assert "/functional/sessions/{session_id}/save" in func_paths
     api_paths = {route.path for route in api_agent_router.routes}
+    assert "/api/sessions" in api_paths
     assert "/api/generate-from-doc" in api_paths
     assert "/api/confirm" in api_paths
 
