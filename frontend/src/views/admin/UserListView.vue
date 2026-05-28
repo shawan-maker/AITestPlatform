@@ -1,16 +1,15 @@
 <template>
   <div class="user-list-view app-card">
-    <PageHeader :title="t('page.admin.users.title')">
-      <template #actions>
-        <el-button type="primary" @click="showCreate = true">{{ t('page.admin.users.create') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.admin.users.title')" />
 
     <FilterBar @search="load" @reset="resetFilters">
-      <el-input v-model="filters.username" :placeholder="t('page.login.username')" clearable style="width: 160px" />
-      <el-input v-model="filters.email" :placeholder="t('page.register.email')" clearable style="width: 180px" />
-      <el-input v-model="filters.project_name" :placeholder="t('page.admin.users.projectName')" clearable style="width: 160px" />
-      <el-select v-model="filters.is_active" :placeholder="t('page.admin.users.status')" clearable style="width: 120px">
+      <template #primary>
+        <el-button type="primary" @click="showCreate = true">{{ t('page.admin.users.create') }}</el-button>
+      </template>
+      <el-input v-model="filters.username" :placeholder="t('page.login.username')" clearable />
+      <el-input v-model="filters.email" :placeholder="t('page.register.email')" clearable />
+      <el-input v-model="filters.project_name" :placeholder="t('page.admin.users.projectName')" clearable />
+      <el-select v-model="filters.is_active" :placeholder="t('page.admin.users.status')" clearable>
         <el-option :label="t('page.admin.users.statusActive')" :value="true" />
         <el-option :label="t('page.admin.users.statusInactive')" :value="false" />
       </el-select>
@@ -25,19 +24,19 @@
       @page-change="load"
       @size-change="load"
     >
-      <el-table-column prop="username" :label="t('page.login.username')" />
-      <el-table-column prop="email" :label="t('page.register.email')" />
-      <el-table-column :label="t('page.admin.users.status')" width="100">
+      <AppTableColumn prop="username" variant="content" :label="t('page.login.username')" />
+      <AppTableColumn prop="email" variant="content" :label="t('page.register.email')" />
+      <AppTableColumn variant="fixed" :label="t('page.admin.users.status')" :width="100">
         <template #default="{ row }">
           <el-tag :type="row.is_active ? 'success' : 'info'">
             {{ row.is_active ? t('page.admin.users.statusActive') : t('page.admin.users.statusInactive') }}
           </el-tag>
         </template>
-      </el-table-column>
-      <el-table-column :label="t('page.admin.users.superAdmin')" width="100">
+      </AppTableColumn>
+      <AppTableColumn variant="fixed" :label="t('page.admin.users.superAdmin')" :width="100">
         <template #default="{ row }">{{ row.is_super_admin ? 'Yes' : 'No' }}</template>
-      </el-table-column>
-      <el-table-column :label="t('common.actions')" width="280">
+      </AppTableColumn>
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="320">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/admin/users/${row.id}`)">{{ t('common.view') }}</el-button>
           <el-button link @click="toggleStatus(row)">
@@ -48,7 +47,7 @@
             <el-button link type="danger">{{ t('common.delete') }}</el-button>
           </ConfirmDelete>
         </template>
-      </el-table-column>
+      </AppTableColumn>
     </PaginatedTable>
 
     <UserFormDialog v-model="showCreate" :loading="creating" @submit="create" />
@@ -65,6 +64,7 @@ import { usePagination } from '@/composables/usePagination'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import UserFormDialog from '@/components/admin/UserFormDialog.vue'
 

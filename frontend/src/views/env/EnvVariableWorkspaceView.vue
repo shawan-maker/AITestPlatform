@@ -9,15 +9,15 @@
       </template>
       <template #right>
         <PaginatedTable :data="environments" :loading="loading" :show-pagination="false">
-          <el-table-column prop="name" :label="t('common.name')">
+          <AppTableColumn prop="name" variant="content" :label="t('common.name')">
             <template #default="{ row }">{{ row.name || row.env_name }}</template>
-          </el-table-column>
-          <el-table-column :label="t('common.actions')" width="200">
+          </AppTableColumn>
+          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="220">
             <template #default="{ row }">
               <el-button link type="primary" @click="router.push(`/env/variables/${row.id}`)">{{ t('common.view') }}</el-button>
               <el-button v-if="canEdit" link @click="openCopy(row)">{{ t('page.env.variables.copy') }}</el-button>
             </template>
-          </el-table-column>
+          </AppTableColumn>
         </PaginatedTable>
       </template>
     </SplitView>
@@ -44,6 +44,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import CatalogTree from '@/components/tree/CatalogTree.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EnvCopyDialog from '@/components/env/EnvCopyDialog.vue'
 
 const { t } = useI18n()

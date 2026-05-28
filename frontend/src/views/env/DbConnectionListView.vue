@@ -2,19 +2,19 @@
   <div class="db-list-view app-card">
     <PageHeader :title="t('page.env.db.title')" />
     <FilterBar @search="load" @reset="reset">
-      <el-select v-model="filters.bound" :placeholder="t('page.env.db.boundFilter')" clearable style="width: 160px">
+      <el-select v-model="filters.bound" :placeholder="t('page.env.db.boundFilter')" clearable>
         <el-option :label="t('page.env.db.bound')" :value="true" />
         <el-option :label="t('page.env.db.unbound')" :value="false" />
       </el-select>
     </FilterBar>
     <PaginatedTable :data="items" :loading="loading" :total="total" v-model:page="page" v-model:page-size="pageSize" @page-change="load">
-      <el-table-column prop="name" :label="t('common.name')" />
-      <el-table-column prop="db_type" label="Type" width="120" />
-      <el-table-column :label="t('common.actions')" width="160">
+      <AppTableColumn prop="name" variant="content" :label="t('common.name')" />
+      <AppTableColumn prop="db_type" variant="flex" label="Type" />
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="160">
         <template #default="{ row }">
           <el-button link @click="testConn(row)">{{ t('page.env.db.test') }}</el-button>
         </template>
-      </el-table-column>
+      </AppTableColumn>
     </PaginatedTable>
   </div>
 </template>
@@ -29,6 +29,7 @@ import { usePagination } from '@/composables/usePagination'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 
 const { t } = useI18n()
 const { withProjectParams } = useProjectScope()

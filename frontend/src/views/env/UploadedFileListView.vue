@@ -1,22 +1,24 @@
 <template>
   <div class="uploaded-file-list app-card">
-    <PageHeader :title="t('page.env.files.title')">
-      <template #actions>
-        <el-button v-if="canEdit && projectId" type="primary" @click="fileInput?.click()">{{ t('common.upload') }}</el-button>
-        <input ref="fileInput" type="file" hidden @change="onUpload" />
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.env.files.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <SplitView v-else :initial-width="360">
+    <template v-else>
+      <FilterBar @search="load" @reset="load">
+        <template #primary>
+          <el-button v-if="canEdit" type="primary" @click="fileInput?.click()">{{ t('common.upload') }}</el-button>
+          <input ref="fileInput" type="file" hidden @change="onUpload" />
+        </template>
+      </FilterBar>
+      <SplitView :initial-width="360">
       <template #left>
         <PaginatedTable :data="items" :loading="loading" :total="total" v-model:page="page" v-model:page-size="pageSize" @page-change="load">
-          <el-table-column prop="name" :label="t('common.name')">
+          <AppTableColumn prop="name" variant="content" :label="t('common.name')">
             <template #default="{ row }">{{ row.name || row.file_name }}</template>
-          </el-table-column>
-          <el-table-column prop="size" :label="t('common.size')" width="100">
+          </AppTableColumn>
+          <AppTableColumn prop="size" variant="flex" :label="t('common.size')">
             <template #default="{ row }">{{ formatFileSize(row.size) }}</template>
-          </el-table-column>
-          <el-table-column :label="t('common.actions')" width="160">
+          </AppTableColumn>
+          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
             <template #default="{ row }">
               <el-button link @click="selectFile(row)">{{ t('common.view') }}</el-button>
               <el-button link @click="download(row)">{{ t('common.download') }}</el-button>
@@ -24,14 +26,15 @@
                 <el-button link type="danger">{{ t('common.delete') }}</el-button>
               </ConfirmDelete>
             </template>
-          </el-table-column>
+          </AppTableColumn>
         </PaginatedTable>
       </template>
       <template #right>
         <FilePreviewPanel v-if="previewFile" :file-id="previewFile.id" :file-name="previewFile.name || previewFile.file_name" />
         <EmptyState v-else :title="t('page.env.files.selectPreview')" />
       </template>
-    </SplitView>
+      </SplitView>
+    </template>
   </div>
 </template>
 
@@ -46,9 +49,11 @@ import { usePagination } from '@/composables/usePagination'
 import { useDownload } from '@/composables/useDownload'
 import { formatFileSize } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
+import FilterBar from '@/components/common/FilterBar.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import FilePreviewPanel from '@/components/env/FilePreviewPanel.vue'
 

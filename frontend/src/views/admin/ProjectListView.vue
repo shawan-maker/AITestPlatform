@@ -1,14 +1,13 @@
 <template>
   <div class="project-list-view app-card">
-    <PageHeader :title="t('page.admin.projects.title')">
-      <template #actions>
-        <el-button type="primary" @click="openCreate">{{ t('page.admin.projects.create') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.admin.projects.title')" />
 
     <FilterBar @search="load" @reset="resetFilters">
-      <el-input v-model="filters.name" :placeholder="t('page.admin.projects.keyword')" clearable style="width: 200px" />
-      <el-input v-model="filters.username" :placeholder="t('page.admin.projects.memberUsername')" clearable style="width: 200px" />
+      <template #primary>
+        <el-button type="primary" @click="openCreate">{{ t('page.admin.projects.create') }}</el-button>
+      </template>
+      <el-input v-model="filters.name" :placeholder="t('page.admin.projects.keyword')" clearable />
+      <el-input v-model="filters.username" :placeholder="t('page.admin.projects.memberUsername')" clearable />
     </FilterBar>
 
     <PaginatedTable
@@ -20,10 +19,10 @@
       @page-change="load"
       @size-change="load"
     >
-      <el-table-column prop="name" :label="t('page.admin.projects.name')" />
-      <el-table-column prop="description" :label="t('page.admin.projects.description')" show-overflow-tooltip />
-      <el-table-column prop="member_count" :label="t('page.projectSettings.members')" width="100" />
-      <el-table-column :label="t('common.actions')" width="220">
+      <AppTableColumn prop="name" variant="content" :label="t('page.admin.projects.name')" />
+      <AppTableColumn prop="description" variant="content" :label="t('page.admin.projects.description')" />
+      <AppTableColumn prop="member_count" variant="flex" :label="t('page.projectSettings.members')" />
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/admin/projects/${row.id}`)">{{ t('common.view') }}</el-button>
           <el-button link type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
@@ -31,7 +30,7 @@
             <el-button link type="danger">{{ t('common.delete') }}</el-button>
           </ConfirmDelete>
         </template>
-      </el-table-column>
+      </AppTableColumn>
     </PaginatedTable>
 
     <ProjectFormDialog v-model="dialogVisible" :project="editProject" :loading="saving" @submit="save" />
@@ -48,6 +47,7 @@ import { usePagination } from '@/composables/usePagination'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import ProjectFormDialog from '@/components/admin/ProjectFormDialog.vue'
 

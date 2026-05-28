@@ -1,15 +1,20 @@
 <template>
-  <div class="paginated-table">
+  <div ref="rootRef" class="paginated-table">
     <el-table
+      ref="tableRef"
       v-loading="loading"
       :data="data"
+      border
+      table-layout="fixed"
+      class="paginated-table__table"
       v-bind="$attrs"
       @selection-change="$emit('selection-change', $event)"
       @row-click="$emit('row-click', $event)"
+      @header-dragend="onHeaderDragend"
     >
       <slot />
     </el-table>
-    <div v-if="showPagination" class="paginated-table__footer">
+    <div v-if="showPagination && total > 0" class="paginated-table__footer">
       <el-pagination
         v-model:current-page="innerPage"
         v-model:page-size="innerPageSize"
@@ -25,8 +30,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref, toRef, watch } from 'vue'
 import { DEFAULT_PAGE_SIZE } from '@/utils/constants'
+import { useTableColumnLayout } from '@/composables/useTableColumnLayout'
+import { TABLE_LAYOUT_KEY } from '@/components/common/tableLayoutKey'
 
 const props = defineProps({
   data: { type: Array, default: () => [] },
@@ -39,6 +46,13 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:page', 'update:pageSize', 'page-change', 'size-change', 'selection-change', 'row-click'])
+
+const rootRef = ref()
+const tableRef = ref()
+const dataRef = toRef(props, 'data')
+const layout = useTableColumnLayout(tableRef, dataRef)
+
+provide(TABLE_LAYOUT_KEY, layout)
 
 const innerPage = computed({
   get: () => props.page,
@@ -57,12 +71,48 @@ function onPageChange(p) {
 function onSizeChange(size) {
   emit('size-change', size)
 }
+
+function onHeaderDragend(newWidth, oldWidth, column, event) {
+  layout.onHeaderDragend(newWidth, oldWidth, column, event)
+}
+
+let resizeObserver = null
+
+onMounted(() => {
+  layout.scheduleLayout()
+  if (typeof ResizeObserver !== 'undefined' && rootRef.value) {
+    resizeObserver = new ResizeObserver(() => layout.scheduleLayout())
+    resizeObserver.observe(rootRef.value)
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
+})
+
+watch(
+  () => [props.data, props.loading],
+  () => layout.scheduleLayout(),
+  { deep: true },
+)
 </script>
 
 <style scoped lang="scss">
-.paginated-table__footer {
+.paginated-table {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+
+  &__table {
+    width: 100%;
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+    flex-shrink: 0;
+  }
 }
 </style>

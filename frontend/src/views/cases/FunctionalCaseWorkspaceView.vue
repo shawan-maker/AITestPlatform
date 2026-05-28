@@ -23,8 +23,8 @@
               @row-click="selectCase"
               @selection-change="onSelectionChange"
             >
-              <el-table-column v-if="canEdit" type="selection" width="48" />
-              <el-table-column prop="name" :label="t('page.functional.caseName')">
+              <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="48" />
+              <AppTableColumn prop="name" variant="content" :label="t('page.functional.caseName')">
                 <template #default="{ row, $index }">
                   <span
                     draggable="true"
@@ -35,7 +35,7 @@
                   >⋮⋮</span>
                   {{ row.name }}
                 </template>
-              </el-table-column>
+              </AppTableColumn>
             </PaginatedTable>
           </template>
           <template #right>
@@ -93,6 +93,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import CatalogTree from '@/components/tree/CatalogTree.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import FunctionalCaseCreateDialog from '@/components/functional/FunctionalCaseCreateDialog.vue'
 import FunctionalBatchEditDialog from '@/components/functional/FunctionalBatchEditDialog.vue'

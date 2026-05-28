@@ -1,12 +1,6 @@
 <template>
   <div class="requirement-list-view app-card">
-    <PageHeader :title="t('page.requirements.title')">
-      <template #actions>
-        <el-button v-if="canEdit && projectId && activeTab === 'confirmed'" type="primary" @click="showCreate = true">
-          {{ t('page.requirements.create') }}
-        </el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.requirements.title')" />
 
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
 
@@ -18,9 +12,16 @@
         </el-tab-pane>
       </el-tabs>
 
-      <FilterBar v-if="activeTab === 'confirmed'" @search="load" @reset="resetFilters">
-        <el-input v-model="filters.title" :placeholder="t('page.requirements.title')" clearable style="width: 180px" />
-        <ModuleSelect v-model="filters.module_id" style="width: 160px" />
+      <FilterBar @search="load" @reset="resetFilters">
+        <template #primary>
+          <el-button v-if="canEdit && activeTab === 'confirmed'" type="primary" @click="showCreate = true">
+            {{ t('page.requirements.create') }}
+          </el-button>
+        </template>
+        <template v-if="activeTab === 'confirmed'">
+          <el-input v-model="filters.title" :placeholder="t('page.requirements.title')" clearable />
+          <ModuleSelect v-model="filters.module_id" />
+        </template>
       </FilterBar>
 
       <PaginatedTable
@@ -32,9 +33,9 @@
         @page-change="load"
         @size-change="load"
       >
-        <el-table-column prop="title" :label="t('page.requirements.title')" />
-        <el-table-column v-if="activeTab === 'confirmed'" prop="module_name" :label="t('page.knowledge.module')" width="120" />
-        <el-table-column :label="t('common.actions')" width="220">
+        <AppTableColumn prop="title" variant="content" :label="t('page.requirements.title')" />
+        <AppTableColumn v-if="activeTab === 'confirmed'" prop="module_name" variant="flex" :label="t('page.knowledge.module')" />
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
           <template #default="{ row }">
             <template v-if="activeTab === 'pending'">
               <el-button v-if="canEdit" link type="primary" @click="openConfirm(row)">{{ t('page.requirements.confirm') }}</el-button>
@@ -49,7 +50,7 @@
               </ConfirmDelete>
             </template>
           </template>
-        </el-table-column>
+        </AppTableColumn>
       </PaginatedTable>
     </template>
 
@@ -95,6 +96,7 @@ import { usePagination } from '@/composables/usePagination'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import ModuleSelect from '@/components/tree/ModuleSelect.vue'

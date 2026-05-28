@@ -1,5 +1,9 @@
 @use './variables.scss';
 
+:root {
+  --el-font-size-base: var(--font-size-base);
+}
+
 .el-button--primary {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   border: none;

@@ -1,21 +1,20 @@
 <template>
   <div class="knowledge-list-view app-card">
-    <PageHeader :title="t('page.knowledge.title')">
-      <template #actions>
-        <el-button v-if="canEdit && projectId" type="primary" @click="showUpload = true">{{ t('page.knowledge.upload') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.knowledge.title')" />
 
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
 
     <template v-else>
       <FilterBar @search="load" @reset="resetFilters">
-        <el-input v-model="filters.keyword" :placeholder="t('common.keyword')" clearable style="width: 180px" />
-        <el-select v-model="filters.doc_type" :placeholder="t('page.knowledge.docType')" clearable style="width: 140px">
+        <template #primary>
+          <el-button v-if="canEdit" type="primary" @click="showUpload = true">{{ t('page.knowledge.upload') }}</el-button>
+        </template>
+        <el-input v-model="filters.keyword" :placeholder="t('common.keyword')" clearable />
+        <el-select v-model="filters.doc_type" :placeholder="t('page.knowledge.docType')" clearable>
           <el-option label="requirement" value="requirement" />
           <el-option label="api" value="api" />
         </el-select>
-        <el-select v-model="filters.index_status" :placeholder="t('page.knowledge.indexStatus')" clearable style="width: 140px">
+        <el-select v-model="filters.index_status" :placeholder="t('page.knowledge.indexStatus')" clearable>
           <el-option v-for="s in INDEX_STATUS" :key="s" :label="s" :value="s" />
         </el-select>
       </FilterBar>
@@ -29,19 +28,19 @@
         @page-change="load"
         @size-change="load"
       >
-        <el-table-column prop="title" :label="t('page.knowledge.titleCol')" />
-        <el-table-column prop="module_name" :label="t('page.knowledge.module')" width="120" />
-        <el-table-column :label="t('page.knowledge.indexStatus')" width="120">
+        <AppTableColumn prop="title" variant="content" :label="t('page.knowledge.titleCol')" />
+        <AppTableColumn prop="module_name" variant="flex" :label="t('page.knowledge.module')" />
+        <AppTableColumn variant="fixed" :label="t('page.knowledge.indexStatus')" :width="120">
           <template #default="{ row }"><IndexStatusBadge :status="row.index_status" /></template>
-        </el-table-column>
-        <el-table-column prop="updated_at" :label="t('common.updatedAt')" width="180">
+        </AppTableColumn>
+        <AppTableColumn prop="updated_at" variant="flex" :label="t('common.updatedAt')">
           <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
-        </el-table-column>
-        <el-table-column :label="t('common.actions')" width="120">
+        </AppTableColumn>
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="120">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/docs/knowledge/${row.id}`)">{{ t('common.view') }}</el-button>
           </template>
-        </el-table-column>
+        </AppTableColumn>
       </PaginatedTable>
     </template>
 
@@ -63,6 +62,7 @@ import { formatDateTime } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import IndexStatusBadge from '@/components/common/IndexStatusBadge.vue'
 import DocumentUploadWizard from '@/components/knowledge/DocumentUploadWizard.vue'

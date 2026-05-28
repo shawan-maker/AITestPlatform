@@ -1,25 +1,24 @@
 <template>
   <div class="task-list-view app-card">
-    <PageHeader :title="t('page.test.tasks.title')">
-      <template #actions>
-        <el-button v-if="canEdit && projectId" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.test.tasks.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
     <template v-else>
       <FilterBar @search="load" @reset="reset">
-        <el-select v-model="filters.task_type" :placeholder="t('page.test.taskType')" clearable style="width: 160px">
+        <template #primary>
+          <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+        </template>
+        <el-select v-model="filters.task_type" :placeholder="t('page.test.taskType')" clearable>
           <el-option v-for="tt in TASK_TYPES" :key="tt" :label="tt" :value="tt" />
         </el-select>
       </FilterBar>
       <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" @page-change="load">
-        <el-table-column prop="name" :label="t('common.name')" />
-        <el-table-column prop="task_type" :label="t('page.test.taskType')" width="120" />
-        <el-table-column :label="t('common.actions')" width="120">
+        <AppTableColumn prop="name" variant="content" :label="t('common.name')" />
+        <AppTableColumn prop="task_type" variant="flex" :label="t('page.test.taskType')" />
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="120">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/tasks/${row.id}`)">{{ t('common.view') }}</el-button>
           </template>
-        </el-table-column>
+        </AppTableColumn>
       </PaginatedTable>
     </template>
   </div>
@@ -37,6 +36,7 @@ import { TASK_TYPES } from '@/utils/constants'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 
 const { t } = useI18n()

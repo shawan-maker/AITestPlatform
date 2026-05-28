@@ -1,32 +1,31 @@
 <template>
   <div class="defect-list-view app-card">
-    <PageHeader :title="t('page.defects.title')">
-      <template #actions>
-        <el-button v-if="canEdit && projectId" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.defects.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
     <template v-else>
       <FilterBar @search="load" @reset="reset">
-        <el-input v-model="filters.q" :placeholder="t('common.keyword')" clearable style="width: 160px" />
-        <el-select v-model="filters.status" :placeholder="t('common.status')" clearable style="width: 140px">
+        <template #primary>
+          <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+        </template>
+        <el-input v-model="filters.q" :placeholder="t('common.keyword')" clearable />
+        <el-select v-model="filters.status" :placeholder="t('common.status')" clearable>
           <el-option v-for="s in DEFECT_STATUS" :key="s" :label="t(`defect.status.${s}`)" :value="s" />
         </el-select>
-        <el-select v-model="filters.severity" :placeholder="t('page.defects.severity')" clearable style="width: 120px">
+        <el-select v-model="filters.severity" :placeholder="t('page.defects.severity')" clearable>
           <el-option v-for="s in DEFECT_SEVERITY" :key="s" :label="s" :value="s" />
         </el-select>
       </FilterBar>
       <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" @page-change="load">
-        <el-table-column prop="title" :label="t('page.defects.title')" />
-        <el-table-column :label="t('common.status')" width="120">
+        <AppTableColumn prop="title" variant="content" :label="t('page.defects.title')" />
+        <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
           <template #default="{ row }"><DefectStatusTag :status="row.status" /></template>
-        </el-table-column>
-        <el-table-column prop="severity" :label="t('page.defects.severity')" width="100" />
-        <el-table-column :label="t('common.actions')" width="100">
+        </AppTableColumn>
+        <AppTableColumn prop="severity" variant="fixed" :label="t('page.defects.severity')" :width="100" />
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="120">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/defects/${row.id}`)">{{ t('common.view') }}</el-button>
           </template>
-        </el-table-column>
+        </AppTableColumn>
       </PaginatedTable>
     </template>
 
@@ -58,6 +57,7 @@ import { DEFECT_SEVERITY, DEFECT_STATUS } from '@/utils/constants'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import DefectStatusTag from '@/components/defect/DefectStatusTag.vue'
 
@@ -70,7 +70,7 @@ const filters = reactive({ q: '', status: '', severity: '' })
 const items = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
-const createForm = reactive({ title: '', severity: DEFECT_SEVERITY[0], priority: '中' })
+const createForm = reactive({ title: '', severity: DEFECT_SEVERITY[0], priority: '?' })
 
 async function load() {
   const params = withProjectParams({

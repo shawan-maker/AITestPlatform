@@ -58,8 +58,9 @@ onBeforeUnmount(onMouseUp)
 <style scoped lang="scss">
 .split-view {
   display: flex;
+  flex: 1;
+  min-height: 0;
   height: 100%;
-  min-height: 400px;
   gap: 0;
 }
 

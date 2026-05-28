@@ -1,23 +1,26 @@
 <template>
   <div class="function-list-view app-card">
-    <PageHeader :title="t('page.env.function.title')">
-      <template #actions>
-        <el-button v-if="canEdit && projectId" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.env.function.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <PaginatedTable v-else :data="items" :loading="loading" :total="total" v-model:page="page" v-model:page-size="pageSize" @page-change="load">
-      <el-table-column prop="file_name" :label="t('common.name')">
+    <template v-else>
+      <FilterBar @search="load" @reset="load">
+        <template #primary>
+          <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+        </template>
+      </FilterBar>
+      <PaginatedTable :data="items" :loading="loading" :total="total" v-model:page="page" v-model:page-size="pageSize" @page-change="load">
+      <AppTableColumn prop="file_name" variant="content" :label="t('common.name')">
         <template #default="{ row }">{{ row.file_name || row.name }}</template>
-      </el-table-column>
-      <el-table-column :label="t('common.actions')" width="240">
+      </AppTableColumn>
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="280">
         <template #default="{ row }">
           <el-button link @click="validate(row)">{{ t('page.env.function.validate') }}</el-button>
           <el-button link @click="openDebug(row)">{{ t('page.env.function.debug') }}</el-button>
           <el-button link @click="editCode(row)">{{ t('common.edit') }}</el-button>
         </template>
-      </el-table-column>
-    </PaginatedTable>
+      </AppTableColumn>
+      </PaginatedTable>
+    </template>
 
     <FunctionDebugDialog v-model="showDebug" :file="debugFile" />
     <el-dialog v-model="showCode" :title="t('page.env.function.editCode')" width="800px">
@@ -39,8 +42,10 @@ import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import PageHeader from '@/components/common/PageHeader.vue'
+import FilterBar from '@/components/common/FilterBar.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import FunctionDebugDialog from '@/components/env/FunctionDebugDialog.vue'
 import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 

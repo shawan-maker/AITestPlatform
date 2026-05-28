@@ -175,7 +175,7 @@ async function onUserCommand(cmd) {
 }
 
 .app-sidebar__name {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   line-height: 1.3;
   color: $text-primary;
@@ -183,7 +183,7 @@ async function onUserCommand(cmd) {
 
 .app-sidebar__name-short {
   display: none;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
 }
 
@@ -245,7 +245,7 @@ async function onUserCommand(cmd) {
 }
 
 .app-sidebar__username {
-  font-size: 14px;
+  font-size: var(--font-size-sidebar);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -254,6 +254,11 @@ async function onUserCommand(cmd) {
 
 .menu-admin-tag {
   margin-left: auto;
+}
+
+:deep(.el-menu-item),
+:deep(.el-sub-menu__title) {
+  font-size: var(--font-size-sidebar);
 }
 
 :deep(.el-menu-item) {

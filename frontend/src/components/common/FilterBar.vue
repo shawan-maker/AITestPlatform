@@ -1,5 +1,8 @@
 <template>
   <div class="filter-bar">
+    <div v-if="$slots.primary" class="filter-bar__primary">
+      <slot name="primary" />
+    </div>
     <slot />
     <div class="filter-bar__actions">
       <el-button type="primary" @click="$emit('search')">{{ t('common.search') }}</el-button>
@@ -19,18 +22,37 @@ const { t } = useI18n()
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   margin-bottom: 16px;
-  padding: 12px 16px;
+  padding: 14px 18px;
   background: var(--el-fill-color-blank);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: $radius-md;
+  font-size: var(--font-size-base);
+}
+
+.filter-bar__primary {
+  flex-shrink: 0;
 }
 
 .filter-bar__actions {
   display: flex;
-  gap: 8px;
-  margin-left: auto;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+:deep(.el-input),
+:deep(.el-select) {
+  width: 220px;
+}
+
+:deep(.el-input__wrapper),
+:deep(.el-select__wrapper) {
+  font-size: var(--font-size-base);
+}
+
+:deep(.el-button) {
+  font-size: var(--font-size-base);
 }
 </style>

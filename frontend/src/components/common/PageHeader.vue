@@ -45,7 +45,7 @@ defineProps({
 }
 
 .page-header__title {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
 }
 

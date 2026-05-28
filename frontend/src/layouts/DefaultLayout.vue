@@ -73,8 +73,18 @@ const drawerOpen = ref(false)
 
 .default-layout__main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: auto;
   padding: 24px;
+
+  > * {
+    flex: 1 0 auto;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
 }
 </style>
 

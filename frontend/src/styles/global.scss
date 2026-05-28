@@ -15,6 +15,7 @@ body,
 
 body {
   font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-size: var(--font-size-base);
   background: linear-gradient(180deg, var(--bg-page-start) 0%, var(--bg-page-end) 100%);
   background-attachment: fixed;
   color: var(--text-primary);
@@ -25,9 +26,62 @@ a {
   text-decoration: none;
 }
 
+.paginated-table__table,
+.app-card .el-table {
+  width: 100%;
+
+  th.el-table__cell {
+    background-color: #f3f4f6 !important;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .cell {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--font-size-base);
+  }
+}
+
 .app-card {
   background: var(--bg-card);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+
+  > .page-header {
+    flex-shrink: 0;
+  }
+
+  > .split-view,
+  > .el-tabs,
+  > .paginated-table,
+  > .empty-state {
+    flex: 1;
+    min-height: 0;
+  }
+
+  > .empty-state {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  > .el-tabs {
+    display: flex;
+    flex-direction: column;
+
+    .el-tabs__content {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .el-tab-pane {
+      height: 100%;
+    }
+  }
 }
