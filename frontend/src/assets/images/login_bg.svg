@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" max-width="800" height="auto" viewBox="0 0 800 600" background="#ffffff">
+  <!-- 定义可复用的动画曲线（提升兼容性） -->
+  <defs>
+    <linearGradient id="racketGradient1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3498db"/>
+      <stop offset="100%" stop-color="#2980b9"/>
+    </linearGradient>
+    <linearGradient id="racketGradient2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#e74c3c"/>
+      <stop offset="100%" stop-color="#c0392b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 左侧球拍（带独立动画） -->
+  <g>
+    <rect x="50" y="250" width="20" height="100" fill="url(#racketGradient1)" rx="5">
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        values="0 60 300; -10 60 300; 0 60 300; 10 60 300; 0 60 300"
+        dur="6s"
+        repeatCount="indefinite"
+        additive="sum"/>
+    </rect>
+    <circle cx="60" cy="300" r="40" fill="none" stroke="#2980b9" stroke-width="8">
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        values="0 60 300; -10 60 300; 0 60 300; 10 60 300; 0 60 300"
+        dur="6s"
+        repeatCount="indefinite"
+        additive="sum"/>
+    </circle>
+    <circle cx="60" cy="300" r="30" fill="none" stroke="#3498db" stroke-width="4">
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        values="0 60 300; -10 60 300; 0 60 300; 10 60 300; 0 60 300"
+        dur="6s"
+        repeatCount="indefinite"
+        additive="sum"/>
+    </circle>
+  </g>
+
+  <!-- 右侧球拍（带独立动画） -->
+  <g>
+    <rect x="730" y="250" width="20" height="100" fill="url(#racketGradient2)" rx="5">
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        values="0 740 300; 10 740 300; 0 740 300; -10 740 300; 0 740 300"
+        dur="6s"
+        repeatCount="indefinite"
+        additive="sum"/>
+    </rect>
+    <circle cx="740" cy="300" r="40" fill="none" stroke="#c0392b" stroke-width="8">
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        values="0 740 300; 10 740 300; 0 740 300; -10 740 300; 0 740 300"
+        dur="6s"
+        repeatCount="indefinite"
+        additive="sum"/>
+    </circle>
+    <circle cx="740" cy="300" r="30" fill="none" stroke="#e74c3c" stroke-width="4">
+      <animateTransform
+        attributeName="transform"
+        type="rotate"
+        values="0 740 300; 10 740 300; 0 740 300; -10 740 300; 0 740 300"
+        dur="6s"
+        repeatCount="indefinite"
+        additive="sum"/>
+    </circle>
+  </g>
+
+  <!-- 乒乓球（核心动态：弹跳+旋转） -->
+  <circle cx="400" cy="300" r="15" fill="#ffffff" stroke="#000000" stroke-width="2">
+    <!-- 水平移动动画 -->
+    <animate
+      attributeName="cx"
+      values="400; 300; 500; 400"
+      dur="5s"
+      repeatCount="indefinite"
+      calcMode="ease-in-out"/>
+    <!-- 垂直移动动画 -->
+    <animate
+      attributeName="cy"
+      values="300; 150; 450; 300"
+      dur="5s"
+      repeatCount="indefinite"
+      calcMode="ease-in-out"/>
+    <!-- 旋转动画 -->
+    <animateTransform
+      attributeName="transform"
+      type="rotate"
+      from="0 400 300"
+      to="360 400 300"
+      dur="3s"
+      repeatCount="indefinite"/>
+  </circle>
+
+  <!-- 运动轨迹（动态闪烁） -->
+  <circle cx="400" cy="300" r="180" fill="none" stroke="#f1c40f" stroke-width="2" stroke-dasharray="5,5">
+    <animate
+      attributeName="opacity"
+      values="0.3; 0.8; 0.3"
+      dur="3s"
+      repeatCount="indefinite"/>
+  </circle>
+</svg>

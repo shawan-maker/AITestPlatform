@@ -1,0 +1,74 @@
+<template>
+  <div v-loading="loading" class="user-detail-view app-card">
+    <PageHeader :title="user?.username || t('page.admin.users.title')">
+      <template #actions>
+        <el-button @click="router.push('/admin/users')">{{ t('common.back') }}</el-button>
+      </template>
+    </PageHeader>
+
+    <el-descriptions v-if="user" :column="2" border class="user-detail-view__info">
+      <el-descriptions-item label="ID">{{ user.id }}</el-descriptions-item>
+      <el-descriptions-item :label="t('page.login.username')">{{ user.username }}</el-descriptions-item>
+      <el-descriptions-item :label="t('page.register.email')">{{ user.email }}</el-descriptions-item>
+      <el-descriptions-item :label="t('page.admin.users.status')">
+        <el-tag :type="user.is_active ? 'success' : 'info'">
+          {{ user.is_active ? t('page.admin.users.statusActive') : t('page.admin.users.statusInactive') }}
+        </el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item :label="t('page.admin.users.superAdmin')">{{ user.is_super_admin ? 'Yes' : 'No' }}</el-descriptions-item>
+    </el-descriptions>
+
+    <h3 class="user-detail-view__section">{{ t('page.admin.users.relatedProjects') }}</h3>
+    <el-table :data="user?.projects ?? []" border>
+      <el-table-column prop="name" :label="t('page.admin.projects.name')">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="router.push(`/admin/projects/${row.project_id || row.id}`)">
+            {{ row.name }}
+          </el-button>
+        </template>
+      </el-table-column>
+      <el-table-column :label="t('page.projectSettings.role')" width="120">
+        <template #default="{ row }">{{ t(`role.${row.role_label || PROJECT_ROLE_LABEL[row.role] || 'viewer'}`) }}</template>
+      </el-table-column>
+    </el-table>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { getUser } from '@/api/users'
+import { PROJECT_ROLE_LABEL } from '@/utils/constants'
+import PageHeader from '@/components/common/PageHeader.vue'
+
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const userId = computed(() => Number(route.params.id))
+const user = ref(null)
+const loading = ref(false)
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await getUser(userId.value)
+    user.value = res.data.data
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
+</script>
+
+<style scoped lang="scss">
+.user-detail-view__info {
+  margin-bottom: 24px;
+}
+
+.user-detail-view__section {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+</style>

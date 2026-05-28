@@ -34,9 +34,6 @@ from utils.loader.get_script_function_list import get_module_functions
 from utils.loader.get_test_file_list import inspect_env_data
 from utils.parser.api_document_ai_parser import safe_structure_parser, _convert_to_serializable
 
-# 添加目标项目的 tests 目录到搜索路径
-import sys
-sys.path.append(r"D:\PyProject\TestApiEngineXin")
 from ApiEngine.core import TestRunner
 
 checkpointer=InMemorySaver()

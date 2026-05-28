@@ -1,0 +1,24 @@
+@use './variables.scss';
+
+.el-button--primary {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  border: none;
+  color: #ffffff;
+
+  &:hover,
+  &:focus {
+    background: linear-gradient(135deg, var(--color-primary-dark), #5ba8ca);
+  }
+}
+
+.el-button--default {
+  border-color: rgba(142, 202, 230, 0.45);
+  color: var(--color-primary-dark);
+
+  &:hover,
+  &:focus {
+    color: var(--color-primary-dark);
+    border-color: var(--color-primary);
+    background-color: var(--color-primary-light);
+  }
+}

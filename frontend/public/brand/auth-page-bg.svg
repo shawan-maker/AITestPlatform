@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EDE9FE"/>
+      <stop offset="45%" stop-color="#DDD6FE"/>
+      <stop offset="100%" stop-color="#C4B5FD"/>
+    </linearGradient>
+    <radialGradient id="orb1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#9B8AFB" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#9B8AFB" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#7C6CF0" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#7C6CF0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#g1)"/>
+  <circle cx="320" cy="280" r="280" fill="url(#orb1)"/>
+  <circle cx="1580" cy="720" r="360" fill="url(#orb2)"/>
+  <circle cx="1200" cy="180" r="200" fill="url(#orb1)"/>
+  <path d="M0 820 Q480 680 960 820 T1920 820 L1920 1080 L0 1080 Z" fill="#9B8AFB" fill-opacity="0.08"/>
+  <path d="M0 900 Q640 760 1280 900 T1920 900 L1920 1080 L0 1080 Z" fill="#7C6CF0" fill-opacity="0.06"/>
+</svg>

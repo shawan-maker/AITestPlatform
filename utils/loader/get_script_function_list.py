@@ -16,23 +16,12 @@
 
 """
 import types
-# 添加目标项目的 tests 目录到搜索路径
-# import sys
-# sys.path.append(r"D:\PyProject\TestApiEngineXin\tests")
-# import Tools
-
-
-
-
 from typing import Dict, Any, List
 import inspect
 from config.settings import BASE_DIR
 
 
-# from test_data import Tools
-
-
-def get_module_functions(source_code: object) -> List[Dict[str,Any]]:
+def get_module_functions(source_code: object) -> List[Dict[str, Any]]:
     """从源代码字符串中获取函数列表"""
     # 1. 创建一个空模块对象
     module = types.ModuleType("dynamic_tools")

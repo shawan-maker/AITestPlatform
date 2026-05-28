@@ -4,7 +4,7 @@ from langchain_core.prompts import PromptTemplate
 from service.core import config as core_config
 
 api_runcase_regenerator_prompt = PromptTemplate.from_template(
-    template=rf"""
+    template=r"""
 你是一位资深的接口测试专家，精通自动化测试策略设计、接口参数分析与测试数据管理。
 你正在协助测试团队**根据预执行失败结果重新优化接口测试用例的数据设计。
 # 
@@ -368,5 +368,11 @@ api_runcase_regenerator_prompt = PromptTemplate.from_template(
 - 输出格式为标准 JSON（**不带 markdown 标记**）
 - 所有字段必须补全，即使为空也要完整保留
 - 所有变量、提取表达式、函数调用等格式必须严格符合规则
-"""
+""".replace(
+    "{core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME}",
+    core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME,
+).replace(
+    "{core_config.AI_AGENT_PROMPT_EXAMPLE_PASSWORD}",
+    core_config.AI_AGENT_PROMPT_EXAMPLE_PASSWORD,
+)
 )

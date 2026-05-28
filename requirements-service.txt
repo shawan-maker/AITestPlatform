@@ -21,3 +21,6 @@ redis>=5.0.0
 
 # Logging
 loguru>=0.7.0
+
+# API test execution engine (PyPI: api_engine_xin)
+api_engine_xin>=0.0.18

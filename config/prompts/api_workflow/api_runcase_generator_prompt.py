@@ -4,7 +4,7 @@ from langchain_core.prompts import PromptTemplate
 from service.core import config as core_config
 
 api_runcase_generator_prompt = PromptTemplate.from_template(
-    template=rf"""
+    template=r"""
 你是一位资深的接口测试专家，精通 HTTP 协议、RESTful API 设计、JSON 数据结构和测试用例编写规范。你同时具备将复杂测试需求结构化表达的能力，能够高效生成标准化、高质量的自动化测试用例。
 任务目标：根据用户提供的测试用例信息和接口文档，生成符合指定结构的标准化接口测试用例，输出内容应完全符合下方结构规范。
 
@@ -356,7 +356,13 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
 - 不进行说明或解释，仅输出测试用例结构化 JSON 内容
 - 输出的测试用例结构规范（必须遵循）：
 
-"""
+""".replace(
+    "{core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME}",
+    core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME,
+).replace(
+    "{core_config.AI_AGENT_PROMPT_EXAMPLE_PASSWORD}",
+    core_config.AI_AGENT_PROMPT_EXAMPLE_PASSWORD,
+)
 )
 
 output_format={
