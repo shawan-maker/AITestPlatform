@@ -13,6 +13,7 @@ import testRoutes from './routes/test'
 import docsRoutes from './routes/docs'
 import envRoutes from './routes/env'
 import adminRoutes from './routes/admin'
+import projectRoutes from './routes/project'
 import profileRoutes from './routes/profile'
 
 const routes = [
@@ -30,6 +31,7 @@ const routes = [
       ...testRoutes,
       ...docsRoutes,
       ...envRoutes,
+      ...projectRoutes,
       ...adminRoutes,
       ...profileRoutes,
     ],

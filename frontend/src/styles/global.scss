@@ -27,7 +27,9 @@ a {
 }
 
 .paginated-table__table,
-.app-card .el-table {
+.app-table__inner,
+.app-card .el-table,
+.el-table {
   width: 100%;
 
   th.el-table__cell {
@@ -44,6 +46,21 @@ a {
   }
 }
 
+.table-cell-actions,
+.app-table-column__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  width: 100%;
+  gap: 4px;
+
+  .el-button {
+    margin: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+
 .app-card {
   background: var(--bg-card);
   border-radius: var(--radius-md);
@@ -52,14 +69,20 @@ a {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+  width: 100%;
 
   > .page-header {
+    flex-shrink: 0;
+  }
+
+  > .filter-bar {
     flex-shrink: 0;
   }
 
   > .split-view,
   > .el-tabs,
   > .paginated-table,
+  > .app-table,
   > .empty-state {
     flex: 1;
     min-height: 0;

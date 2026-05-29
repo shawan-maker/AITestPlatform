@@ -15,23 +15,23 @@
         </el-descriptions>
       </el-tab-pane>
       <el-tab-pane :label="t('page.test.tabCases')" name="cases">
-        <el-table :data="cases" border>
-          <el-table-column prop="case_name" :label="t('page.functional.caseName')" />
-        </el-table>
+        <AppTable :data="cases">
+          <AppTableColumn prop="case_name" variant="content" :label="t('page.functional.caseName')" />
+        </AppTable>
       </el-tab-pane>
       <el-tab-pane :label="t('page.test.tabHistory')" name="history">
         <RunProgressPanel v-if="activeRun" :progress="progress" />
-        <el-table :data="history" border>
-          <el-table-column prop="started_at" :label="t('page.test.startedAt')" />
-          <el-table-column prop="status" :label="t('common.status')" width="120">
+        <AppTable :data="history">
+          <AppTableColumn prop="started_at" variant="flex" :label="t('page.test.startedAt')" />
+          <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
             <template #default="{ row }"><StatusTag :status="row.status" :map="RUN_STATUS_MAP" /></template>
-          </el-table-column>
-          <el-table-column :label="t('common.actions')" width="120">
+          </AppTableColumn>
+          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="120">
             <template #default="{ row }">
               <el-button link @click="viewReport(row)">{{ t('page.test.report') }}</el-button>
             </template>
-          </el-table-column>
-        </el-table>
+          </AppTableColumn>
+        </AppTable>
       </el-tab-pane>
     </el-tabs>
 
@@ -51,6 +51,8 @@ import { getCaseRunLog, getSuiteHistory, getSuiteProgress, getSuiteReport, runSu
 import { usePermission } from '@/composables/usePermission'
 import { usePolling } from '@/composables/usePolling'
 import { RUN_STATUS_MAP } from '@/utils/constants'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
 import RunProgressPanel from '@/components/execution/RunProgressPanel.vue'

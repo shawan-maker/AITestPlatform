@@ -17,25 +17,24 @@
         </el-radio-group>
       </el-form-item>
     </el-form>
-    <el-table
+    <AppTable
       v-if="items.length"
       :data="items"
-      border
       :row-class-name="rowClassName"
       @selection-change="onSelect"
     >
-      <el-table-column type="selection" width="48" />
-      <el-table-column prop="method" label="Method" width="90" />
-      <el-table-column prop="path" label="Path" min-width="200" />
-      <el-table-column prop="summary" :label="t('page.apiCases.summary')" />
-      <el-table-column :label="t('common.status')" width="120">
+      <AppTableColumn type="selection" variant="fixed" :width="48" />
+      <AppTableColumn prop="method" variant="fixed" label="Method" :width="90" />
+      <AppTableColumn prop="path" variant="content" label="Path" />
+      <AppTableColumn prop="summary" variant="content" :label="t('page.apiCases.summary')" />
+      <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
         <template #default="{ row }">
           <el-tag :type="row.conflict ? 'warning' : 'success'">
             {{ row.conflict ? t('page.apiCases.actionUpsert') : t('page.apiCases.actionCreate') }}
           </el-tag>
         </template>
-      </el-table-column>
-    </el-table>
+      </AppTableColumn>
+    </AppTable>
     <template #footer>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
       <el-button type="primary" :loading="confirming" :disabled="!selected.length" @click="confirm">
@@ -51,6 +50,8 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmApiImport, previewApiImport } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

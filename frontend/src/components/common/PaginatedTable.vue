@@ -103,9 +103,11 @@ watch(
   flex-direction: column;
   min-height: 0;
   width: 100%;
+  flex: 1;
 
   &__table {
     width: 100%;
+    flex: 1;
   }
 
   &__footer {

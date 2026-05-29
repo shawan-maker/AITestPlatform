@@ -74,7 +74,9 @@
         "created": "用户已创建",
         "projectName": "关联项目",
         "userId": "用户 ID",
-        "relatedProjects": "关联项目"
+        "relatedProjects": "关联项目",
+        "confirmActivate": "确定激活该用户？",
+        "confirmDeactivate": "确定停用该用户？"
       }
     },
     "projectSettings": {
@@ -88,10 +90,34 @@
       "moduleName": "模块名称",
       "role": "角色",
       "members": "成员数",
-      "owner": "所有者",
-      "transferOwner": "转移所有者",
-      "ownerTransferred": "所有者已转移",
-      "searchUser": "搜索用户名或邮箱"
+      "myRole": "我的角色",
+      "membersSave": "保存成员变更",
+      "membersUnsaved": "有未保存的成员角色变更，确定离开？",
+      "owner": "项目管理员",
+      "admin": "项目管理员",
+      "setAdmin": "设置项目管理员",
+      "adminSet": "项目管理员已设置",
+      "transferOwner": "设置项目管理员",
+      "ownerTransferred": "项目管理员已设置",
+      "searchUser": "搜索用户名或邮箱",
+      "batchDelete": "批量删除",
+      "batchDeletePartial": "部分项目未能删除",
+      "batchDeleteDone": "已删除 {count} 个项目",
+      "deleteBlocked": "无法删除项目",
+      "blocker": {
+        "environments": "测试环境",
+        "knowledgeWorkspaces": "知识库工作区",
+        "knowledgeDocuments": "知识库文档",
+        "testTasks": "测试任务",
+        "testSuites": "测试套件",
+        "aiSessions": "AI 会话",
+        "apiCatalogs": "接口目录",
+        "apiInterfaces": "接口",
+        "apiBaseCases": "接口基础用例",
+        "apiTestCases": "接口测试用例",
+        "functionalCases": "功能用例",
+        "requirementDocs": "需求文档"
+      }
     },
     "knowledge": {
       "title": "知识库",
@@ -341,12 +367,17 @@
     "resetForm": "重置",
     "openMenu": "打开菜单",
     "loading": "加载中...",
-    "requestFailed": "请求失败"
+    "requestFailed": "请求失败",
+    "yes": "是",
+    "no": "否",
+    "error": "错误"
   },
   "role": {
     "viewer": "查看者",
     "editor": "编辑者",
-    "owner": "所有者"
+    "owner": "项目管理员",
+    "admin": "项目管理员",
+    "superAdminInProject": "超级管理员"
   },
   "defect": {
     "status": {

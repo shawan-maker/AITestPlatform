@@ -2,22 +2,22 @@
   <div class="env-config-editor">
     <el-tabs v-model="activeGroup">
       <el-tab-pane v-for="g in CONFIG_GROUPS" :key="g" :label="t(`configGroup.${g}`)" :name="g">
-        <el-table :data="groupItems(g)" border>
-          <el-table-column prop="name" :label="t('common.name')" />
-          <el-table-column prop="config_type" :label="t('page.env.configType')" width="100" />
-          <el-table-column prop="value" :label="t('page.env.configValue')" min-width="160">
+        <AppTable :data="groupItems(g)">
+          <AppTableColumn prop="name" variant="content" :label="t('common.name')" />
+          <AppTableColumn prop="config_type" variant="fixed" :label="t('page.env.configType')" :width="100" />
+          <AppTableColumn prop="value" variant="content" :label="t('page.env.configValue')">
             <template #default="{ row }">{{ row.value ?? '—' }}</template>
-          </el-table-column>
-          <el-table-column prop="remark" :label="t('page.env.remark')" />
-          <el-table-column v-if="canEdit" :label="t('common.actions')" width="120">
+          </AppTableColumn>
+          <AppTableColumn prop="remark" variant="content" :label="t('page.env.remark')" />
+          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="120">
             <template #default="{ row }">
               <el-button link @click="editItem(row)">{{ t('common.edit') }}</el-button>
               <ConfirmDelete @confirm="removeItem(row)">
                 <el-button link type="danger">{{ t('common.delete') }}</el-button>
               </ConfirmDelete>
             </template>
-          </el-table-column>
-        </el-table>
+          </AppTableColumn>
+        </AppTable>
         <el-pagination
           v-if="g === 'envs' && envsTotal > envsPageSize"
           v-model:current-page="envsPage"
@@ -57,6 +57,8 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { createConfig, deleteConfig, getConfigs, updateConfig } from '@/api/environment'
 import { CONFIG_GROUPS, CONFIG_TYPES } from '@/utils/constants'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 
 const props = defineProps({

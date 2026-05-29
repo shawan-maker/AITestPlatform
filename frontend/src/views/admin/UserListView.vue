@@ -8,10 +8,14 @@
       </template>
       <el-input v-model="filters.username" :placeholder="t('page.login.username')" clearable />
       <el-input v-model="filters.email" :placeholder="t('page.register.email')" clearable />
-      <el-input v-model="filters.project_name" :placeholder="t('page.admin.users.projectName')" clearable />
+      <ProjectSearchPicker v-model="filters.project_id" :placeholder="t('page.admin.users.projectName')" />
       <el-select v-model="filters.is_active" :placeholder="t('page.admin.users.status')" clearable>
         <el-option :label="t('page.admin.users.statusActive')" :value="true" />
         <el-option :label="t('page.admin.users.statusInactive')" :value="false" />
+      </el-select>
+      <el-select v-model="filters.is_super_admin" :placeholder="t('page.admin.users.superAdmin')" clearable>
+        <el-option :label="t('common.yes')" :value="true" />
+        <el-option :label="t('common.no')" :value="false" />
       </el-select>
     </FilterBar>
 
@@ -34,7 +38,7 @@
         </template>
       </AppTableColumn>
       <AppTableColumn variant="fixed" :label="t('page.admin.users.superAdmin')" :width="100">
-        <template #default="{ row }">{{ row.is_super_admin ? 'Yes' : 'No' }}</template>
+        <template #default="{ row }">{{ row.is_super_admin ? t('common.yes') : t('common.no') }}</template>
       </AppTableColumn>
       <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="320">
         <template #default="{ row }">
@@ -67,12 +71,13 @@ import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import UserFormDialog from '@/components/admin/UserFormDialog.vue'
+import ProjectSearchPicker from '@/components/picker/ProjectSearchPicker.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const { page, pageSize, total } = usePagination()
 
-const filters = reactive({ username: '', email: '', project_name: '', is_active: null })
+const filters = reactive({ username: '', email: '', project_id: null, is_active: null, is_super_admin: null })
 const items = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
@@ -86,8 +91,9 @@ async function load() {
       page_size: pageSize.value,
       username: filters.username || undefined,
       email: filters.email || undefined,
-      project_name: filters.project_name || undefined,
+      project_id: filters.project_id ?? undefined,
       is_active: filters.is_active ?? undefined,
+      is_super_admin: filters.is_super_admin ?? undefined,
     })
     items.value = res.data.data?.items ?? []
     total.value = res.data.data?.total ?? 0
@@ -97,7 +103,7 @@ async function load() {
 }
 
 function resetFilters() {
-  Object.assign(filters, { username: '', email: '', project_name: '', is_active: null })
+  Object.assign(filters, { username: '', email: '', project_id: null, is_active: null, is_super_admin: null })
   page.value = 1
   load()
 }
@@ -115,7 +121,10 @@ async function create(data) {
 }
 
 async function toggleStatus(row) {
-  await updateUserStatus(row.id, !row.is_active)
+  const activating = !row.is_active
+  const msg = activating ? t('page.admin.users.confirmActivate') : t('page.admin.users.confirmDeactivate')
+  await ElMessageBox.confirm(msg, t('common.confirm'), { type: 'warning' })
+  await updateUserStatus(row.id, activating)
   ElMessage.success(t('common.saved'))
   load()
 }

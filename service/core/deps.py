@@ -91,7 +91,7 @@ async def require_project_owner_or_super_admin(
         role=ProjectMemberRole.owner.value,
     )
     if membership is None:
-        raise AppException("需要项目所有者或超级管理员权限", 403)
+        raise AppException("需要项目管理员或超级管理员权限", 403)
     return project, user
 
 

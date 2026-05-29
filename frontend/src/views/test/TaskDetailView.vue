@@ -13,10 +13,10 @@
         <el-tag>{{ task?.task_type }}</el-tag>
       </el-tab-pane>
       <el-tab-pane :label="t('page.test.tabHistory')" name="history">
-        <el-table :data="history" border>
-          <el-table-column prop="started_at" :label="t('page.test.startedAt')" />
-          <el-table-column prop="status" :label="t('common.status')" />
-        </el-table>
+        <AppTable :data="history">
+          <AppTableColumn prop="started_at" variant="flex" :label="t('page.test.startedAt')" />
+          <AppTableColumn prop="status" variant="fixed" :label="t('common.status')" :width="120" />
+        </AppTable>
       </el-tab-pane>
     </el-tabs>
 
@@ -32,6 +32,8 @@ import { ElMessage } from 'element-plus'
 import { getTask } from '@/api/testManagement'
 import { getTaskHistory, openManualRun, runTask } from '@/api/testExecution'
 import { usePermission } from '@/composables/usePermission'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import ManualRunDrawer from '@/components/execution/ManualRunDrawer.vue'
 

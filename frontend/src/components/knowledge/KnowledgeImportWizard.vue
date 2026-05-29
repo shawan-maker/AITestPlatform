@@ -12,19 +12,19 @@
       </el-form-item>
       <el-button type="primary" :loading="previewing" @click="loadPreview">{{ t('page.apiCases.preview') }}</el-button>
     </el-form>
-    <el-table v-if="items.length" :data="items" border :row-class-name="rowClassName" @selection-change="onSelect">
-      <el-table-column type="selection" width="48" />
-      <el-table-column prop="method" label="Method" width="90" />
-      <el-table-column prop="path" label="Path" min-width="200" />
-      <el-table-column prop="summary" :label="t('page.apiCases.summary')" />
-      <el-table-column :label="t('common.status')" width="120">
+    <AppTable v-if="items.length" :data="items" :row-class-name="rowClassName" @selection-change="onSelect">
+      <AppTableColumn type="selection" variant="fixed" :width="48" />
+      <AppTableColumn prop="method" variant="fixed" label="Method" :width="90" />
+      <AppTableColumn prop="path" variant="content" label="Path" />
+      <AppTableColumn prop="summary" variant="content" :label="t('page.apiCases.summary')" />
+      <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
         <template #default="{ row }">
           <el-tag :type="row.conflict ? 'warning' : 'success'">
             {{ row.conflict ? t('page.apiCases.actionUpsert') : t('page.apiCases.actionCreate') }}
           </el-tag>
         </template>
-      </el-table-column>
-    </el-table>
+      </AppTableColumn>
+    </AppTable>
     <template #footer>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
       <el-button type="primary" :loading="confirming" :disabled="!selected.length" @click="confirm">
@@ -39,6 +39,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmImport, previewImport } from '@/api/knowledge'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ModuleSelect from '@/components/tree/ModuleSelect.vue'
 
 const props = defineProps({

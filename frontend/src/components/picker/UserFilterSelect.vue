@@ -3,11 +3,11 @@
     v-model="innerValue"
     filterable
     remote
+    clearable
     reserve-keyword
     :remote-method="searchUsers"
     :loading="loading"
-    :placeholder="t('page.projectSettings.searchUser')"
-    style="width: 100%"
+    :placeholder="placeholder || t('page.login.username')"
     @change="onChange"
   >
     <el-option
@@ -22,16 +22,15 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { listUsers, lookupUsers } from '@/api/users'
-import { useAuthStore } from '@/stores/auth'
+import { listUsers } from '@/api/users'
 
 const props = defineProps({
   modelValue: { type: Number, default: null },
+  placeholder: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
-const auth = useAuthStore()
 
 const innerValue = ref(props.modelValue)
 const options = ref([])
@@ -43,19 +42,10 @@ watch(
 )
 
 async function searchUsers(query) {
-  if (!query?.trim()) {
-    options.value = []
-    return
-  }
   loading.value = true
   try {
-    if (auth.isSuperAdmin) {
-      const res = await listUsers({ username: query.trim(), page: 1, page_size: 20, is_active: true })
-      options.value = res.data.data?.items ?? []
-    } else {
-      const res = await lookupUsers({ q: query.trim(), page: 1, page_size: 20 })
-      options.value = res.data.data?.items ?? []
-    }
+    const res = await listUsers({ username: query?.trim() || undefined, page: 1, page_size: 30, is_active: true })
+    options.value = res.data.data?.items ?? []
   } catch {
     options.value = []
   } finally {
@@ -64,6 +54,8 @@ async function searchUsers(query) {
 }
 
 function onChange(v) {
-  emit('update:modelValue', v)
+  emit('update:modelValue', v ?? null)
 }
+
+searchUsers('')
 </script>

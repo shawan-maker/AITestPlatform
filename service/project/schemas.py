@@ -54,11 +54,30 @@ class ProjectMemberAddRequest(BaseModel):
 
 
 class ProjectMemberUpdateRequest(BaseModel):
-    role: Literal[0, 1] = Field(..., description="0=viewer, 1=editor")
+    role: Literal[0, 1, 2] = Field(..., description="0=viewer, 1=editor, 2=admin(SA only)")
 
 
 class ProjectOwnerTransferRequest(BaseModel):
     new_owner_user_id: int = Field(..., ge=1)
+
+
+class ProjectAdminSetRequest(BaseModel):
+    user_id: int = Field(..., ge=1)
+
+
+class ProjectBatchDeleteRequest(BaseModel):
+    project_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class ProjectBatchDeleteFailure(BaseModel):
+    project_id: int
+    message: str
+    blockers: dict[str, int] | None = None
+
+
+class ProjectBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[ProjectBatchDeleteFailure]
 
 
 class ProjectBrief(BaseModel):
@@ -67,6 +86,7 @@ class ProjectBrief(BaseModel):
     description: str | None
     owner_id: int
     owner_username: str
+    member_count: int = 0
     my_role: int | None = None
     my_role_label: str | None = None
     is_member: bool
@@ -87,6 +107,7 @@ class ProjectMemberOut(BaseModel):
     email: str
     role: int
     role_label: str
+    is_super_admin: bool = False
     joined_at: datetime
 
 

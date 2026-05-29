@@ -54,6 +54,17 @@ async def list_users(
     return success(data=data)
 
 
+@router.get("/lookup", summary="用户模糊搜索（添加成员等）")
+async def lookup_users(
+    q: str | None = Query(None, description="用户名或邮箱模糊搜索"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    _: User = Depends(get_current_active_user),
+):
+    data = await UserService.lookup_users(q, page, page_size)
+    return success(data=data)
+
+
 @router.get("/{user_id}", summary="用户详情")
 async def get_user_detail(
     user_id: int,

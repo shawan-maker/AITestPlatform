@@ -39,11 +39,9 @@ export const menuConfig = [
     ],
   },
   {
-    path: '/admin/projects',
+    path: '/projects',
     titleKey: 'menu.adminProjects',
     icon: 'OfficeBuilding',
-    superAdminOnly: true,
-    emphasis: 'admin',
   },
   {
     path: '/admin/users',

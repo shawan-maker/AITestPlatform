@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from tortoise.expressions import Q
+
 from service.core.enums import project_member_role_label
 from service.core.exceptions import AppException
 from service.core.redis import invalidate_user_tokens
@@ -10,10 +12,12 @@ from service.user.schemas import (
     AdminResetPasswordRequest,
     ChangeOwnPasswordRequest,
     PaginatedUsers,
+    PaginatedUserLookup,
     UserBrief,
     UserCreateByAdminRequest,
     UserDetail,
     UserListQuery,
+    UserLookupBrief,
     UserProjectMembership,
 )
 
@@ -108,6 +112,29 @@ class UserService:
             page=query.page,
             page_size=query.page_size,
             items=[cls._to_user_brief(user) for user in users],
+        )
+
+    @classmethod
+    async def lookup_users(
+        cls,
+        q: str | None,
+        page: int,
+        page_size: int,
+    ) -> PaginatedUserLookup:
+        qs = User.filter(is_deleted=False, is_active=True)
+        if q and q.strip():
+            keyword = q.strip()
+            qs = qs.filter(Q(username__icontains=keyword) | Q(email__icontains=keyword))
+        total = await qs.count()
+        users = await qs.order_by("username").offset((page - 1) * page_size).limit(page_size)
+        return PaginatedUserLookup(
+            total=total,
+            page=page,
+            page_size=page_size,
+            items=[
+                UserLookupBrief(id=u.id, username=u.username, email=u.email)
+                for u in users
+            ],
         )
 
     @classmethod

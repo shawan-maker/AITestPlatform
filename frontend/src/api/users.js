@@ -31,3 +31,7 @@ export function changeMyPassword(data) {
 export function resetUserPassword(userId, newPassword) {
   return request.put(`/users/${userId}/password`, { new_password: newPassword })
 }
+
+export function lookupUsers(params = {}) {
+  return request.get('/users/lookup', { params })
+}

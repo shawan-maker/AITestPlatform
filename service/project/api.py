@@ -11,6 +11,8 @@ from service.core.response import success
 from service.project.module_service import ModuleService
 from service.project.project_service import ProjectService
 from service.project.schemas import (
+    ProjectAdminSetRequest,
+    ProjectBatchDeleteRequest,
     ProjectCreateRequest,
     ProjectListQuery,
     ProjectMemberAddRequest,
@@ -57,6 +59,15 @@ async def list_projects(
 ):
     data = await ProjectService.list_projects(user, query)
     return success(data=data)
+
+
+@router.post("/batch-delete", summary="批量删除项目")
+async def batch_delete_projects(
+    data: ProjectBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await ProjectService.batch_delete_projects(user, data)
+    return success(data=result, message="批量删除完成")
 
 
 @router.get("/{project_id}", summary="项目详情")
@@ -128,14 +139,28 @@ async def remove_project_member(
     return success(message="成员已移除")
 
 
-@router.put("/{project_id}/owner", summary="转移项目所有者")
+@router.put("/{project_id}/admin", summary="设置项目管理员")
+async def set_project_admin(
+    project_id: int,
+    data: ProjectAdminSetRequest,
+    super_admin: User = Depends(get_current_super_admin),
+):
+    result = await ProjectService.set_project_admin(super_admin, project_id, data)
+    return success(data=result, message="项目管理员已设置")
+
+
+@router.put("/{project_id}/owner", summary="转移项目所有者（已废弃，请使用 /admin）", deprecated=True)
 async def transfer_project_owner(
     project_id: int,
     data: ProjectOwnerTransferRequest,
     super_admin: User = Depends(get_current_super_admin),
 ):
-    result = await ProjectService.transfer_owner(super_admin, project_id, data)
-    return success(data=result, message="项目所有者已转移")
+    result = await ProjectService.set_project_admin(
+        super_admin,
+        project_id,
+        ProjectAdminSetRequest(user_id=data.new_owner_user_id),
+    )
+    return success(data=result, message="项目管理员已设置")
 
 
 @router.get("/{project_id}/modules", summary="项目模块列表")

@@ -18,10 +18,10 @@
         <MonacoJsonEditor v-model="responseJson" read-only :height="180" />
         <div class="editor-label">{{ t('page.apiCases.assertions') }}</div>
         <MonacoJsonEditor v-model="assertionsJson" :height="160" />
-        <el-table :data="runRecords" border style="margin-top: 12px">
-          <el-table-column prop="created_at" :label="t('common.createdAt')" />
-          <el-table-column prop="status" :label="t('common.status')" width="100" />
-        </el-table>
+        <AppTable :data="runRecords" class="run-records-table">
+          <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')" />
+          <AppTableColumn prop="status" variant="fixed" :label="t('common.status')" :width="100" />
+        </AppTable>
       </template>
     </SplitView>
   </div>
@@ -39,6 +39,8 @@ import {
   listDependencies,
   updateApiCase,
 } from '@/api/apiTest'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
@@ -114,5 +116,9 @@ onMounted(load)
   font-size: 13px;
   margin: 8px 0 4px;
   color: var(--el-text-color-secondary);
+}
+
+.run-records-table {
+  margin-top: 12px;
 }
 </style>

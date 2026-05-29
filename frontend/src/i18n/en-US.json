@@ -74,7 +74,9 @@
         "created": "User created",
         "projectName": "Project name",
         "userId": "User ID",
-        "relatedProjects": "Related Projects"
+        "relatedProjects": "Related Projects",
+        "confirmActivate": "Activate this user?",
+        "confirmDeactivate": "Deactivate this user?"
       }
     },
     "projectSettings": {
@@ -88,10 +90,34 @@
       "moduleName": "Module Name",
       "role": "Role",
       "members": "Members",
-      "owner": "Owner",
-      "transferOwner": "Transfer Owner",
-      "ownerTransferred": "Owner transferred",
-      "searchUser": "Search by username or email"
+      "myRole": "My Role",
+      "membersSave": "Save Member Changes",
+      "membersUnsaved": "Unsaved member role changes. Leave anyway?",
+      "owner": "Project Admin",
+      "admin": "Project Admin",
+      "setAdmin": "Set Project Admin",
+      "adminSet": "Project admin updated",
+      "transferOwner": "Set Project Admin",
+      "ownerTransferred": "Project admin updated",
+      "searchUser": "Search by username or email",
+      "batchDelete": "Batch Delete",
+      "batchDeletePartial": "Some projects could not be deleted",
+      "batchDeleteDone": "Deleted {count} project(s)",
+      "deleteBlocked": "Cannot delete project",
+      "blocker": {
+        "environments": "Environments",
+        "knowledgeWorkspaces": "Knowledge workspaces",
+        "knowledgeDocuments": "Knowledge documents",
+        "testTasks": "Test tasks",
+        "testSuites": "Test suites",
+        "aiSessions": "AI sessions",
+        "apiCatalogs": "API catalogs",
+        "apiInterfaces": "API interfaces",
+        "apiBaseCases": "API base cases",
+        "apiTestCases": "API test cases",
+        "functionalCases": "Functional cases",
+        "requirementDocs": "Requirement docs"
+      }
     },
     "knowledge": {
       "title": "Knowledge Base",
@@ -341,12 +367,17 @@
     "resetForm": "Reset",
     "openMenu": "Open menu",
     "loading": "Loading...",
-    "requestFailed": "Request failed"
+    "requestFailed": "Request failed",
+    "yes": "Yes",
+    "no": "No",
+    "error": "Error"
   },
   "role": {
     "viewer": "Viewer",
     "editor": "Editor",
-    "owner": "Owner"
+    "owner": "Project Admin",
+    "admin": "Project Admin",
+    "superAdminInProject": "Super Admin"
   },
   "defect": {
     "status": {

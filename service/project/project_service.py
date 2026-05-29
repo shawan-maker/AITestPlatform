@@ -13,6 +13,10 @@ from service.project.models import Project, ProjectMember
 from service.project.schemas import (
     PaginatedProjects,
     ProjectBrief,
+    ProjectAdminSetRequest,
+    ProjectBatchDeleteFailure,
+    ProjectBatchDeleteRequest,
+    ProjectBatchDeleteResult,
     ProjectCreateRequest,
     ProjectDetail,
     ProjectListQuery,
@@ -26,20 +30,25 @@ from service.test_environment.models import TestEnvironment
 from service.test_management.models import TestSuite, TestTask
 from service.user.models import User
 
-BLOCKER_MODELS: list[tuple[type, str]] = [
+HARD_BLOCKER_MODELS: list[tuple[type, str]] = [
     (TestEnvironment, "environments"),
     (KnowledgeWorkspace, "knowledge_workspaces"),
     (KnowledgeDocument, "knowledge_documents"),
-    (RequirementDoc, "requirement_docs"),
-    (FunctionalCase, "functional_cases"),
-    (ApiInterfaceCatalog, "api_interface_catalogs"),
-    (ApiInterface, "api_interfaces"),
-    (ApiBaseCase, "api_base_cases"),
-    (ApiTestCase, "api_test_cases"),
     (TestTask, "test_tasks"),
     (TestSuite, "test_suites"),
     (AIGenerationSession, "ai_generation_sessions"),
+    (ApiInterfaceCatalog, "api_interface_catalogs"),
 ]
+
+SOFT_BLOCKER_MODELS: list[tuple[type, str]] = [
+    (ApiInterface, "api_interfaces"),
+    (ApiBaseCase, "api_base_cases"),
+    (ApiTestCase, "api_test_cases"),
+    (FunctionalCase, "functional_cases"),
+    (RequirementDoc, "requirement_docs"),
+]
+
+DELETE_BLOCKER_MODELS = HARD_BLOCKER_MODELS + SOFT_BLOCKER_MODELS
 
 
 class ProjectService:
@@ -95,12 +104,14 @@ class ProjectService:
             await project.fetch_related("owner")
         is_member = membership is not None
         my_role = membership.role if membership else None
+        member_count = await ProjectMember.filter(project_id=project.id).count()
         return ProjectBrief(
             id=project.id,
             name=project.name,
             description=project.description,
             owner_id=project.owner_id,
             owner_username=project.owner.username,
+            member_count=member_count,
             my_role=my_role,
             my_role_label=project_member_role_label(my_role) if my_role is not None else None,
             is_member=is_member,
@@ -122,6 +133,7 @@ class ProjectService:
                 email=member.user.email,
                 role=member.role,
                 role_label=project_member_role_label(member.role),
+                is_super_admin=member.user.is_super_admin,
                 joined_at=member.created_at,
             )
             for member in members
@@ -147,7 +159,7 @@ class ProjectService:
             return key, count
 
         results = await asyncio.gather(
-            *[count_blocker(model, key) for model, key in BLOCKER_MODELS]
+            *[count_blocker(model, key) for model, key in DELETE_BLOCKER_MODELS]
         )
         return {key: count for key, count in results if count > 0}
 
@@ -299,6 +311,7 @@ class ProjectService:
             email=member.user.email,
             role=member.role,
             role_label=project_member_role_label(member.role),
+            is_super_admin=member.user.is_super_admin,
             joined_at=member.created_at,
         )
 
@@ -314,10 +327,28 @@ class ProjectService:
         member = await ProjectMember.get_or_none(project_id=project.id, user_id=user_id)
         if member is None:
             raise AppException("成员不存在", 404)
-        if member.role == ProjectMemberRole.owner.value:
-            raise AppException("不能修改项目所有者的角色", 400)
+        await member.fetch_related("user")
+        if member.user.is_super_admin:
+            raise AppException("不能修改超级管理员的角色", 400)
 
-        member.role = data.role
+        target_role = data.role
+        if target_role == ProjectMemberRole.owner.value:
+            if not operator.is_super_admin:
+                raise AppException("只有超级管理员可以设置项目管理员", 403)
+            if member.role == ProjectMemberRole.owner.value:
+                raise AppException("该用户已是项目管理员", 400)
+            detail = await cls.transfer_owner(
+                operator,
+                project_id,
+                ProjectOwnerTransferRequest(new_owner_user_id=user_id),
+            )
+            updated = next(m for m in (detail.members or []) if m.user_id == user_id)
+            return updated
+
+        if member.role == ProjectMemberRole.owner.value:
+            raise AppException("不能直接将项目管理员降为其他角色，请先指定新的项目管理员", 400)
+
+        member.role = target_role
         member.granted_by = operator
         await member.save(update_fields=["role", "granted_by_id", "updated_at"])
         await member.fetch_related("user")
@@ -327,6 +358,7 @@ class ProjectService:
             email=member.user.email,
             role=member.role,
             role_label=project_member_role_label(member.role),
+            is_super_admin=member.user.is_super_admin,
             joined_at=member.created_at,
         )
 
@@ -341,11 +373,60 @@ class ProjectService:
         member = await ProjectMember.get_or_none(project_id=project.id, user_id=user_id)
         if member is None:
             raise AppException("成员不存在", 404)
+        await member.fetch_related("user")
+        if member.user.is_super_admin:
+            raise AppException("不能移除超级管理员", 400)
         if member.role == ProjectMemberRole.owner.value:
-            raise AppException("不能移除项目所有者", 400)
+            raise AppException("不能移除项目管理员", 400)
         if operator.id == user_id and member.role == ProjectMemberRole.owner.value:
             raise AppException("不能移除自己", 400)
         await member.delete()
+
+    @classmethod
+    async def set_project_admin(
+        cls,
+        super_admin: User,
+        project_id: int,
+        data: ProjectAdminSetRequest,
+    ) -> ProjectDetail:
+        return await cls.transfer_owner(
+            super_admin,
+            project_id,
+            ProjectOwnerTransferRequest(new_owner_user_id=data.user_id),
+        )
+
+    @classmethod
+    async def batch_delete_projects(
+        cls,
+        operator: User,
+        data: ProjectBatchDeleteRequest,
+    ) -> ProjectBatchDeleteResult:
+        deleted_ids: list[int] = []
+        failures: list[ProjectBatchDeleteFailure] = []
+        for pid in data.project_ids:
+            try:
+                await cls.delete_project(operator, pid)
+                deleted_ids.append(pid)
+            except AppException as exc:
+                blockers = None
+                if exc.code == 409 and isinstance(exc.data, dict):
+                    blockers = exc.data.get("blockers")
+                failures.append(
+                    ProjectBatchDeleteFailure(
+                        project_id=pid,
+                        message=exc.message,
+                        blockers=blockers,
+                    )
+                )
+            except Exception as exc:
+                failures.append(
+                    ProjectBatchDeleteFailure(
+                        project_id=pid,
+                        message=str(exc),
+                        blockers=None,
+                    )
+                )
+        return ProjectBatchDeleteResult(deleted_ids=deleted_ids, failures=failures)
 
     @classmethod
     async def transfer_owner(
@@ -359,7 +440,7 @@ class ProjectService:
             raise AppException("项目不存在", 404)
 
         if project.owner_id == data.new_owner_user_id:
-            raise AppException("该用户已是项目所有者", 400)
+            raise AppException("该用户已是项目管理员", 400)
 
         new_user = await cls._get_addable_user(data.new_owner_user_id)
 
@@ -369,7 +450,7 @@ class ProjectService:
                 role=ProjectMemberRole.owner.value,
             )
             if old_owner_member is None:
-                raise AppException("项目缺少有效的所有者成员记录", 400)
+                raise AppException("项目缺少有效的项目管理员成员记录", 400)
 
             new_member = await ProjectMember.get_or_none(
                 project_id=project.id,
@@ -415,5 +496,5 @@ class ProjectService:
             role=ProjectMemberRole.owner.value,
         )
         if membership is None:
-            raise AppException("需要项目所有者或超级管理员权限", 403)
+            raise AppException("需要项目管理员或超级管理员权限", 403)
         return project, user

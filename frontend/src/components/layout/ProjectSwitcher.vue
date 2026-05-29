@@ -53,7 +53,7 @@ async function onChange(id) {
 
 function onCommand(cmd) {
   if (cmd === 'settings' && projectStore.currentProjectId) {
-    router.push(`/projects/${projectStore.currentProjectId}/settings`)
+    router.push(`/projects/${projectStore.currentProjectId}`)
   }
 }
 </script>

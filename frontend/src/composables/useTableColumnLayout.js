@@ -25,7 +25,7 @@ function distributeWidths(cols, bases, remaining, mins) {
   const count = cols.length
   if (!count) return next
 
-  let baseSum = bases.reduce((sum, w) => sum + w, 0)
+  const baseSum = bases.reduce((sum, w) => sum + w, 0)
   if (baseSum <= 0) {
     const even = Math.max(MIN_FLEX, Math.floor(remaining / count))
     cols.forEach((col, index) => {
@@ -41,14 +41,13 @@ function distributeWidths(cols, bases, remaining, mins) {
       next[col.id] = Math.round(bases[index] + (bases[index] / baseSum) * extra)
     })
   } else {
-    let scale = remaining / baseSum
     cols.forEach((col, index) => {
-      next[col.id] = Math.max(mins[index], Math.floor(bases[index] * scale))
+      next[col.id] = Math.max(mins[index], Math.floor(bases[index] * (remaining / baseSum)))
     })
     let used = Object.values(next).reduce((sum, w) => sum + w, 0)
     let delta = remaining - used
     let i = 0
-    while (delta !== 0 && i < count * 4) {
+    while (delta !== 0 && i < count * 8) {
       const col = cols[i % count]
       const step = delta > 0 ? 1 : -1
       const nextWidth = next[col.id] + step
@@ -128,38 +127,41 @@ export function useTableColumnLayout(tableRef, dataRef) {
       return
     }
 
-    const bases = adjustable.map((col) => {
-      if (col.userWidth) return col.userWidth
-      if (col.variant === 'content') return measureContentWidth(col, data)
-      return MIN_FLEX
-    })
-    const mins = adjustable.map((col) =>
-      col.variant === 'content' ? (col.minWidth ?? MIN_CONTENT) : MIN_FLEX,
-    )
-    Object.assign(next, distributeWidths(adjustable, bases, remaining, mins))
-    widths.value = { ...next }
-  }
+    const locked = adjustable.filter((col) => col.userWidth != null)
+    const free = adjustable.filter((col) => col.userWidth == null)
+    let lockedUsed = 0
+    for (const col of locked) {
+      next[col.id] = col.userWidth
+      lockedUsed += col.userWidth
+    }
 
-  function onHeaderDragend(newWidth, oldWidth, column) {
-    const target = findColumnByTableColumn(column)
-    if (!target || target.variant === 'fixed') return
-
-    target.userWidth = newWidth
-    const delta = newWidth - oldWidth
-    const adjustable = [...columns.value.values()].filter(
-      (c) => c.id !== target.id && c.variant !== 'fixed',
-    )
-    if (!adjustable.length || delta === 0) {
-      applyLayout()
+    const freeRemaining = Math.max(0, remaining - lockedUsed)
+    if (!free.length) {
+      widths.value = { ...next }
       return
     }
 
-    const per = delta / adjustable.length
-    for (const col of adjustable) {
-      const current = col.userWidth ?? widths.value[col.id] ?? MIN_FLEX
-      const min = col.variant === 'content' ? (col.minWidth ?? MIN_CONTENT) : MIN_FLEX
-      col.userWidth = Math.max(min, Math.round(current - per))
-    }
+    const flexCount = free.filter((c) => c.variant === 'flex').length
+    const equalFlexBase = flexCount > 0 ? Math.max(MIN_FLEX, Math.floor(freeRemaining / free.length)) : MIN_FLEX
+
+    const bases = free.map((col) => {
+      if (col.variant === 'content') return measureContentWidth(col, data)
+      return equalFlexBase
+    })
+    const mins = free.map((col) =>
+      col.variant === 'content' ? (col.minWidth ?? MIN_CONTENT) : MIN_FLEX,
+    )
+    Object.assign(next, distributeWidths(free, bases, freeRemaining, mins))
+    widths.value = { ...next }
+  }
+
+  function onHeaderDragend(newWidth, _oldWidth, column) {
+    const target = findColumnByTableColumn(column)
+    if (!target || target.variant === 'fixed') return
+    target.userWidth = Math.max(
+      target.variant === 'content' ? (target.minWidth ?? MIN_CONTENT) : MIN_FLEX,
+      Math.round(newWidth),
+    )
     applyLayout()
   }
 

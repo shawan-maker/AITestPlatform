@@ -26,12 +26,12 @@
     </el-descriptions>
 
     <h3>{{ t('page.knowledge.versions') }}</h3>
-    <el-table :data="versions" border>
-      <el-table-column prop="version_no" :label="t('page.knowledge.versionNo')" width="100" />
-      <el-table-column prop="created_at" :label="t('common.createdAt')">
+    <AppTable :data="versions">
+      <AppTableColumn prop="version_no" variant="fixed" :label="t('page.knowledge.versionNo')" :width="100" />
+      <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column :label="t('common.actions')" width="200">
+      </AppTableColumn>
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="200">
         <template #default="{ row }">
           <el-button link @click="downloadVersion(row)">{{ t('common.download') }}</el-button>
           <el-button
@@ -40,8 +40,8 @@
             @click="openImportForVersion(row)"
           >{{ t('page.knowledge.importInterfaces') }}</el-button>
         </template>
-      </el-table-column>
-    </el-table>
+      </AppTableColumn>
+    </AppTable>
 
     <KnowledgeImportWizard
       v-model="showImport"
@@ -73,6 +73,8 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import AsyncJobBanner from '@/components/common/AsyncJobBanner.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import IndexStatusBadge from '@/components/common/IndexStatusBadge.vue'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import KnowledgeImportWizard from '@/components/knowledge/KnowledgeImportWizard.vue'
 
 const { t } = useI18n()

@@ -7,7 +7,7 @@ export const PROJECT_ROLE = {
 export const PROJECT_ROLE_LABEL = {
   [PROJECT_ROLE.VIEWER]: 'viewer',
   [PROJECT_ROLE.EDITOR]: 'editor',
-  [PROJECT_ROLE.OWNER]: 'owner',
+  [PROJECT_ROLE.OWNER]: 'admin',
 }
 
 export const PROJECT_MEMBER_ROLES = [

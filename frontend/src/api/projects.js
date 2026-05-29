@@ -20,6 +20,14 @@ export function deleteProject(projectId) {
   return request.delete(`/projects/${projectId}`)
 }
 
+export function batchDeleteProjects(projectIds) {
+  return request.post('/projects/batch-delete', { project_ids: projectIds })
+}
+
+export function setProjectAdmin(projectId, userId) {
+  return request.put(`/projects/${projectId}/admin`, { user_id: userId })
+}
+
 export function listMembers(projectId) {
   return request.get(`/projects/${projectId}/members`)
 }
@@ -37,7 +45,7 @@ export function removeMember(projectId, userId) {
 }
 
 export function transferOwner(projectId, newOwnerUserId) {
-  return request.put(`/projects/${projectId}/owner`, { new_owner_user_id: newOwnerUserId })
+  return setProjectAdmin(projectId, newOwnerUserId)
 }
 
 export function listModules(projectId) {

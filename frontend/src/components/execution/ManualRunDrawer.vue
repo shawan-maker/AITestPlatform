@@ -1,10 +1,10 @@
 <template>
   <el-drawer :model-value="modelValue" :title="t('page.test.manualRun')" size="50%" @update:model-value="$emit('update:modelValue', $event)">
-    <div v-loading="loading">
-      <el-table :data="cases" border @row-click="openCase">
-        <el-table-column prop="name" :label="t('page.functional.caseName')" />
-        <el-table-column prop="result" :label="t('common.status')" width="100" />
-      </el-table>
+    <div>
+      <AppTable :data="cases" :loading="loading" @row-click="openCase">
+        <AppTableColumn prop="name" variant="content" :label="t('page.functional.caseName')" />
+        <AppTableColumn prop="result" variant="fixed" :label="t('common.status')" :width="100" />
+      </AppTable>
     </div>
     <el-dialog v-model="caseVisible" :title="currentCase?.name" width="480px">
       <el-radio-group v-model="caseResult">
@@ -24,6 +24,8 @@
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getManualContext, getManualCase, patchManualCase } from '@/api/testExecution'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

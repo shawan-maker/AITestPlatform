@@ -105,6 +105,19 @@ class PaginatedUsers(BaseModel):
     items: list[UserBrief]
 
 
+class UserLookupBrief(BaseModel):
+    id: int
+    username: str
+    email: str
+
+
+class PaginatedUserLookup(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: list[UserLookupBrief]
+
+
 class ChangeOwnPasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=6, max_length=18)
     new_password: str = Field(..., min_length=6, max_length=18)

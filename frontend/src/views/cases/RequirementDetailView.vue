@@ -16,14 +16,14 @@
     </el-form>
 
     <h3>{{ t('page.requirements.linkedCases') }}</h3>
-    <el-table :data="req?.linked_cases ?? []" border>
-      <el-table-column prop="name" :label="t('page.functional.caseName')" />
-      <el-table-column :label="t('common.actions')" width="120">
+    <AppTable :data="req?.linked_cases ?? []">
+      <AppTableColumn prop="name" variant="content" :label="t('page.functional.caseName')" />
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="120">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/cases/functional?caseId=${row.id}`)">{{ t('common.view') }}</el-button>
         </template>
-      </el-table-column>
-    </el-table>
+      </AppTableColumn>
+    </AppTable>
   </div>
 </template>
 
@@ -34,6 +34,8 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { deleteRequirement, getRequirement, updateRequirement } from '@/api/functional'
 import { usePermission } from '@/composables/usePermission'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 

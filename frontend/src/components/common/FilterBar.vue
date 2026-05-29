@@ -1,12 +1,16 @@
 <template>
   <div class="filter-bar">
-    <div v-if="$slots.primary" class="filter-bar__primary">
-      <slot name="primary" />
-    </div>
-    <slot />
-    <div class="filter-bar__actions">
-      <el-button type="primary" @click="$emit('search')">{{ t('common.search') }}</el-button>
-      <el-button @click="$emit('reset')">{{ t('common.resetForm') }}</el-button>
+    <div class="filter-bar__row">
+      <div v-if="$slots.primary" class="filter-bar__primary">
+        <slot name="primary" />
+      </div>
+      <div class="filter-bar__filters">
+        <slot />
+      </div>
+      <div class="filter-bar__actions">
+        <el-button type="primary" @click="$emit('search')">{{ t('common.search') }}</el-button>
+        <el-button @click="$emit('reset')">{{ t('common.resetForm') }}</el-button>
+      </div>
     </div>
   </div>
 </template>
@@ -20,10 +24,6 @@ const { t } = useI18n()
 
 <style scoped lang="scss">
 .filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
   margin-bottom: 16px;
   padding: 14px 18px;
   background: var(--el-fill-color-blank);
@@ -32,27 +32,52 @@ const { t } = useI18n()
   font-size: var(--font-size-base);
 }
 
+.filter-bar__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
 .filter-bar__primary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
+}
+
+.filter-bar__filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .filter-bar__actions {
   display: flex;
   gap: 10px;
   flex-shrink: 0;
+  margin-left: auto;
 }
 
-:deep(.el-input),
-:deep(.el-select) {
-  width: 220px;
+.filter-bar__filters :deep(.el-input),
+.filter-bar__filters :deep(.el-select) {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 360px;
 }
 
-:deep(.el-input__wrapper),
-:deep(.el-select__wrapper) {
+.filter-bar__filters :deep(.el-input__wrapper),
+.filter-bar__filters :deep(.el-select__wrapper) {
   font-size: var(--font-size-base);
+  min-height: 36px;
 }
 
-:deep(.el-button) {
+.filter-bar__actions :deep(.el-button),
+.filter-bar__primary :deep(.el-button) {
   font-size: var(--font-size-base);
 }
 </style>

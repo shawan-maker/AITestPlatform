@@ -15,22 +15,22 @@
           {{ user.is_active ? t('page.admin.users.statusActive') : t('page.admin.users.statusInactive') }}
         </el-tag>
       </el-descriptions-item>
-      <el-descriptions-item :label="t('page.admin.users.superAdmin')">{{ user.is_super_admin ? 'Yes' : 'No' }}</el-descriptions-item>
+      <el-descriptions-item :label="t('page.admin.users.superAdmin')">{{ user.is_super_admin ? t('common.yes') : t('common.no') }}</el-descriptions-item>
     </el-descriptions>
 
     <h3 class="user-detail-view__section">{{ t('page.admin.users.relatedProjects') }}</h3>
-    <el-table :data="user?.projects ?? []" border>
-      <el-table-column prop="name" :label="t('page.admin.projects.name')">
+    <AppTable :data="user?.projects ?? []">
+      <AppTableColumn prop="project_name" variant="content" :label="t('page.admin.projects.name')">
         <template #default="{ row }">
-          <el-button link type="primary" @click="router.push(`/admin/projects/${row.project_id || row.id}`)">
-            {{ row.name }}
+          <el-button link type="primary" @click="router.push(`/projects/${row.project_id}`)">
+            {{ row.project_name }}
           </el-button>
         </template>
-      </el-table-column>
-      <el-table-column :label="t('page.projectSettings.role')" width="120">
-        <template #default="{ row }">{{ t(`role.${row.role_label || PROJECT_ROLE_LABEL[row.role] || 'viewer'}`) }}</template>
-      </el-table-column>
-    </el-table>
+      </AppTableColumn>
+      <AppTableColumn variant="fixed" :label="t('page.projectSettings.role')" :width="140">
+        <template #default="{ row }">{{ t(`role.${PROJECT_ROLE_LABEL[row.role] || 'viewer'}`) }}</template>
+      </AppTableColumn>
+    </AppTable>
   </div>
 </template>
 
@@ -41,6 +41,8 @@ import { useI18n } from 'vue-i18n'
 import { getUser } from '@/api/users'
 import { PROJECT_ROLE_LABEL } from '@/utils/constants'
 import PageHeader from '@/components/common/PageHeader.vue'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 
 const { t } = useI18n()
 const route = useRoute()

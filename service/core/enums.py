@@ -275,7 +275,7 @@ class ProjectMemberRole(int, Enum):
 
     viewer = (0, "项目查看者")
     editor = (1, "项目编辑者")
-    owner = (2, "项目所有者")
+    owner = (2, "项目管理员")
 
 
 def project_member_role_label(role: int) -> str:

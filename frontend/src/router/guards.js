@@ -3,7 +3,6 @@ import { getProject } from '@/api/projects'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectStore } from '@/stores/project'
 import { usePermissionStore } from '@/stores/permission'
-import { PROJECT_ROLE } from '@/utils/constants'
 import i18n from '@/i18n'
 
 const PUBLIC_PATHS = ['/login', '/register', '/403']
@@ -39,20 +38,14 @@ export function setupRouterGuards(router) {
         return next('/403')
       }
 
-      if (to.meta.projectOwnerOrSuperAdmin) {
+      if (to.meta.projectMemberRequired) {
         const projectId = Number(to.params.id)
         if (!projectId) {
           return next('/403')
         }
-        if (auth.isSuperAdmin) {
-          // allowed
-        } else {
+        if (!auth.isSuperAdmin) {
           try {
-            const res = await getProject(projectId)
-            const detail = res.data.data
-            if (detail.my_role !== PROJECT_ROLE.OWNER) {
-              return next('/403')
-            }
+            await getProject(projectId)
           } catch {
             return next('/403')
           }

@@ -3,20 +3,20 @@
     <div class="module-panel__toolbar">
       <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('page.projectSettings.addModule') }}</el-button>
     </div>
-    <el-table v-loading="loading" :data="modules" border>
-      <el-table-column prop="name" :label="t('page.projectSettings.moduleName')" />
-      <el-table-column prop="created_at" :label="t('common.createdAt')" width="180">
+    <AppTable :data="modules" :loading="loading">
+      <AppTableColumn prop="name" variant="content" :label="t('page.projectSettings.moduleName')" />
+      <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column v-if="canEdit" :label="t('common.actions')" width="160">
+      </AppTableColumn>
+      <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="180">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <ConfirmDelete @confirm="$emit('delete', row)">
             <el-button link type="danger">{{ t('common.delete') }}</el-button>
           </ConfirmDelete>
         </template>
-      </el-table-column>
-    </el-table>
+      </AppTableColumn>
+    </AppTable>
 
     <el-dialog v-model="dialogVisible" :title="editRow ? t('common.edit') : t('page.projectSettings.addModule')" width="400px">
       <el-form label-width="80px">
@@ -36,6 +36,8 @@
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatDateTime } from '@/utils/format'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 
 defineProps({
