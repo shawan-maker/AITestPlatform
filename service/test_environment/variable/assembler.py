@@ -4,13 +4,14 @@ import json
 from service.core.enums import ConfigType
 from service.core.secret_crypto import decrypt_secret
 from service.test_environment.models import (
-    DebugRuntimeVar,
     EnvironmentDbRelation,
     EnvironmentFunctionRelation,
+    ProjectGlobalConfig,
     TestEnvironment,
     TestEnvironmentConfig,
     TestEnvironmentSnapshot,
 )
+from service.test_environment.variable.global_config_service import ProjectGlobalConfigService
 
 
 def _maybe_decrypt(value: str | None, config_type: ConfigType) -> str | None:
@@ -47,6 +48,26 @@ def build_payload_summary(payload: dict) -> dict:
 
 class TestEnvDataAssembler:
     @classmethod
+    async def merge_persisted_envs(cls, project_id: int, environment_id: int) -> dict[str, str]:
+        """Global first, then environment envs overlay (env wins on collision)."""
+        merged = await ProjectGlobalConfigService.load_envs_dict(project_id, decrypt=True)
+        configs = await TestEnvironmentConfig.filter(
+            environment_id=environment_id, config_group="envs"
+        )
+        for cfg in configs:
+            val = _maybe_decrypt(cfg.value, cfg.config_type)
+            if cfg.config_type == ConfigType.json and val:
+                try:
+                    parsed = json.loads(val)
+                    if isinstance(parsed, dict):
+                        merged.update({str(k): str(v) for k, v in parsed.items()})
+                        continue
+                except json.JSONDecodeError:
+                    pass
+            merged[cfg.name] = val or ""
+        return merged
+
+    @classmethod
     async def assemble(cls, environment_id: int) -> dict:
         env = await TestEnvironment.get_or_none(id=environment_id)
         if env is None:
@@ -55,7 +76,6 @@ class TestEnvDataAssembler:
         configs = await TestEnvironmentConfig.filter(environment_id=environment_id)
         base_url = ""
         headers: dict[str, str] = {}
-        envs: dict[str, str] = {}
 
         for cfg in configs:
             val = _maybe_decrypt(cfg.value, cfg.config_type)
@@ -63,16 +83,8 @@ class TestEnvDataAssembler:
                 base_url = val or ""
             elif cfg.config_group == "headers":
                 headers[cfg.name] = val or ""
-            elif cfg.config_group == "envs":
-                if cfg.config_type == ConfigType.json and val:
-                    try:
-                        parsed = json.loads(val)
-                        if isinstance(parsed, dict):
-                            envs.update({str(k): str(v) for k, v in parsed.items()})
-                            continue
-                    except json.JSONDecodeError:
-                        pass
-                envs[cfg.name] = val or ""
+
+        envs = await cls.merge_persisted_envs(env.project_id, environment_id)
 
         relations = (
             await EnvironmentDbRelation.filter(environment_id=environment_id)
@@ -117,37 +129,30 @@ class TestEnvDataAssembler:
         }
 
     @classmethod
-    async def merge_debug_vars(cls, payload: dict, environment_id: int) -> dict:
-        result = copy.deepcopy(payload)
-        envs = dict(result.get("envs") or {})
-        debug_vars = await DebugRuntimeVar.filter(environment_id=environment_id)
-        for var in debug_vars:
-            envs[var.var_key] = var.var_value or ""
-        result["envs"] = envs
-        return result
-
-    @classmethod
     async def get_test_env_data(
         cls,
         environment_id: int,
         *,
         use_snapshot: bool = False,
-        merge_debug: bool = False,
+        snapshot_id: int | None = None,
     ) -> dict:
+        if use_snapshot and snapshot_id:
+            snapshot = await TestEnvironmentSnapshot.get_or_none(id=snapshot_id)
+            if snapshot:
+                return copy.deepcopy(snapshot.payload)
         if use_snapshot:
             snapshot = (
-                await TestEnvironmentSnapshot.filter(
-                    environment_id=environment_id, is_active=True
-                )
+                await TestEnvironmentSnapshot.filter(environment_id=environment_id)
                 .order_by("-created_at")
                 .first()
             )
             if snapshot:
-                payload = copy.deepcopy(snapshot.payload)
-                if merge_debug:
-                    return await cls.merge_debug_vars(payload, environment_id)
-                return payload
-        payload = await cls.assemble(environment_id)
-        if merge_debug:
-            return await cls.merge_debug_vars(payload, environment_id)
-        return payload
+                return copy.deepcopy(snapshot.payload)
+        return await cls.assemble(environment_id)
+
+    @classmethod
+    async def get_snapshot_payload_by_id(cls, snapshot_id: int) -> dict | None:
+        snap = await TestEnvironmentSnapshot.get_or_none(id=snapshot_id)
+        if snap is None:
+            return None
+        return copy.deepcopy(snap.payload)

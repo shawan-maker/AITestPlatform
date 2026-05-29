@@ -16,18 +16,18 @@
           <el-descriptions-item :label="t('page.projectSettings.myRole')">{{ myRoleLabel || '—' }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.admin.projects.description')" :span="2">{{ basicForm.description || '—' }}</el-descriptions-item>
         </el-descriptions>
-        <el-form v-else :model="basicForm" label-width="100px" style="max-width: 560px">
-          <el-form-item :label="t('page.admin.projects.name')">
-            <el-input v-model="basicForm.name" />
-          </el-form-item>
-          <el-form-item :label="t('page.admin.projects.description')">
-            <el-input v-model="basicForm.description" type="textarea" :rows="3" />
-          </el-form-item>
-          <el-form-item :label="t('page.projectSettings.admin')">{{ ownerUsername || '—' }}</el-form-item>
-          <el-form-item>
-            <el-button type="primary" :loading="saving" @click="saveBasic">{{ t('common.save') }}</el-button>
-          </el-form-item>
-        </el-form>
+        <SectionPanel v-else :title="t('page.projectSettings.tabBasic')">
+          <el-form :model="basicForm" label-width="100px" class="detail-form">
+            <el-form-item :label="t('page.admin.projects.name')">
+              <el-input v-model="basicForm.name" />
+            </el-form-item>
+            <el-form-item :label="t('page.admin.projects.description')">
+              <el-input v-model="basicForm.description" type="textarea" :rows="3" />
+            </el-form-item>
+            <el-form-item :label="t('page.projectSettings.admin')">{{ ownerUsername || '—' }}</el-form-item>
+          </el-form>
+          <FormActionBar :saving="saving" @save="saveBasic" @cancel="cancelBasic" />
+        </SectionPanel>
       </el-tab-pane>
       <el-tab-pane v-if="canViewAdminTabs" :label="t('page.projectSettings.tabMembers')" name="members">
         <MemberPanel
@@ -76,6 +76,8 @@ import {
 import { useAuthStore } from '@/stores/auth'
 import { usePermissionStore } from '@/stores/permission'
 import PageHeader from '@/components/common/PageHeader.vue'
+import SectionPanel from '@/components/common/SectionPanel.vue'
+import FormActionBar from '@/components/common/FormActionBar.vue'
 import MemberPanel from '@/components/admin/MemberPanel.vue'
 import ModulePanel from '@/components/admin/ModulePanel.vue'
 
@@ -99,6 +101,7 @@ const membersLoading = ref(false)
 const modules = ref([])
 const modulesLoading = ref(false)
 const memberPanelRef = ref(null)
+const basicSnapshot = ref(null)
 
 const pageTitle = computed(() => basicForm.name || t('page.projectSettings.title'))
 const canViewAdminTabs = computed(() => auth.isSuperAdmin || permissionStore.isOwner)
@@ -128,6 +131,7 @@ async function loadProject() {
     const data = res.data.data
     basicForm.name = data.name
     basicForm.description = data.description ?? ''
+    basicSnapshot.value = { name: basicForm.name, description: basicForm.description }
     ownerUsername.value = data.owner_username
     memberCount.value = data.member_count ?? data.members?.length ?? null
     myRoleLabel.value = data.my_role_label ?? ''
@@ -165,10 +169,17 @@ async function saveBasic() {
   saving.value = true
   try {
     await updateProject(projectId.value, { name: basicForm.name, description: basicForm.description })
+    basicSnapshot.value = { name: basicForm.name, description: basicForm.description }
     ElMessage.success(t('common.saved'))
   } finally {
     saving.value = false
   }
+}
+
+function cancelBasic() {
+  if (!basicSnapshot.value) return
+  basicForm.name = basicSnapshot.value.name
+  basicForm.description = basicSnapshot.value.description
 }
 
 async function addMember(data) {
@@ -229,5 +240,10 @@ onMounted(async () => {
 <style scoped lang="scss">
 .project-workspace__desc {
   margin-bottom: 16px;
+}
+
+.detail-form {
+  max-width: 560px;
+  margin: 0 auto;
 }
 </style>

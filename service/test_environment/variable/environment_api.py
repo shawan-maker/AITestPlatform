@@ -136,14 +136,10 @@ async def delete_config(
 @router.get("/environments/{environment_id}/test-env-data", summary="组装 test_env_data")
 async def get_test_env_data(
     environment_id: int,
-    use_snapshot: bool = Query(False),
-    merge_debug: bool = Query(False),
     _: object = Depends(require_environment_viewer),
     user: User = Depends(get_current_active_user),
 ):
-    data = await TestEnvDataAssembler.get_test_env_data(
-        environment_id, use_snapshot=use_snapshot, merge_debug=merge_debug
-    )
+    data = await TestEnvDataAssembler.get_test_env_data(environment_id)
     if data.get("db"):
         for item in data["db"]:
             cfg = item.get("config") or {}

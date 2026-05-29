@@ -8,6 +8,10 @@
     :width="resolvedWidth"
     :min-width="resolvedMinWidth"
     :show-overflow-tooltip="showOverflowTooltip"
+    :align="columnAlign"
+    :header-align="columnAlign"
+    :class-name="columnCellClass"
+    :label-class-name="columnHeaderClass"
   >
     <template v-if="$slots.default" #default="scope">
       <div v-if="actions" class="app-table-column__actions">
@@ -67,6 +71,14 @@ const resolvedMinWidth = computed(() => {
   if (!layout && props.variant === 'flex') return props.minWidth ?? 80
   return undefined
 })
+
+const columnAlign = computed(() => (props.variant === 'content' ? 'left' : 'center'))
+
+const columnCellClass = computed(() =>
+  props.variant === 'content' ? 'app-table-col--content' : 'app-table-col--center',
+)
+
+const columnHeaderClass = computed(() => `${columnCellClass.value} app-table-col__header`)
 
 onMounted(() => {
   layout?.register({

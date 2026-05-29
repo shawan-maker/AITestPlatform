@@ -60,14 +60,18 @@ onBeforeUnmount(onMouseUp)
   display: flex;
   flex: 1;
   min-height: 0;
-  height: 100%;
+  min-width: 0;
+  overflow: hidden;
   gap: 0;
 }
 
 .split-view__left {
   flex-shrink: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-right: 1px solid var(--el-border-color-lighter);
+  padding: 8px 12px;
+  box-sizing: border-box;
 }
 
 .split-view__resizer {
@@ -84,6 +88,9 @@ onBeforeUnmount(onMouseUp)
 .split-view__right {
   flex: 1;
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 16px;
+  box-sizing: border-box;
 }
 </style>

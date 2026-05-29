@@ -5,9 +5,9 @@ from service.test_environment.models import (
     EnvironmentDbRelation,
     EnvironmentFunctionRelation,
     TestEnvironment,
-    TestEnvironmentSnapshot,
 )
 from service.test_environment.permissions import ensure_project_editor, ensure_project_viewer
+from service.test_environment.function.schemas import FunctionBindItem
 from service.test_environment.variable.schemas import (
     EnvironmentBrief,
     EnvironmentCreateRequest,
@@ -78,20 +78,22 @@ class EnvironmentService:
         db_ids = await EnvironmentDbRelation.filter(environment_id=environment_id).values_list(
             "db_connection_id", flat=True
         )
-        func_ids = await EnvironmentFunctionRelation.filter(
+        func_relations = await EnvironmentFunctionRelation.filter(
             environment_id=environment_id
-        ).values_list("function_file_id", flat=True)
-        active = (
-            await TestEnvironmentSnapshot.filter(environment_id=environment_id, is_active=True)
-            .order_by("-created_at")
-            .first()
-        )
+        ).order_by("sort_order", "id")
+        func_bindings = [
+            FunctionBindItem(
+                function_file_id=rel.function_file_id,
+                sort_order=rel.sort_order,
+            )
+            for rel in func_relations
+        ]
         brief = cls._to_brief(env)
         return EnvironmentDetail(
             **brief.model_dump(),
             db_connection_ids=list(db_ids),
-            function_file_ids=list(func_ids),
-            active_snapshot_id=active.id if active else None,
+            function_file_ids=[b.function_file_id for b in func_bindings],
+            function_bindings=func_bindings,
         )
 
     @classmethod

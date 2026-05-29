@@ -41,6 +41,18 @@ def _run(client: TestClient) -> None:
     project_id = proj_resp.json()["data"]["id"]
     print("project ok", project_id)
 
+    global_resp = client.put(
+        f"/api/v1/env/projects/{project_id}/global-configs",
+        json={
+            "items": [
+                {"name": "global_token", "config_type": "scalar", "value": "g1"},
+            ]
+        },
+        headers=headers,
+    )
+    assert global_resp.status_code == 200, global_resp.text
+    print("global config ok")
+
     cat_resp = client.post(
         f"/api/v1/env/catalogs?project_id={project_id}",
         json={"name": "默认目录"},
@@ -73,6 +85,21 @@ def _run(client: TestClient) -> None:
         headers=headers,
     )
     assert cfg_resp.status_code == 200, cfg_resp.text
+
+    envs_resp = client.put(
+        f"/api/v1/env/environments/{environment_id}/configs/envs",
+        json={
+            "items": [
+                {
+                    "name": "global_token",
+                    "config_type": "scalar",
+                    "value": "env_override",
+                }
+            ]
+        },
+        headers=headers,
+    )
+    assert envs_resp.status_code == 200, envs_resp.text
     print("config ok")
 
     db_resp = client.post(
@@ -100,9 +127,8 @@ def _run(client: TestClient) -> None:
         json={"set_active": True},
         headers=headers,
     )
-    assert snap_resp.status_code == 200, snap_resp.text
-    assert snap_resp.json()["data"]["is_active"] is True
-    print("snapshot ok")
+    assert snap_resp.status_code == 403, snap_resp.text
+    print("manual snapshot disabled ok")
 
     func_name = f"utils_{int(time.time())}.py"
     func_resp = client.post(
@@ -146,27 +172,6 @@ def _run(client: TestClient) -> None:
     assert Path(resolve_data["absolute_path"]).is_file()
     print("resolve-path ok", resolve_data["absolute_path"])
 
-    debug_put_resp = client.put(
-        f"/api/v1/env/environments/{environment_id}/debug-vars",
-        json={
-            "items": [
-                {"var_key": "smoke_key", "var_value": "manual_val", "source": "manual"}
-            ]
-        },
-        headers=headers,
-    )
-    assert debug_put_resp.status_code == 200, debug_put_resp.text
-    print("debug-vars upsert ok")
-
-    debug_sync_resp = client.post(
-        f"/api/v1/env/environments/{environment_id}/debug-vars/sync",
-        json={"items": [{"var_key": "engine_key", "var_value": "engine_val"}]},
-        headers=headers,
-    )
-    assert debug_sync_resp.status_code == 200, debug_sync_resp.text
-    assert len(debug_sync_resp.json()["data"]) == 1
-    print("debug-vars sync ok")
-
     export_resp = client.get(
         f"/api/v1/env/environments/{environment_id}/export",
         headers=headers,
@@ -207,14 +212,13 @@ def _run(client: TestClient) -> None:
     print("import-file embed ok")
 
     test_data_resp = client.get(
-        f"/api/v1/env/environments/{environment_id}/test-env-data?merge_debug=true",
+        f"/api/v1/env/environments/{environment_id}/test-env-data",
         headers=headers,
     )
     assert test_data_resp.status_code == 200, test_data_resp.text
     assert test_data_resp.json()["data"]["base_url"]
     envs = test_data_resp.json()["data"].get("envs") or {}
-    assert envs.get("smoke_key") == "manual_val"
-    assert envs.get("engine_key") == "engine_val"
+    assert envs.get("global_token") == "env_override", "env should override global on merge"
     print("test-env-data ok")
 
     client.delete(f"/api/v1/env/environments/{environment_id}", headers=headers)

@@ -9,21 +9,18 @@ from service.test_environment.variable.assembler import TestEnvDataAssembler
 async def load_test_env_data(
     environment_id: int,
     *,
-    use_snapshot: bool = True,
-    merge_debug: bool = True,
+    use_snapshot: bool = False,
 ) -> dict:
     return await TestEnvDataAssembler.get_test_env_data(
         environment_id,
         use_snapshot=use_snapshot,
-        merge_debug=merge_debug,
     )
 
 
 def load_test_env_data_plain(
     environment_id: int,
     *,
-    use_snapshot: bool = True,
-    merge_debug: bool = True,
+    use_snapshot: bool = False,
 ) -> dict:
     async def _load() -> dict:
         await init_db()
@@ -31,7 +28,6 @@ def load_test_env_data_plain(
             return await TestEnvDataAssembler.get_test_env_data(
                 environment_id,
                 use_snapshot=use_snapshot,
-                merge_debug=merge_debug,
             )
         finally:
             await close_db()

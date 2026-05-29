@@ -1,13 +1,12 @@
 import copy
-from datetime import datetime, timezone
 
 from service.api_test.dependency.resolver_service import DependencyResolverService
 from service.api_test.models import ApiTestCase
 from service.api_test.shared.runner_gateway import RunnerGateway
 from service.core.enums import CaseRunStatus, CaseRunType, ExecStatus
-from service.test_environment.variable.assembler import TestEnvDataAssembler
 from service.test_execution.case_prepare_service import prepare_case_payload
 from service.test_execution.models import ApiCaseRunRecord
+from service.test_execution.shared.run_var_context import RunVarContext
 
 
 class SuiteCaseRunner:
@@ -24,7 +23,9 @@ class SuiteCaseRunner:
         environment_id: int,
         env_snapshot_id: int,
         triggered_by_id: int,
+        run_context: RunVarContext | None = None,
     ) -> ApiCaseRunRecord:
+        ctx = run_context or RunVarContext()
         env_data = copy.deepcopy(test_env_data)
         if use_dependency and case.interface_id:
             resolved = await DependencyResolverService.resolve(case.interface_id)
@@ -41,13 +42,15 @@ class SuiteCaseRunner:
                         case_payload=prepared,
                         case_name=dep_case.title,
                         api_case_id=dep_case.id,
-                        interface_id=dep_case.interface_id,
+                        interface_id=dep_api.id,
                         suite_run_id=suite_run_id,
                         task_run_id=task_run_id,
                         environment_id=environment_id,
                         env_snapshot_id=env_snapshot_id,
                         triggered_by_id=triggered_by_id,
                         run_type=CaseRunType.suite,
+                        project_id=project_id,
+                        temp_vars=ctx.temp_vars,
                     )
                     if record.status != CaseRunStatus.success:
                         return record
@@ -64,4 +67,6 @@ class SuiteCaseRunner:
             env_snapshot_id=env_snapshot_id,
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.suite,
+            project_id=project_id,
+            temp_vars=ctx.temp_vars,
         )

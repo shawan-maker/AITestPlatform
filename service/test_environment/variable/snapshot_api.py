@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from service.core.deps import get_current_active_user, require_environment_editor, require_environment_viewer
+from service.core.exceptions import AppException
 from service.core.response import success
 from service.test_environment.variable.schemas import SnapshotCreateRequest
 from service.test_environment.variable.snapshot_service import SnapshotService
@@ -9,7 +10,7 @@ from service.user.models import User
 router = APIRouter(tags=["环境-快照"])
 
 
-@router.get("/environments/{environment_id}/snapshots", summary="快照列表")
+@router.get("/environments/{environment_id}/snapshots", summary="快照列表（报告/内部）")
 async def list_snapshots(
     environment_id: int,
     _: object = Depends(require_environment_viewer),
@@ -19,15 +20,14 @@ async def list_snapshots(
     return success(data=data)
 
 
-@router.post("/environments/{environment_id}/snapshots", summary="生成快照")
+@router.post("/environments/{environment_id}/snapshots", summary="生成快照（已禁用，仅 trigger 内部）")
 async def create_snapshot(
     environment_id: int,
     data: SnapshotCreateRequest = SnapshotCreateRequest(),
     _: object = Depends(require_environment_editor),
     user: User = Depends(get_current_active_user),
 ):
-    result = await SnapshotService.create(user, environment_id, data)
-    return success(data=result, message="快照生成成功")
+    raise AppException("快照由任务/套件运行时自动创建，不支持手工生成", 403)
 
 
 @router.get("/snapshots/{snapshot_id}", summary="快照详情")
@@ -39,13 +39,12 @@ async def get_snapshot(
     return success(data=data)
 
 
-@router.put("/snapshots/{snapshot_id}/activate", summary="激活快照")
+@router.put("/snapshots/{snapshot_id}/activate", summary="激活快照（已废弃）")
 async def activate_snapshot(
     snapshot_id: int,
     user: User = Depends(get_current_active_user),
 ):
-    result = await SnapshotService.activate(user, snapshot_id)
-    return success(data=result, message="快照已激活")
+    raise AppException("is_active 已废弃，快照与 run 绑定", 403)
 
 
 @router.delete("/snapshots/{snapshot_id}", summary="删除快照")

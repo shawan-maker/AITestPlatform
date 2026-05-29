@@ -12,8 +12,6 @@ from service.test_environment.variable.assembler import (
 )
 from service.user.models import User
 
-MAX_SNAPSHOTS = 3
-
 
 class SnapshotService:
     @classmethod
@@ -32,7 +30,6 @@ class SnapshotService:
         snaps = (
             await TestEnvironmentSnapshot.filter(environment_id=environment_id)
             .order_by("-created_at")
-            .limit(MAX_SNAPSHOTS)
         )
         return [cls._to_brief(s) for s in snaps]
 
@@ -52,27 +49,37 @@ class SnapshotService:
             .first()
         )
         version = (latest.version + 1) if latest else 1
-        if data.set_active:
-            await TestEnvironmentSnapshot.filter(environment_id=environment_id).update(
-                is_active=False
-            )
         snap = await TestEnvironmentSnapshot.create(
             environment_id=environment_id,
             payload=payload,
             payload_summary=summary,
             version=version,
-            is_active=data.set_active,
-            created_by_id=user.id,
+            is_active=False,
+            created_by_id=user.id if user else None,
         )
-        snaps = (
-            await TestEnvironmentSnapshot.filter(environment_id=environment_id)
-            .order_by("created_at")
-        )
-        if len(snaps) > MAX_SNAPSHOTS:
-            to_delete = snaps[: len(snaps) - MAX_SNAPSHOTS]
-            for old in to_delete:
-                await old.delete()
         return cls._to_detail(snap)
+
+    @classmethod
+    async def create_for_run(
+        cls, environment_id: int, *, created_by_id: int | None = None
+    ) -> TestEnvironmentSnapshot:
+        """Internal: trigger service creates snapshot on run start."""
+        payload = await TestEnvDataAssembler.assemble(environment_id)
+        summary = build_payload_summary(payload)
+        latest = (
+            await TestEnvironmentSnapshot.filter(environment_id=environment_id)
+            .order_by("-version")
+            .first()
+        )
+        version = (latest.version + 1) if latest else 1
+        return await TestEnvironmentSnapshot.create(
+            environment_id=environment_id,
+            payload=payload,
+            payload_summary=summary,
+            version=version,
+            is_active=False,
+            created_by_id=created_by_id,
+        )
 
     @classmethod
     async def get_detail(cls, user: User, snapshot_id: int) -> SnapshotDetail:
@@ -80,18 +87,6 @@ class SnapshotService:
         env = await TestEnvironment.get(id=snap.environment_id)
         await ensure_project_viewer(env.project_id, user)
         return cls._to_detail(snap)
-
-    @classmethod
-    async def activate(cls, user: User, snapshot_id: int) -> SnapshotBrief:
-        snap = await cls._get_or_404(snapshot_id)
-        env = await TestEnvironment.get(id=snap.environment_id)
-        await ensure_project_editor(env.project_id, user)
-        await TestEnvironmentSnapshot.filter(environment_id=snap.environment_id).update(
-            is_active=False
-        )
-        snap.is_active = True
-        await snap.save()
-        return cls._to_brief(snap)
 
     @classmethod
     async def delete(cls, user: User, snapshot_id: int) -> None:

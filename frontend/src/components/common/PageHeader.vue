@@ -30,11 +30,14 @@ defineProps({
   padding: 16px 20px;
   border-radius: $radius-md;
   background: linear-gradient(
-    90deg,
+    135deg,
     var(--bg-page-header-start) 0%,
     var(--bg-page-header-end) 100%
   );
-  border: 1px solid rgba($color-primary, 0.08);
+  border: 1px solid rgba($color-primary-dark, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    0 1px 3px rgba($color-primary-dark, 0.12);
 }
 
 .page-header__left {

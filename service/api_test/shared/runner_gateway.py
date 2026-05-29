@@ -1,11 +1,21 @@
 import copy
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from ApiEngine.BaseCase import ENV
 from ApiEngine.core import TestRunner
 
 from service.core.enums import CaseRunStatus, CaseRunType
+from service.test_environment.variable.global_config_service import ProjectGlobalConfigService
 from service.test_execution.models import ApiCaseRunRecord
+from service.test_execution.shared.run_var_context import (
+    collect_engine_writeback,
+    prepare_runner_env,
+    sync_temp_vars_from_engine,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def map_runner_status(result: dict[str, Any]) -> CaseRunStatus:
@@ -33,15 +43,35 @@ class RunnerGateway:
         env_snapshot_id: int | None = None,
         triggered_by_id: int | None = None,
         run_type: CaseRunType = CaseRunType.suite,
+        project_id: int | None = None,
+        temp_vars: dict[str, str] | None = None,
+        writeback_global: bool = True,
     ) -> ApiCaseRunRecord:
-        env_copy = copy.deepcopy(test_env_data)
-        runner = TestRunner(env_copy)
+        base_envs = dict(test_env_data.get("envs") or {})
+        runner_env = prepare_runner_env(test_env_data, temp_vars)
+        runner = TestRunner(runner_env)
         start = datetime.now(timezone.utc)
         try:
             result = runner.execute_cases(case_payload)
         except Exception as exc:
             result = {"status": "error", "message": str(exc)}
         end = datetime.now(timezone.utc)
+
+        engine_snapshot = {
+            "envs": copy.deepcopy(dict(ENV.get("envs") or {})),
+            "debug_updates": copy.deepcopy(ENV.get("debug_updates") or {}),
+            "debug_deletes": copy.deepcopy(ENV.get("debug_deletes") or []),
+        }
+        if temp_vars is not None:
+            sync_temp_vars_from_engine(temp_vars, base_envs, engine_snapshot)
+
+        if writeback_global and project_id is not None:
+            updates, deletes = collect_engine_writeback(engine_snapshot)
+            if updates or deletes:
+                await ProjectGlobalConfigService.apply_engine_writeback(
+                    project_id, updates, deletes
+                )
+
         status = map_runner_status(result if isinstance(result, dict) else {})
         return await ApiCaseRunRecord.create(
             api_case_id=api_case_id,
@@ -74,10 +104,9 @@ class RunnerGateway:
         from service.api_test.shared.payload_builder import build_runner_case_from_payload
         from service.test_environment.variable.assembler import TestEnvDataAssembler
 
-        test_env_data = await TestEnvDataAssembler.get_test_env_data(
-            environment_id, use_snapshot=True, merge_debug=True
-        )
+        test_env_data = await TestEnvDataAssembler.get_test_env_data(environment_id)
         runner_case = build_runner_case_from_payload(interface, payload)
+        temp_vars: dict[str, str] = {}
         record = await cls.execute_case_payload(
             test_env_data=test_env_data,
             case_payload=runner_case,
@@ -86,6 +115,8 @@ class RunnerGateway:
             environment_id=environment_id,
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.debug,
+            project_id=interface.project_id,
+            temp_vars=temp_vars,
         )
         interface.last_debug_environment_id = environment_id
         await interface.save(update_fields=["last_debug_environment_id", "updated_at"])
@@ -99,11 +130,12 @@ class RunnerGateway:
         environment_id: int,
         triggered_by_id: int,
     ) -> ApiCaseRunRecord:
+        from service.test_environment.models import TestEnvironment
         from service.test_environment.variable.assembler import TestEnvDataAssembler
 
-        test_env_data = await TestEnvDataAssembler.get_test_env_data(
-            environment_id, use_snapshot=True, merge_debug=True
-        )
+        env = await TestEnvironment.get_or_none(id=environment_id)
+        test_env_data = await TestEnvDataAssembler.get_test_env_data(environment_id)
+        temp_vars: dict[str, str] = {}
         record = await cls.execute_case_payload(
             test_env_data=test_env_data,
             case_payload=case.case_payload,
@@ -113,6 +145,8 @@ class RunnerGateway:
             environment_id=environment_id,
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.debug,
+            project_id=env.project_id if env else None,
+            temp_vars=temp_vars,
         )
         case.last_run_at = record.end_time
         await case.save(update_fields=["last_run_at", "updated_at"])

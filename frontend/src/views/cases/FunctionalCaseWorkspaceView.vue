@@ -39,14 +39,18 @@
             </PaginatedTable>
           </template>
           <template #right>
-            <el-form v-if="selectedCase" :model="caseForm" label-width="80px">
-              <el-form-item :label="t('page.functional.caseName')"><el-input v-model="caseForm.name" /></el-form-item>
-              <el-form-item :label="t('page.functional.steps')"><el-input v-model="caseForm.steps" type="textarea" :rows="6" /></el-form-item>
-              <el-button v-if="canEdit" type="primary" @click="saveCase">{{ t('common.save') }}</el-button>
-              <ConfirmDelete v-if="canEdit" @confirm="removeCase">
-                <el-button type="danger">{{ t('common.delete') }}</el-button>
-              </ConfirmDelete>
-            </el-form>
+            <SectionPanel v-if="selectedCase" :title="t('page.functional.caseName')">
+              <el-form :model="caseForm" label-width="80px" class="detail-form">
+                <el-form-item :label="t('page.functional.caseName')"><el-input v-model="caseForm.name" /></el-form-item>
+                <el-form-item :label="t('page.functional.steps')"><el-input v-model="caseForm.steps" type="textarea" :rows="6" /></el-form-item>
+              </el-form>
+              <FormActionBar v-if="canEdit" :saving="caseSaving" @save="saveCase" @cancel="cancelCaseEdit" />
+              <div v-if="canEdit" class="case-delete">
+                <ConfirmDelete @confirm="removeCase">
+                  <el-button type="danger">{{ t('common.delete') }}</el-button>
+                </ConfirmDelete>
+              </div>
+            </SectionPanel>
             <EmptyState v-else :title="t('page.functional.selectCase')" />
           </template>
         </SplitView>
@@ -92,6 +96,8 @@ import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import CatalogTree from '@/components/tree/CatalogTree.vue'
+import SectionPanel from '@/components/common/SectionPanel.vue'
+import FormActionBar from '@/components/common/FormActionBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
@@ -110,6 +116,8 @@ const cases = ref([])
 const loading = ref(false)
 const selectedCase = ref(null)
 const caseForm = reactive({ name: '', steps: '' })
+const caseSnapshot = ref(null)
+const caseSaving = ref(false)
 const showCreate = ref(false)
 const showBatchEdit = ref(false)
 const selectedIds = ref([])
@@ -141,16 +149,29 @@ async function selectCase(row) {
   selectedCase.value = res.data.data
   caseForm.name = selectedCase.value.name
   caseForm.steps = selectedCase.value.steps ?? ''
+  caseSnapshot.value = { name: caseForm.name, steps: caseForm.steps }
 }
 
 function onSelectionChange(rows) {
   selectedIds.value = rows.map((r) => r.id)
 }
 
+function cancelCaseEdit() {
+  if (!caseSnapshot.value) return
+  caseForm.name = caseSnapshot.value.name
+  caseForm.steps = caseSnapshot.value.steps
+}
+
 async function saveCase() {
-  await updateCase(selectedCase.value.id, { name: caseForm.name, steps: caseForm.steps })
-  ElMessage.success(t('common.saved'))
-  loadCases()
+  caseSaving.value = true
+  try {
+    await updateCase(selectedCase.value.id, { name: caseForm.name, steps: caseForm.steps })
+    ElMessage.success(t('common.saved'))
+    caseSnapshot.value = { name: caseForm.name, steps: caseForm.steps }
+    loadCases()
+  } finally {
+    caseSaving.value = false
+  }
 }
 
 async function removeCase() {
@@ -226,5 +247,11 @@ onMounted(async () => {
   margin-right: 6px;
   color: var(--el-text-color-secondary);
   user-select: none;
+}
+
+.case-delete {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 </style>

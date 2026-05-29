@@ -17,5 +17,11 @@ export function useDownload() {
     downloadBlob(response.data, filename)
   }
 
-  return { downloadBlob, downloadFromResponse }
+  function downloadJson(data, filename = 'data.json') {
+    const name = filename.endsWith('.json') ? filename : `${filename}.json`
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    downloadBlob(blob, name)
+  }
+
+  return { downloadBlob, downloadFromResponse, downloadJson }
 }

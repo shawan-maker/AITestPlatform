@@ -1,6 +1,6 @@
 from tortoise import fields, models
 
-from service.core.enums import ConfigType, DbType, DebugVarSource
+from service.core.enums import ConfigType, DbType
 
 
 class EnvCatalog(models.Model):
@@ -196,6 +196,23 @@ class TestEnvironmentSnapshot(models.Model):
         indexes = (("environment_id", "is_active"),)
 
 
+class ProjectGlobalConfig(models.Model):
+    id = fields.IntField(pk=True)
+    project = fields.ForeignKeyField(
+        "models.Project", related_name="global_configs", on_delete=fields.CASCADE
+    )
+    name = fields.CharField(max_length=100)
+    config_type = fields.CharEnumField(ConfigType, default=ConfigType.scalar)
+    value = fields.TextField(null=True)
+    remark = fields.CharField(max_length=255, null=True)
+    created_at = fields.DatetimeField(auto_now_add=True, precision=6)
+    updated_at = fields.DatetimeField(auto_now=True, precision=6)
+
+    class Meta:
+        table = "project_global_config"
+        unique_together = (("project_id", "name"),)
+
+
 class EnvUploadedFile(models.Model):
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
@@ -218,26 +235,3 @@ class EnvUploadedFile(models.Model):
 
     class Meta:
         table = "env_uploaded_file"
-
-
-class DebugRuntimeVar(models.Model):
-    id = fields.IntField(pk=True)
-    environment = fields.ForeignKeyField(
-        "models.TestEnvironment",
-        related_name="debug_runtime_vars",
-        on_delete=fields.CASCADE,
-    )
-    var_key = fields.CharField(max_length=100)
-    var_value = fields.TextField(null=True)
-    source = fields.CharEnumField(DebugVarSource, default=DebugVarSource.engine)
-    updated_by = fields.ForeignKeyField(
-        "models.User",
-        related_name="debug_runtime_vars",
-        null=True,
-        on_delete=fields.SET_NULL,
-    )
-    updated_at = fields.DatetimeField(auto_now=True, precision=6)
-
-    class Meta:
-        table = "debug_runtime_var"
-        unique_together = (("environment_id", "var_key"),)

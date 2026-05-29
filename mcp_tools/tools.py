@@ -163,8 +163,7 @@ def load_evn_data(environment_id: int):
         try:
             return await TestEnvDataAssembler.get_test_env_data(
                 environment_id,
-                use_snapshot=True,
-                merge_debug=True,
+                use_snapshot=False,
             )
         finally:
             await close_db()

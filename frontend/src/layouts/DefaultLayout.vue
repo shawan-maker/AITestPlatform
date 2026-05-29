@@ -76,12 +76,13 @@ const drawerOpen = ref(false)
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: auto;
-  padding: 24px;
+  overflow: hidden;
+  padding: 20px;
 
   > * {
-    flex: 1 0 auto;
-    min-height: 100%;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
     display: flex;
     flex-direction: column;
   }

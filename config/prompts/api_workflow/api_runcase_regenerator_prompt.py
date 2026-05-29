@@ -128,7 +128,7 @@ api_runcase_regenerator_prompt = PromptTemplate.from_template(
             具备del_evn_variable方法，可以删除环境变量
             使用案例：test.del_evn_variable("环境变量名")
 
-            具备save_global_variable方法，可以保存数据到全局变量，在用例的参数中可以使用${{全局变量名}}引用保存的全局变量，同时记录本次运行中修改/新增的全局变量，便于上层平台同步到“调试运行变量”并永久保存，方便调试
+            具备save_global_variable方法，可以保存数据到全局变量，在用例的参数中可以使用${{全局变量名}}引用保存的全局变量，同时记录本次运行中修改/新增的全局变量，便于上层平台在 run 结束后回写到项目全局变量（project_global_config）并持久保存
             使用案例：test.save_global_variable("全局变量名","全局变量值")
 
             具备del_global_variable方法，可以删除全局变量
@@ -179,7 +179,7 @@ api_runcase_regenerator_prompt = PromptTemplate.from_template(
             具备del_evn_variable方法，可以删除环境变量
             使用案例：test.del_evn_variable("环境变量名")
 
-            具备save_global_variable方法，可以保存数据到全局变量，在用例的参数中可以使用${{全局变量名}}引用保存的全局变量，同时记录本次运行中修改/新增的全局变量，便于上层平台同步到“调试运行变量”并永久保存，方便调试
+            具备save_global_variable方法，可以保存数据到全局变量，在用例的参数中可以使用${{全局变量名}}引用保存的全局变量，同时记录本次运行中修改/新增的全局变量，便于上层平台在 run 结束后回写到项目全局变量（project_global_config）并持久保存
             使用案例：test.save_global_variable("全局变量名","全局变量值")
 
             具备del_global_variable方法，可以删除全局变量

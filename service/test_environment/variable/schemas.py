@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from service.core.enums import ConfigType, DebugVarSource
+from service.core.enums import ConfigType
 from service.core.pagination import Paginated
 from service.test_environment.database.schemas import (
     DbConnectionConfigInput,
@@ -97,7 +97,7 @@ class EnvironmentBrief(BaseModel):
 class EnvironmentDetail(EnvironmentBrief):
     db_connection_ids: list[int] = Field(default_factory=list)
     function_file_ids: list[int] = Field(default_factory=list)
-    active_snapshot_id: int | None = None
+    function_bindings: list[FunctionBindItem] = Field(default_factory=list)
 
 
 PaginatedEnvironments = Paginated[EnvironmentBrief]
@@ -183,35 +183,6 @@ class EnvironmentImportRequest(BaseModel):
     bundle: EnvironmentExportBundle
     overwrite: bool = False
     import_mode: ImportMode | None = None
-
-
-class DebugVarItem(BaseModel):
-    var_key: str = Field(..., min_length=1, max_length=100)
-    var_value: str | None = None
-    source: DebugVarSource = DebugVarSource.manual
-
-
-class DebugVarBatchUpsertRequest(BaseModel):
-    items: list[DebugVarItem]
-
-
-class DebugVarSyncItem(BaseModel):
-    var_key: str = Field(..., min_length=1, max_length=100)
-    var_value: str | None = None
-
-
-class DebugVarSyncRequest(BaseModel):
-    items: list[DebugVarSyncItem]
-
-
-class DebugVarOut(BaseModel):
-    id: int
-    environment_id: int
-    var_key: str
-    var_value: str | None
-    source: DebugVarSource
-    updated_by_id: int | None
-    updated_at: datetime
 
 
 CatalogTreeNode.model_rebuild()

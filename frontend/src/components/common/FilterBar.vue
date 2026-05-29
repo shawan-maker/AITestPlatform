@@ -26,9 +26,14 @@ const { t } = useI18n()
 .filter-bar {
   margin-bottom: 16px;
   padding: 14px 18px;
-  background: var(--el-fill-color-blank);
-  border: 1px solid var(--el-border-color-lighter);
+  background: linear-gradient(
+    135deg,
+    var(--bg-filter-bar-start) 0%,
+    var(--bg-filter-bar-end) 100%
+  );
+  border: 1px solid rgba($color-primary-dark, 0.35);
   border-radius: $radius-md;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   font-size: var(--font-size-base);
 }
 

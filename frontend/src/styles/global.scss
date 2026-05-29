@@ -1,4 +1,5 @@
 @use './variables.scss';
+@use './ui-patterns.scss';
 
 *,
 *::before,
@@ -31,11 +32,42 @@ a {
 .app-card .el-table,
 .el-table {
   width: 100%;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 
   th.el-table__cell {
     background-color: #f3f4f6 !important;
     font-weight: 600;
+    font-size: calc(var(--font-size-base) + 2px);
     color: var(--text-primary);
+    text-align: center !important;
+    border-right: 1px solid var(--el-border-color) !important;
+    border-bottom: 1px solid var(--el-border-color) !important;
+
+    &:last-child {
+      border-right: none !important;
+    }
+  }
+
+  td.el-table__cell {
+    text-align: center;
+    border-right: 1px solid var(--el-border-color-lighter) !important;
+    border-bottom: 1px solid var(--el-border-color-lighter) !important;
+
+    &:last-child {
+      border-right: none !important;
+    }
+  }
+
+  .app-table-col--content .cell {
+    text-align: left;
+    justify-content: flex-start;
+  }
+
+  .app-table-col--center .cell {
+    text-align: center;
+    justify-content: center;
   }
 
   .cell {
@@ -68,15 +100,21 @@ a {
   padding: 20px;
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   width: 100%;
+  overflow: hidden;
+  gap: 4px;
 
   > .page-header {
     flex-shrink: 0;
+    margin-bottom: 8px;
   }
 
   > .filter-bar {
     flex-shrink: 0;
+    margin-bottom: 12px;
   }
 
   > .split-view,
@@ -86,6 +124,12 @@ a {
   > .empty-state {
     flex: 1;
     min-height: 0;
+    min-width: 0;
+  }
+
+  > .paginated-table,
+  > .app-table {
+    overflow: auto;
   }
 
   > .empty-state {
@@ -105,6 +149,8 @@ a {
 
     .el-tab-pane {
       height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
   }
 }

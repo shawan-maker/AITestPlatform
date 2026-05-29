@@ -66,34 +66,34 @@ export function deleteConfig(id) {
   return request.delete(`/env/configs/${id}`)
 }
 
-// Snapshots
+// Global configs (project-level)
+export function listGlobalConfigs(projectId) {
+  return request.get(`/env/projects/${projectId}/global-configs`)
+}
+
+export function replaceGlobalConfigs(projectId, data) {
+  return request.put(`/env/projects/${projectId}/global-configs`, data)
+}
+
+export function updateGlobalConfig(id, data) {
+  return request.patch(`/env/global-configs/${id}`, data)
+}
+
+export function deleteGlobalConfig(id) {
+  return request.delete(`/env/global-configs/${id}`)
+}
+
+// Snapshots (read-only for reports)
 export function listSnapshots(environmentId) {
   return request.get(`/env/environments/${environmentId}/snapshots`)
 }
 
-export function createSnapshot(environmentId, data) {
-  return request.post(`/env/environments/${environmentId}/snapshots`, data)
-}
-
-export function activateSnapshot(snapshotId) {
-  return request.put(`/env/snapshots/${snapshotId}/activate`)
+export function getSnapshot(snapshotId) {
+  return request.get(`/env/snapshots/${snapshotId}`)
 }
 
 export function deleteSnapshot(snapshotId) {
   return request.delete(`/env/snapshots/${snapshotId}`)
-}
-
-// Debug vars
-export function listDebugVars(environmentId) {
-  return request.get(`/env/environments/${environmentId}/debug-vars`)
-}
-
-export function upsertDebugVars(environmentId, data) {
-  return request.put(`/env/environments/${environmentId}/debug-vars`, data)
-}
-
-export function deleteDebugVar(varId) {
-  return request.delete(`/env/debug-vars/${varId}`)
 }
 
 export function getTestEnvData(environmentId) {

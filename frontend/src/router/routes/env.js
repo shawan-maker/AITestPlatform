@@ -1,5 +1,4 @@
 import EnvVariableWorkspaceView from '@/views/env/EnvVariableWorkspaceView.vue'
-import EnvVariableDetailView from '@/views/env/EnvVariableDetailView.vue'
 import DbConnectionListView from '@/views/env/DbConnectionListView.vue'
 import FunctionFileListView from '@/views/env/FunctionFileListView.vue'
 import UploadedFileListView from '@/views/env/UploadedFileListView.vue'
@@ -13,9 +12,10 @@ export default [
   },
   {
     path: '/env/variables/:environmentId',
-    name: 'EnvVariableDetail',
-    component: EnvVariableDetailView,
-    meta: { titleKey: 'menu.envVariables', projectRequired: true },
+    redirect: (to) => ({
+      path: '/env/variables',
+      query: { environmentId: to.params.environmentId },
+    }),
   },
   {
     path: '/env/databases',
