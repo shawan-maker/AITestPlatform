@@ -251,3 +251,17 @@
 .ui-tree-section-header:hover .ui-tree-menu-trigger {
   color: #4b5563;
 }
+
+/* 函数编辑/详情：半屏弹窗，上下边距对称（top 25vh + height 50vh） */
+.env-function-code-dialog {
+  height: 50vh;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+
+  .el-dialog__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+  }
+}

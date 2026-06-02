@@ -18,7 +18,9 @@
         <template v-for="item in menus" :key="item.path || item.titleKey">
           <el-sub-menu v-if="item.children" :index="item.titleKey">
             <template #title>
-              <el-icon v-if="item.icon"><component :is="icons[item.icon]" /></el-icon>
+              <el-icon v-if="resolveMenuIcon(item.icon)" class="app-sidebar__menu-icon">
+                <component :is="resolveMenuIcon(item.icon)" />
+              </el-icon>
               <span>{{ t(item.titleKey) }}</span>
             </template>
             <el-menu-item
@@ -34,7 +36,9 @@
             :index="item.path"
             :class="menuItemClass(item)"
           >
-            <el-icon v-if="item.icon"><component :is="icons[item.icon]" /></el-icon>
+            <el-icon v-if="resolveMenuIcon(item.icon)" class="app-sidebar__menu-icon">
+              <component :is="resolveMenuIcon(item.icon)" />
+            </el-icon>
             <span>{{ t(item.titleKey) }}</span>
             <el-tag v-if="item.emphasis === 'admin'" size="small" type="info" class="menu-admin-tag">
               SA
@@ -77,15 +81,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
-  Cpu,
-  Document,
-  Monitor,
-  FolderOpened,
-  Setting,
-  OfficeBuilding,
-  User,
-} from '@element-plus/icons-vue'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import { filterMenus } from '@/router/menus'
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
@@ -103,14 +99,8 @@ const localeStore = useLocaleStore()
 const projectStore = useProjectStore()
 const permissionStore = usePermissionStore()
 
-const icons = {
-  Cpu,
-  Document,
-  Monitor,
-  FolderOpened,
-  Setting,
-  OfficeBuilding,
-  User,
+function resolveMenuIcon(name) {
+  return name ? ElementPlusIconsVue[name] : undefined
 }
 
 const menus = computed(() => filterMenus(auth.isSuperAdmin))
@@ -202,7 +192,26 @@ async function onUserCommand(cmd) {
 }
 
 :deep(.el-sub-menu__title) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: transparent !important;
+}
+
+:deep(.el-sub-menu__title .app-sidebar__menu-icon) {
+  flex-shrink: 0;
+  width: 1em;
+  height: 1em;
+  font-size: 18px;
+  margin: 0;
+}
+
+:deep(.el-menu-item .app-sidebar__menu-icon) {
+  flex-shrink: 0;
+  width: 1em;
+  height: 1em;
+  font-size: 18px;
+  margin: 0;
 }
 
 :deep(.el-menu--inline) {

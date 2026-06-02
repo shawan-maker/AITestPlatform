@@ -11,6 +11,7 @@ import {
   clearRefreshQueue,
   getRefreshQueue,
   isApiSuccess,
+  maybeParseJsonBlob,
   parseHttpError,
   setRefreshQueue,
 } from '@/utils/request-helpers'
@@ -59,7 +60,7 @@ service.interceptors.request.use((config) => {
 })
 
 service.interceptors.response.use(
-  (response) => {
+  async (response) => {
     const payload = response.data
     if (payload && typeof payload.code === 'number' && !isApiSuccess(payload.code)) {
       ElMessage.error(payload.message || '请求失败')
@@ -69,6 +70,12 @@ service.interceptors.response.use(
   },
   async (error) => {
     const { config, response } = error
+    if (response?.config?.responseType === 'blob' && response.data instanceof Blob) {
+      const parsed = await maybeParseJsonBlob(response)
+      if (parsed !== response.data) {
+        response.data = parsed
+      }
+    }
     const status = response?.status
 
     const message = parseHttpError(error)

@@ -105,12 +105,16 @@ export function listDbConnections(params = {}) {
   return request.get('/env/db-connections', { params })
 }
 
+export function getDbConnection(id) {
+  return request.get(`/env/db-connections/${id}`)
+}
+
 export function createDbConnection(data, params = {}) {
   return request.post('/env/db-connections', data, { params })
 }
 
-export function updateDbConnection(id, data) {
-  return request.patch(`/env/db-connections/${id}`, data)
+export function updateDbConnection(id, data, params = {}) {
+  return request.patch(`/env/db-connections/${id}`, data, { params })
 }
 
 export function deleteDbConnection(id) {
@@ -125,13 +129,17 @@ export function testDbConnection(id) {
   return request.post(`/env/db-connections/${id}/test`)
 }
 
-export function getDbTestLogs(id) {
-  return request.get(`/env/db-connections/${id}/test-logs`)
+export function getDbTestLogs(id, params = {}) {
+  return request.get(`/env/db-connections/${id}/test-logs`, { params })
 }
 
 // Functions
 export function listFunctionFiles(params = {}) {
   return request.get('/env/function-files', { params })
+}
+
+export function listFunctionBoundEnvironments(params = {}) {
+  return request.get('/env/function-files/bound-environments', { params })
 }
 
 export function getFunctionFile(id) {
@@ -156,6 +164,10 @@ export function bindFunctionFiles(environmentId, data) {
 
 export function validateFunctionFile(data) {
   return request.post('/env/function-files/validate', data)
+}
+
+export function debugFunctionFile(id, data) {
+  return request.post(`/env/function-files/${id}/debug`, data)
 }
 
 // Uploaded files

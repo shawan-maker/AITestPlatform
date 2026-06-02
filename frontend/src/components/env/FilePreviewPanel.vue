@@ -6,8 +6,9 @@
     <template v-else-if="previewType === 'json'">
       <MonacoJsonEditor v-model="textContent" read-only :height="360" />
     </template>
-    <template v-else-if="textContent">
-      <pre class="file-preview-panel__text">{{ textContent }}</pre>
+    <template v-else-if="previewType === 'text'">
+      <pre v-if="!loadError" class="file-preview-panel__text">{{ textContent }}</pre>
+      <EmptyState v-else :title="t('page.env.files.previewFailed')" />
     </template>
     <EmptyState v-else :title="t('page.env.files.noPreview')" />
   </div>
@@ -27,6 +28,7 @@ const props = defineProps({
 
 const { t } = useI18n()
 const loading = ref(false)
+const loadError = ref(false)
 const textContent = ref('')
 const objectUrl = ref('')
 
@@ -41,22 +43,32 @@ const previewType = computed(() => {
 
 async function load() {
   if (!props.fileId) return
+  loadError.value = false
+  textContent.value = ''
+  if (previewType.value === 'unknown') return
   loading.value = true
   try {
     const res = await downloadUploadedFile(props.fileId)
     const blob = res.data
+    if (!(blob instanceof Blob)) {
+      loadError.value = true
+      return
+    }
     if (previewType.value === 'image') {
       if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
       objectUrl.value = URL.createObjectURL(blob)
     } else {
       textContent.value = await blob.text()
     }
+  } catch {
+    loadError.value = true
+    textContent.value = ''
   } finally {
     loading.value = false
   }
 }
 
-watch(() => props.fileId, load, { immediate: true })
+watch(() => [props.fileId, props.fileName], load, { immediate: true })
 
 onBeforeUnmount(() => {
   if (objectUrl.value) URL.revokeObjectURL(objectUrl.value)
@@ -81,5 +93,6 @@ onBeforeUnmount(() => {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
+  margin: 0;
 }
 </style>

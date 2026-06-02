@@ -3,46 +3,68 @@
     <PageHeader :title="t('page.env.files.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
     <template v-else>
-      <FilterBar @search="load" @reset="load">
+      <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="fileInput?.click()">{{ t('common.upload') }}</el-button>
           <input ref="fileInput" type="file" hidden @change="onUpload" />
         </template>
+        <el-input v-model="filters.keyword" :placeholder="t('page.env.files.keywordPlaceholder')" clearable />
+        <el-select
+          v-model="filters.uploaded_by_id"
+          :placeholder="t('page.env.files.uploaderFilter')"
+          clearable
+          filterable
+        >
+          <el-option v-for="u in uploaderOptions" :key="u.id" :label="u.label" :value="u.id" />
+        </el-select>
+        <el-input v-model="filters.mime_type" :placeholder="t('page.env.files.mimeFilter')" clearable />
       </FilterBar>
-      <SplitView :initial-width="360">
-      <template #left>
-        <PaginatedTable :data="items" :loading="loading" :total="total" v-model:page="page" v-model:page-size="pageSize" @page-change="load">
-          <AppTableColumn prop="name" variant="content" :label="t('common.name')">
-            <template #default="{ row }">{{ row.name || row.file_name }}</template>
-          </AppTableColumn>
-          <AppTableColumn prop="size" variant="flex" :label="t('common.size')">
-            <template #default="{ row }">{{ formatFileSize(row.size) }}</template>
-          </AppTableColumn>
-          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
-            <template #default="{ row }">
-              <el-button link @click="selectFile(row)">{{ t('common.view') }}</el-button>
-              <el-button link @click="download(row)">{{ t('common.download') }}</el-button>
-              <ConfirmDelete v-if="canEdit" @confirm="remove(row)">
-                <el-button link type="danger">{{ t('common.delete') }}</el-button>
-              </ConfirmDelete>
-            </template>
-          </AppTableColumn>
-        </PaginatedTable>
-      </template>
-      <template #right>
-        <FilePreviewPanel v-if="previewFile" :file-id="previewFile.id" :file-name="previewFile.name || previewFile.file_name" />
-        <EmptyState v-else :title="t('page.env.files.selectPreview')" />
-      </template>
-      </SplitView>
+      <PaginatedTable
+        :data="items"
+        :loading="loading"
+        :total="total"
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        @page-change="load"
+      >
+        <AppTableColumn prop="file_name" variant="content" :label="t('common.name')" />
+        <AppTableColumn prop="storage_path" variant="flex" :label="t('page.env.files.storagePath')">
+          <template #default="{ row }">files/{{ row.project_id }}/{{ row.file_name }}</template>
+        </AppTableColumn>
+        <AppTableColumn prop="file_size" variant="flex" :label="t('common.size')">
+          <template #default="{ row }">{{ formatFileSize(row.file_size) }}</template>
+        </AppTableColumn>
+        <AppTableColumn prop="mime_type" variant="flex" :label="t('page.env.files.mimeType')" />
+        <AppTableColumn prop="uploaded_by_id" variant="flex" :label="t('page.env.files.uploader')">
+          <template #default="{ row }">{{ uploaderLabel(row.uploaded_by_id) }}</template>
+        </AppTableColumn>
+        <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')" />
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
+          <template #default="{ row }">
+            <el-button link @click="openPreview(row)">{{ t('common.view') }}</el-button>
+            <el-button link @click="download(row)">{{ t('common.download') }}</el-button>
+            <ConfirmDelete v-if="canEdit" @confirm="remove(row)">
+              <el-button link type="danger">{{ t('common.delete') }}</el-button>
+            </ConfirmDelete>
+          </template>
+        </AppTableColumn>
+      </PaginatedTable>
     </template>
+
+    <FilePreviewDialog
+      v-model="showPreview"
+      :file-id="previewFile?.id"
+      :file-name="previewFile?.file_name"
+    />
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { deleteUploadedFile, downloadUploadedFile, listUploadedFiles, uploadFile } from '@/api/environment'
+import { lookupUsers } from '@/api/users'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
@@ -51,11 +73,10 @@ import { formatFileSize } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
-import SplitView from '@/components/common/SplitView.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
-import FilePreviewPanel from '@/components/env/FilePreviewPanel.vue'
+import FilePreviewDialog from '@/components/env/FilePreviewDialog.vue'
 
 const { t } = useI18n()
 const { projectId, withProjectParams } = useProjectScope()
@@ -65,23 +86,73 @@ const { downloadFromResponse } = useDownload()
 const fileInput = ref()
 const items = ref([])
 const loading = ref(false)
+const showPreview = ref(false)
 const previewFile = ref(null)
+const uploaderOptions = ref([])
+const uploaderMap = ref({})
+const filters = reactive({ keyword: '', uploaded_by_id: null, mime_type: '' })
+
+function uploaderLabel(id) {
+  if (!id) return '-'
+  return uploaderMap.value[id] || `#${id}`
+}
+
+async function loadUploaders() {
+  try {
+    const res = await lookupUsers({ page: 1, page_size: 50 })
+    const users = res.data.data?.items ?? res.data.data ?? []
+    uploaderOptions.value = users.map((u) => ({
+      id: u.id,
+      label: u.username || u.email || String(u.id),
+    }))
+    uploaderMap.value = Object.fromEntries(uploaderOptions.value.map((u) => [u.id, u.label]))
+  } catch {
+    uploaderOptions.value = []
+  }
+}
+
+function syncUploadersFromFiles(fileItems) {
+  const known = new Set(uploaderOptions.value.map((u) => u.id))
+  for (const row of fileItems) {
+    const id = row.uploaded_by_id
+    if (!id || known.has(id)) continue
+    known.add(id)
+    const label = uploaderMap.value[id] || `#${id}`
+    uploaderOptions.value.push({ id, label })
+  }
+}
 
 async function load() {
-  const params = withProjectParams({ page: page.value, page_size: pageSize.value })
+  const params = withProjectParams({
+    page: page.value,
+    page_size: pageSize.value,
+    keyword: filters.keyword || undefined,
+    uploaded_by_id: filters.uploaded_by_id ?? undefined,
+    mime_type: filters.mime_type || undefined,
+  })
   if (!params) return
   loading.value = true
   try {
     const res = await listUploadedFiles(params)
     items.value = res.data.data?.items ?? []
     total.value = res.data.data?.total ?? 0
+    syncUploadersFromFiles(items.value)
   } finally {
     loading.value = false
   }
 }
 
-function selectFile(row) {
+function reset() {
+  filters.keyword = ''
+  filters.uploaded_by_id = null
+  filters.mime_type = ''
+  page.value = 1
+  load()
+}
+
+function openPreview(row) {
   previewFile.value = row
+  showPreview.value = true
 }
 
 async function onUpload(e) {
@@ -94,14 +165,22 @@ async function onUpload(e) {
   const fd = new FormData()
   fd.append('file', file)
   const params = withProjectParams()
-  await uploadFile(fd, params)
-  ElMessage.success(t('common.uploaded'))
-  load()
+  try {
+    await uploadFile(fd, params)
+    ElMessage.success(t('common.uploaded'))
+    load()
+  } finally {
+    e.target.value = ''
+  }
 }
 
 async function download(row) {
-  const res = await downloadUploadedFile(row.id)
-  downloadFromResponse(res, row.name || row.file_name)
+  try {
+    const res = await downloadUploadedFile(row.id)
+    downloadFromResponse(res, row.file_name)
+  } catch {
+    ElMessage.error(t('page.env.files.downloadFailed'))
+  }
 }
 
 async function remove(row) {
@@ -111,5 +190,8 @@ async function remove(row) {
   load()
 }
 
-onMounted(load)
+onMounted(() => {
+  loadUploaders()
+  load()
+})
 </script>

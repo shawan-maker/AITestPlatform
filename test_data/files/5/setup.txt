@@ -1,0 +1,21 @@
+# 从环境变量取值（平台已将 ENV["envs"] 暴露给 get_global_variable）
+e_url = test.get_global_variable("e_url")
+e_estack_tenant_admin_name = test.get_global_variable("e_estack_tenant_admin_name")
+e_estack_tenant_admin_password = test.get_global_variable("e_estack_tenant_admin_password")
+e_ecsc_yy_new_name = test.get_global_variable("e_ecsc_yy_new_name")
+e_ecsc_yy_new_password = test.get_global_variable("e_ecsc_yy_new_password")
+# 直接调用环境里定义的函数，无需 global_func. 前缀
+cookie = get_token_by_ecsctenantadmin(e_url, e_estack_tenant_admin_name, e_estack_tenant_admin_password)
+yy_cookie = get_token_by_ecsctenantadmin(e_url, e_ecsc_yy_new_name, e_ecsc_yy_new_password)
+# 保存到环境变量（跨脚本/跨用例使用）
+test.save_global_variable('cookie', cookie)
+test.save_global_variable('yy_cookie', yy_cookie)
+
+
+
+
+teardown中：
+test.save_env_variable('e_basicLevelDepartment_ID', test.json_extract(res, 'entity.list.0.tenantId'))
+test.save_global_variable('e_basicLevelDepartment_ID', test.json_extract(res, 'entity.list.0.tenantId'))
+
+默认导入时是save_env_variable（设置临时变量），准备测试数据的脚本可以改成save_global_variable（设置环境变量），变量值会写入到环境信息（文件）里，后面脚本单独运行也可以直接调用（相当于移动云测试平台中“保存为产品变量”）

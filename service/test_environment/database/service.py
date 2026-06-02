@@ -59,15 +59,17 @@ class DbConnectionService:
         return conn
 
     @classmethod
-    async def _sync_project_id(cls, connection_id: int) -> None:
+    async def _sync_project_id(
+        cls, connection_id: int, *, fallback_project_id: int | None = None
+    ) -> None:
         conn = await DbConnection.get(id=connection_id)
         relations = await EnvironmentDbRelation.filter(
             db_connection_id=connection_id
         ).prefetch_related("environment")
-        if not relations:
-            conn.project_id = None
-        else:
+        if relations:
             conn.project_id = relations[0].environment.project_id
+        elif fallback_project_id is not None:
+            conn.project_id = fallback_project_id
         await conn.save()
 
     @classmethod
@@ -123,10 +125,25 @@ class DbConnectionService:
         )
 
     @classmethod
-    async def create(cls, user: User, data: DbConnectionCreateRequest) -> DbConnectionDetail:
+    async def create(
+        cls,
+        user: User,
+        data: DbConnectionCreateRequest,
+        *,
+        project_id: int | None = None,
+    ) -> DbConnectionDetail:
         if await DbConnection.filter(connection_name=data.connection_name).exists():
             raise AppException("连接名称已存在", 409)
+        if data.environment_ids:
+            for env_id in data.environment_ids:
+                env = await TestEnvironment.get_or_none(id=env_id)
+                if env is None:
+                    raise AppException(f"变量文件 {env_id} 不存在", 404)
+                await ensure_project_editor(env.project_id, user)
+        elif project_id is not None:
+            await ensure_project_editor(project_id, user)
         config = cls._prepare_config_for_storage(data.config)
+        initial_project_id = None if data.environment_ids else project_id
         conn = await DbConnection.create(
             connection_name=data.connection_name,
             server_name=data.server_name,
@@ -134,13 +151,9 @@ class DbConnectionService:
             config=config,
             description=data.description,
             created_by_id=user.id,
+            project_id=initial_project_id,
         )
         if data.environment_ids:
-            for env_id in data.environment_ids:
-                env = await TestEnvironment.get_or_none(id=env_id)
-                if env is None:
-                    raise AppException(f"变量文件 {env_id} 不存在", 404)
-                await ensure_project_editor(env.project_id, user)
             for env_id in data.environment_ids:
                 existing_ids = list(
                     await EnvironmentDbRelation.filter(environment_id=env_id).values_list(
@@ -154,18 +167,23 @@ class DbConnectionService:
                 )
             await cls._sync_project_id(conn.id)
             conn = await cls._get_or_404(conn.id)
-        return cls._to_detail(conn, await EnvironmentDbRelation.filter(db_connection_id=conn.id).exists())
+        return await cls._to_detail(conn, await EnvironmentDbRelation.filter(db_connection_id=conn.id).exists())
 
     @classmethod
     async def get_detail(cls, user: User, connection_id: int) -> DbConnectionDetail:
         conn = await cls._get_or_404(connection_id)
         await ensure_db_connection_view(conn, user)
         is_bound = await EnvironmentDbRelation.filter(db_connection_id=conn.id).exists()
-        return cls._to_detail(conn, is_bound)
+        return await cls._to_detail(conn, is_bound)
 
     @classmethod
     async def update(
-        cls, user: User, connection_id: int, data: DbConnectionUpdateRequest
+        cls,
+        user: User,
+        connection_id: int,
+        data: DbConnectionUpdateRequest,
+        *,
+        project_id: int | None = None,
     ) -> DbConnectionDetail:
         conn = await cls._get_or_404(connection_id)
         await ensure_db_connection_edit(conn, user)
@@ -184,9 +202,46 @@ class DbConnectionService:
             conn.config = cls._prepare_config_for_storage(data.config, conn.config)
         if data.description is not None:
             conn.description = data.description
+        if data.environment_ids is not None:
+            await cls._sync_environment_bindings(
+                user, conn, data.environment_ids, project_id=project_id
+            )
+        elif project_id is not None and conn.project_id is None:
+            conn.project_id = project_id
         await conn.save()
         is_bound = await EnvironmentDbRelation.filter(db_connection_id=conn.id).exists()
-        return cls._to_detail(conn, is_bound)
+        return await cls._to_detail(conn, is_bound)
+
+    @classmethod
+    async def _sync_environment_bindings(
+        cls,
+        user: User,
+        conn: DbConnection,
+        environment_ids: list[int],
+        *,
+        project_id: int | None = None,
+    ) -> None:
+        for env_id in environment_ids:
+            env = await TestEnvironment.get_or_none(id=env_id)
+            if env is None:
+                raise AppException(f"变量文件 {env_id} 不存在", 404)
+            await ensure_project_editor(env.project_id, user)
+        for env_id in environment_ids:
+            existing_ids = list(
+                await EnvironmentDbRelation.filter(environment_id=env_id).values_list(
+                    "db_connection_id", flat=True
+                )
+            )
+            combined = list(set(existing_ids) | {conn.id})
+            await cls._validate_server_names_unique(env_id, combined)
+        await EnvironmentDbRelation.filter(db_connection_id=conn.id).delete()
+        for env_id in environment_ids:
+            await EnvironmentDbRelation.create(
+                environment_id=env_id, db_connection_id=conn.id
+            )
+        await cls._sync_project_id(conn.id, fallback_project_id=project_id or conn.project_id)
+        refreshed = await cls._get_or_404(conn.id)
+        conn.project_id = refreshed.project_id
 
     @classmethod
     async def delete(cls, user: User, connection_id: int) -> None:
@@ -296,6 +351,8 @@ class DbConnectionService:
             server_name=conn.server_name,
             db_type=conn.db_type,
             description=conn.description,
+            host=(conn.config or {}).get("host"),
+            username=(conn.config or {}).get("username"),
             project_id=conn.project_id,
             created_by_id=conn.created_by_id,
             is_bound=is_bound,
@@ -303,10 +360,20 @@ class DbConnectionService:
             updated_at=conn.updated_at,
         )
 
+    @staticmethod
+    async def _environment_ids_for(connection_id: int) -> list[int]:
+        return list(
+            await EnvironmentDbRelation.filter(db_connection_id=connection_id).values_list(
+                "environment_id", flat=True
+            )
+        )
+
     @classmethod
-    def _to_detail(cls, conn: DbConnection, is_bound: bool) -> DbConnectionDetail:
+    async def _to_detail(cls, conn: DbConnection, is_bound: bool) -> DbConnectionDetail:
         brief = cls._to_brief(conn, is_bound)
+        env_ids = await cls._environment_ids_for(conn.id)
         return DbConnectionDetail(
             **brief.model_dump(),
             config=cls._mask_config(conn.config or {}),
+            environment_ids=env_ids,
         )

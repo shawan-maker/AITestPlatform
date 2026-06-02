@@ -11,13 +11,22 @@ router = APIRouter(prefix="/uploaded-files", tags=["环境-上传文件"])
 @router.get("", summary="上传文件列表")
 async def list_uploaded_files(
     project_id: int = Query(..., ge=1),
+    keyword: str | None = Query(None),
+    uploaded_by_id: int | None = Query(None, ge=1),
+    mime_type: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     _: tuple = Depends(require_project_viewer),
     user: User = Depends(get_current_active_user),
 ):
     data = await UploadedFileService.list_files(
-        user, project_id, page=page, page_size=page_size
+        user,
+        project_id,
+        keyword=keyword,
+        uploaded_by_id=uploaded_by_id,
+        mime_type=mime_type,
+        page=page,
+        page_size=page_size,
     )
     return success(data=data)
 

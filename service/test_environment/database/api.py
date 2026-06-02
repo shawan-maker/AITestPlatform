@@ -36,9 +36,10 @@ async def list_db_connections(
 @router.post("", summary="创建数据库连接")
 async def create_db_connection(
     data: DbConnectionCreateRequest,
+    project_id: int | None = Query(None, ge=1),
     user: User = Depends(get_current_active_user),
 ):
-    result = await DbConnectionService.create(user, data)
+    result = await DbConnectionService.create(user, data, project_id=project_id)
     return success(data=result, message="数据库连接创建成功")
 
 
@@ -55,9 +56,12 @@ async def get_db_connection(
 async def update_db_connection(
     connection_id: int,
     data: DbConnectionUpdateRequest,
+    project_id: int | None = Query(None, ge=1),
     user: User = Depends(get_current_active_user),
 ):
-    result = await DbConnectionService.update(user, connection_id, data)
+    result = await DbConnectionService.update(
+        user, connection_id, data, project_id=project_id
+    )
     return success(data=result, message="数据库连接更新成功")
 
 

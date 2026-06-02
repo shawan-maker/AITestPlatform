@@ -3,41 +3,74 @@
     <PageHeader :title="t('page.env.function.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
     <template v-else>
-      <FilterBar @search="load" @reset="load">
+      <FilterBar @search="load" @reset="reset">
         <template #primary>
-          <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+          <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
         </template>
+        <el-input v-model="filters.keyword" :placeholder="t('page.env.function.keywordPlaceholder')" clearable />
+        <el-input v-model="filters.method_name" :placeholder="t('page.env.function.methodNameFilter')" clearable />
+        <el-select
+          v-model="filters.environment_id"
+          :placeholder="t('page.env.function.boundEnvFilter')"
+          clearable
+          filterable
+        >
+          <el-option
+            v-for="env in boundEnvOptions"
+            :key="env.id"
+            :label="env.env_name"
+            :value="env.id"
+          />
+        </el-select>
       </FilterBar>
-      <PaginatedTable :data="items" :loading="loading" :total="total" v-model:page="page" v-model:page-size="pageSize" @page-change="load">
-      <AppTableColumn prop="file_name" variant="content" :label="t('common.name')">
-        <template #default="{ row }">{{ row.file_name || row.name }}</template>
-      </AppTableColumn>
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="280">
-        <template #default="{ row }">
-          <el-button link @click="validate(row)">{{ t('page.env.function.validate') }}</el-button>
-          <el-button link @click="openDebug(row)">{{ t('page.env.function.debug') }}</el-button>
-          <el-button link @click="editCode(row)">{{ t('common.edit') }}</el-button>
-        </template>
-      </AppTableColumn>
+      <PaginatedTable
+        :data="items"
+        :loading="loading"
+        :total="total"
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        @page-change="load"
+      >
+        <AppTableColumn prop="file_name" variant="content" :label="t('page.env.function.fileName')" />
+        <AppTableColumn prop="method_names" variant="flex" :label="t('page.env.function.methodNames')">
+          <template #default="{ row }">{{ formatNames(row.method_names) }}</template>
+        </AppTableColumn>
+        <AppTableColumn prop="environment_names" variant="content" :label="t('page.env.function.boundEnvNames')">
+          <template #default="{ row }">{{ formatNames(row.environment_names) }}</template>
+        </AppTableColumn>
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="320">
+          <template #default="{ row }">
+            <el-button link @click="openDetail(row)">{{ t('common.detail') }}</el-button>
+            <el-button v-if="canEdit" link @click="openEdit(row)">{{ t('common.edit') }}</el-button>
+            <el-button link @click="openDebug(row)">{{ t('page.env.function.debug') }}</el-button>
+            <ConfirmDelete v-if="canEdit" @confirm="remove(row)">
+              <el-button link type="danger">{{ t('common.delete') }}</el-button>
+            </ConfirmDelete>
+          </template>
+        </AppTableColumn>
       </PaginatedTable>
     </template>
 
+    <FunctionFileFormDialog v-model="showForm" :file-id="editId" @saved="onSaved" />
+    <FunctionDetailDialog
+      v-model="showDetail"
+      :file-id="detailId"
+      @debug="onDetailDebug"
+    />
     <FunctionDebugDialog v-model="showDebug" :file="debugFile" />
-    <el-dialog v-model="showCode" :title="t('page.env.function.editCode')" width="800px">
-      <MonacoJsonEditor v-model="codeForm.source_code" language="python" :height="400" />
-      <template #footer>
-        <el-button @click="showCode = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="saveCode">{{ t('common.save') }}</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { getFunctionFile, listFunctionFiles, updateFunctionFile, validateFunctionFile } from '@/api/environment'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  deleteFunctionFile,
+  getFunctionFile,
+  listFunctionBoundEnvironments,
+  listFunctionFiles,
+} from '@/api/environment'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
@@ -46,23 +79,53 @@ import FilterBar from '@/components/common/FilterBar.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
+import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
+import FunctionFileFormDialog from '@/components/env/FunctionFileFormDialog.vue'
+import FunctionDetailDialog from '@/components/env/FunctionDetailDialog.vue'
 import FunctionDebugDialog from '@/components/env/FunctionDebugDialog.vue'
-import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 
 const { t } = useI18n()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 const { page, pageSize, total } = usePagination()
+const filters = reactive({ keyword: '', method_name: '', environment_id: null })
 const items = ref([])
 const loading = ref(false)
-const showCreate = ref(false)
+const boundEnvOptions = ref([])
+const showForm = ref(false)
+const editId = ref(null)
+const showDetail = ref(false)
+const detailId = ref(null)
 const showDebug = ref(false)
 const debugFile = ref(null)
-const showCode = ref(false)
-const codeForm = reactive({ id: null, source_code: '' })
+
+function formatNames(names) {
+  if (!names?.length) return '—'
+  return names.join(', ')
+}
+
+async function loadBoundEnvOptions() {
+  const params = withProjectParams()
+  if (!params) {
+    boundEnvOptions.value = []
+    return
+  }
+  try {
+    const res = await listFunctionBoundEnvironments(params)
+    boundEnvOptions.value = res.data.data ?? []
+  } catch {
+    boundEnvOptions.value = []
+  }
+}
 
 async function load() {
-  const params = withProjectParams({ page: page.value, page_size: pageSize.value })
+  const params = withProjectParams({
+    page: page.value,
+    page_size: pageSize.value,
+    keyword: filters.keyword || undefined,
+    method_name: filters.method_name || undefined,
+    environment_id: filters.environment_id ?? undefined,
+  })
   if (!params) return
   loading.value = true
   try {
@@ -74,11 +137,27 @@ async function load() {
   }
 }
 
-async function validate(row) {
-  const detail = await getFunctionFile(row.id)
-  const f = detail.data.data
-  await validateFunctionFile({ file_name: f.file_name, source_code: f.source_code })
-  ElMessage.success(t('page.env.function.valid'))
+function reset() {
+  filters.keyword = ''
+  filters.method_name = ''
+  filters.environment_id = null
+  page.value = 1
+  load()
+}
+
+function openCreate() {
+  editId.value = null
+  showForm.value = true
+}
+
+function openEdit(row) {
+  editId.value = row.id
+  showForm.value = true
+}
+
+function openDetail(row) {
+  detailId.value = row.id
+  showDetail.value = true
 }
 
 async function openDebug(row) {
@@ -87,20 +166,35 @@ async function openDebug(row) {
   showDebug.value = true
 }
 
-async function editCode(row) {
-  const detail = await getFunctionFile(row.id)
-  const f = detail.data.data
-  codeForm.id = f.id
-  codeForm.source_code = f.source_code ?? ''
-  showCode.value = true
+async function onDetailDebug(file) {
+  showDetail.value = false
+  debugFile.value = file
+  showDebug.value = true
 }
 
-async function saveCode() {
-  await updateFunctionFile(codeForm.id, { source_code: codeForm.source_code })
+function onSaved() {
   ElMessage.success(t('common.saved'))
-  showCode.value = false
+  loadBoundEnvOptions()
   load()
 }
 
-onMounted(load)
+async function remove(row) {
+  if (row.is_bound) {
+    await ElMessageBox.confirm(t('page.env.function.deleteBoundHint'), t('common.warning'), { type: 'warning' })
+  }
+  await deleteFunctionFile(row.id)
+  ElMessage.success(t('common.deleted'))
+  loadBoundEnvOptions()
+  load()
+}
+
+watch(projectId, () => {
+  loadBoundEnvOptions()
+  load()
+})
+
+onMounted(() => {
+  loadBoundEnvOptions()
+  load()
+})
 </script>

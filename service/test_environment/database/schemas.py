@@ -30,6 +30,7 @@ class DbConnectionUpdateRequest(BaseModel):
     db_type: DbType | None = None
     config: DbConnectionConfigInput | None = None
     description: str | None = Field(default=None, max_length=255)
+    environment_ids: list[int] | None = None
 
     @model_validator(mode="after")
     def at_least_one(self):
@@ -41,6 +42,7 @@ class DbConnectionUpdateRequest(BaseModel):
                 self.db_type,
                 self.config,
                 self.description,
+                self.environment_ids,
             )
         ):
             raise ValueError("至少提供一个可更新字段")
@@ -53,6 +55,8 @@ class DbConnectionBrief(BaseModel):
     server_name: str
     db_type: DbType
     description: str | None
+    host: str | None = None
+    username: str | None = None
     project_id: int | None
     created_by_id: int | None
     is_bound: bool
@@ -62,6 +66,7 @@ class DbConnectionBrief(BaseModel):
 
 class DbConnectionDetail(DbConnectionBrief):
     config: dict[str, Any]
+    environment_ids: list[int] = Field(default_factory=list)
 
 
 class DbConnectionTestResult(BaseModel):

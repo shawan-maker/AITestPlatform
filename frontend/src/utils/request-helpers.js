@@ -18,6 +18,41 @@ export function clearRefreshQueue() {
   refreshPromise = null
 }
 
+/** 是否为平台 API 错误 JSON（非业务文件内容） */
+function looksLikeApiErrorPayload(value) {
+  return (
+    value
+    && typeof value === 'object'
+    && typeof value.code === 'number'
+    && typeof value.message === 'string'
+  )
+}
+
+/** blob 请求仅在 HTTP 错误且体为 API JSON 时解析，避免把 .json 文件内容误当错误体 */
+export async function maybeParseJsonBlob(response) {
+  const blob = response?.data
+  if (typeof Blob === 'undefined' || !(blob instanceof Blob)) return blob
+
+  const disposition = (response.headers?.['content-disposition'] || '').toLowerCase()
+  if (disposition.includes('filename') || disposition.includes('attachment')) {
+    return blob
+  }
+
+  const status = response?.status ?? 0
+  if (status >= 200 && status < 300) {
+    return blob
+  }
+
+  const text = await blob.text()
+  try {
+    const parsed = JSON.parse(text)
+    if (looksLikeApiErrorPayload(parsed)) return parsed
+  } catch {
+    // not JSON
+  }
+  return text
+}
+
 /** 409 code → i18n key (17-00 §6.1) */
 const CONFLICT_CODE_MAP = {
   requirement_confirmed: 'error.conflict.requirementConfirmed',
@@ -76,6 +111,14 @@ export function parseHttpError(error, fallback = '请求失败') {
 
   if (data && typeof data.message === 'string' && data.message.trim()) {
     return data.message
+  }
+  if (typeof data === 'string' && data.trim()) {
+    try {
+      const parsed = JSON.parse(data)
+      if (parsed?.message) return parsed.message
+    } catch {
+      return data
+    }
   }
   if (typeof data?.detail === 'string' && data.detail.trim()) {
     return data.detail

@@ -30,7 +30,7 @@ export const menuConfig = [
   },
   {
     titleKey: 'menu.env',
-    icon: 'Setting',
+    icon: 'Management',
     children: [
       { path: '/env/variables', titleKey: 'menu.envVariables' },
       { path: '/env/databases', titleKey: 'menu.envDatabases' },

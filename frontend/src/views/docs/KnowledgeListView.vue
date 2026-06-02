@@ -11,8 +11,8 @@
         </template>
         <el-input v-model="filters.keyword" :placeholder="t('common.keyword')" clearable />
         <el-select v-model="filters.doc_type" :placeholder="t('page.knowledge.docType')" clearable>
-          <el-option label="requirement" value="requirement" />
-          <el-option label="api" value="api" />
+          <el-option :label="t('page.knowledge.docTypeRequirement')" value="requirement" />
+          <el-option :label="t('page.knowledge.docTypeApi')" value="api_doc" />
         </el-select>
         <el-select v-model="filters.index_status" :placeholder="t('page.knowledge.indexStatus')" clearable>
           <el-option v-for="s in INDEX_STATUS" :key="s" :label="s" :value="s" />

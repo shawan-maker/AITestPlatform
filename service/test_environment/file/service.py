@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tortoise.expressions import Q
+
 from fastapi.responses import FileResponse
 
 from service.core.config import BASE_DIR, MAX_UPLOAD_BYTES
@@ -19,8 +21,37 @@ from service.user.models import User
 
 UPLOAD_ROOT = BASE_DIR / "test_data" / "files"
 
+_EXT_MIME_HINTS: dict[str, str] = {
+    "txt": "text/plain",
+    "json": "application/json",
+    "xml": "application/xml",
+    "csv": "text/csv",
+    "md": "text/markdown",
+    "log": "text/plain",
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+    "svg": "image/svg+xml",
+}
+
 
 class UploadedFileService:
+    @classmethod
+    def _apply_type_filter(cls, qs, raw: str):
+        token = raw.strip()
+        if not token:
+            return qs
+        if "/" in token:
+            return qs.filter(mime_type__icontains=token)
+        ext = token.lstrip(".").lower()
+        ext_q = Q(file_name__iendswith=f".{ext}")
+        mime_hint = _EXT_MIME_HINTS.get(ext)
+        if mime_hint:
+            return qs.filter(ext_q | Q(mime_type__icontains=mime_hint))
+        return qs.filter(ext_q | Q(mime_type__icontains=token))
+
     @classmethod
     def _storage_dir(cls, project_id: int) -> Path:
         path = UPLOAD_ROOT / str(project_id)
@@ -36,13 +67,22 @@ class UploadedFileService:
         cls,
         user: User,
         project_id: int,
+        *,
+        keyword: str | None = None,
+        uploaded_by_id: int | None = None,
+        mime_type: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> PaginatedUploadedFiles:
         await ensure_project_viewer(project_id, user)
-        qs = EnvUploadedFile.filter(project_id=project_id, is_deleted=False).order_by(
-            "-updated_at"
-        )
+        qs = EnvUploadedFile.filter(project_id=project_id, is_deleted=False)
+        if keyword:
+            qs = qs.filter(file_name__icontains=keyword.strip())
+        if uploaded_by_id is not None:
+            qs = qs.filter(uploaded_by_id=uploaded_by_id)
+        if mime_type:
+            qs = cls._apply_type_filter(qs, mime_type)
+        qs = qs.order_by("-updated_at")
         total, items = await paginate(qs, page, page_size)
         return PaginatedUploadedFiles(
             total=total,

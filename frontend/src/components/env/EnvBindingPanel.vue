@@ -12,7 +12,7 @@
         <el-option
           v-for="db in dbOptions"
           :key="db.id"
-          :label="db.name"
+          :label="db.connection_name"
           :value="db.id"
         />
       </el-select>
