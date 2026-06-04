@@ -36,8 +36,6 @@ export function mergeParsedInterfaceItems(...sources) {
         continue
       }
       pickField(existing, normalized, 'summary')
-      pickField(existing, normalized, 'request_modules')
-      pickField(existing, normalized, 'api_path')
       pickField(existing, normalized, 'module_name')
       pickField(existing, normalized, 'catalog_path')
     }

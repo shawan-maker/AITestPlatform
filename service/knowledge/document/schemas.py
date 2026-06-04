@@ -59,8 +59,6 @@ class ParsedInterfaceItem(BaseModel):
     method: str
     path: str
     summary: str | None = None
-    request_modules: str | None = None
-    api_path: str | None = None
     module_name: str | None = None
     catalog_path: str | None = None
 

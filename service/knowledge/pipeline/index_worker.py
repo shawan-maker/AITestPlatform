@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from service.core.config import BASE_DIR, KNOWLEDGE_PARSE_ROOT
@@ -29,6 +29,8 @@ _AI_ROUTES = {
     ActualParseRoute.ai_multimodal,
     ActualParseRoute.auto_text,
 }
+
+_TIMEOUT_MINUTES = 10
 
 
 class IndexWorker:
@@ -78,7 +80,14 @@ class IndexWorker:
     @classmethod
     async def process_version(cls, version_id: int) -> None:
         version = await KnowledgeDocumentVersion.get_or_none(id=version_id)
-        if version is None or version.index_status != IndexStatus.pending:
+        if version is None:
+            return
+
+        # 超时检测：indexing / parsing 超过 _TIMEOUT_MINUTES 分钟自动标记为失败
+        if version.index_status in (IndexStatus.indexing, IndexStatus.parsing):
+            await cls._check_timeout(version)
+
+        if version.index_status != IndexStatus.pending:
             return
 
         document = await KnowledgeDocument.get_or_none(id=version.document_id)
@@ -142,38 +151,54 @@ class IndexWorker:
             )
 
         doc_id = f"knowledge/{document.id}/{version.id}"
-        if route == ActualParseRoute.ai_multimodal:
-            rag_backend, rag_doc_id = await RagGateway.index_multimodal(
-                workspace_key=workspace.workspace_key,
-                absolute_path=abs_path,
-                doc_id=doc_id,
+        try:
+            if route == ActualParseRoute.ai_multimodal:
+                rag_backend, rag_doc_id = await RagGateway.index_multimodal(
+                    workspace_key=workspace.workspace_key,
+                    absolute_path=abs_path,
+                    doc_id=doc_id,
+                )
+            else:
+                rag_backend, rag_doc_id = await RagGateway.index_text(
+                    workspace_key=workspace.workspace_key,
+                    absolute_path=abs_path,
+                    doc_id=doc_id,
+                )
+
+            version.rag_backend = rag_backend
+            version.rag_doc_id = rag_doc_id
+            version.index_status = IndexStatus.indexed
+            version.indexed_at = datetime.now(timezone.utc)
+            version.index_error = None
+            await version.save(
+                update_fields=[
+                    "rag_backend",
+                    "rag_doc_id",
+                    "index_status",
+                    "indexed_at",
+                    "index_error",
+                ]
             )
-        else:
-            rag_backend, rag_doc_id = await RagGateway.index_text(
-                workspace_key=workspace.workspace_key,
-                absolute_path=abs_path,
-                doc_id=doc_id,
-            )
 
-        version.rag_backend = rag_backend
-        version.rag_doc_id = rag_doc_id
-        version.index_status = IndexStatus.indexed
-        version.indexed_at = datetime.now(timezone.utc)
-        version.index_error = None
-        await version.save(
-            update_fields=[
-                "rag_backend",
-                "rag_doc_id",
-                "index_status",
-                "indexed_at",
-                "index_error",
-            ]
-        )
+            await cls._activate_version(version, document)
 
-        await cls._activate_version(version, document)
-
-        if document.doc_type == KnowledgeDocType.requirement:
-            await sync_requirement_candidate(document, version)
+            if document.doc_type == KnowledgeDocType.requirement:
+                await sync_requirement_candidate(document, version)
+        except Exception as exc:
+            logger.exception("RAG 处理失败 document=%s version=%s route=%s", document.id, version.id, route)
+            err_msg = str(exc) or repr(exc) or "RAG 处理未知错误"
+            try:
+                await cls._mark_index_failed(version, err_msg)
+            except Exception as save_err:
+                logger.error("标记 index_status=failed 也失败了 version=%s: %s", version.id, save_err)
+                # 二次兜底：只保存最核心的状态字段
+                try:
+                    version.index_status = IndexStatus.failed
+                    version.index_error = err_msg
+                    await version.save(update_fields=["index_status", "index_error"])
+                except Exception:
+                    logger.critical("版本 %s 状态回滚完全失败，状态可能卡在 indexing", version.id)
+            raise
 
     @classmethod
     async def _process_swagger(
@@ -299,6 +324,45 @@ class IndexWorker:
                 document.current_version_id = version.id
                 document.updated_at = datetime.now(timezone.utc)
                 await document.save(update_fields=["current_version_id", "updated_at"])
+
+    @classmethod
+    async def detect_and_fail_timeouts(cls) -> None:
+        """扫描所有 indexing/parsing 状态的版本，将超时的标记为 failed。"""
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=_TIMEOUT_MINUTES)
+        stale = await KnowledgeDocumentVersion.filter(
+            index_status__in=[IndexStatus.indexing, IndexStatus.parsing],
+        )
+        for v in stale:
+            # 用 created_at 作为近似时间（进入 indexing/parsing 后不再更新此字段）
+            since = v.created_at
+            if since.tzinfo is None:
+                since = since.replace(tzinfo=timezone.utc)
+            if since < cutoff:
+                logger.warning(
+                    "检测到超时版本 %s（状态=%s），自动标记为解析失败",
+                    v.id,
+                    v.index_status,
+                )
+                await cls._mark_index_failed(v, f"解析超时（超过{_TIMEOUT_MINUTES}分钟未完成）")
+
+    @classmethod
+    async def _check_timeout(cls, version: KnowledgeDocumentVersion) -> None:
+        """检测版本是否处理超时，超时则自动标记为 failed。"""
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=_TIMEOUT_MINUTES)
+        # 用 created_at 作为进入当前状态的近似时间
+        since = version.created_at
+        if since is None:
+            return
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
+        if since < cutoff:
+            logger.warning(
+                "版本 %s 状态 %s 已超过 %d 分钟，自动标记为解析失败",
+                version.id,
+                version.index_status,
+                _TIMEOUT_MINUTES,
+            )
+            await cls._mark_index_failed(version, f"解析超时（超过{_TIMEOUT_MINUTES}分钟未完成）")
 
     @classmethod
     async def _mark_index_failed(

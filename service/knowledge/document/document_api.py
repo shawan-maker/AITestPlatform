@@ -81,7 +81,7 @@ async def get_document(
     user: User = Depends(get_current_active_user),
 ):
     data = await DocumentService.get_detail(user, document_id)
-    return success(data=data.model_dump(mode="json"))
+    return success(data=data)
 
 
 @router.get("/documents/{document_id}/requirement-candidate", summary="当前版本需求候选")
@@ -196,7 +196,7 @@ async def get_parsed_interfaces(
     data = await DocumentService.get_version_parsed_interfaces(
         user, document_id, version_id
     )
-    return success(data=data.model_dump(mode="json"))
+    return success(data=data)
 
 
 @router.post("/documents/{document_id}/reindex", summary="重新索引当前版本")

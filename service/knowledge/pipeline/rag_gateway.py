@@ -1,8 +1,11 @@
 import asyncio
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from service.core.enums import RagBackend
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from rag.ragManager import RAGManager
@@ -39,8 +42,10 @@ class RagGateway:
         manager = cls._managers.get(workspace_key)
         if manager is None:
             manager = cls._get_manager_cls()()
+            logger.info("初始化 RAGManager workspace=%s", workspace_key)
+            await manager.init_rag(workspace_key)
             cls._managers[workspace_key] = manager
-        await manager.init_rag(workspace_key)
+            logger.info("RAGManager 初始化完成 workspace=%s", workspace_key)
         return manager
 
     @classmethod
@@ -62,8 +67,10 @@ class RagGateway:
                 workspace_key,
             )
             return RagBackend.rag_client, rag_doc_id
+        logger.info("RAGManager.index_text 开始 path=%s", absolute_path)
         manager = await cls._get_manager(workspace_key)
         await manager.add_document(absolute_path)
+        logger.info("RAGManager.index_text 完成 path=%s", absolute_path)
         return RagBackend.rag_manager, absolute_path
 
     @classmethod
@@ -81,8 +88,10 @@ class RagGateway:
                 workspace_key,
             )
             return RagBackend.rag_client, rag_doc_id
+        logger.info("RAGManager.index_multimodal 开始 path=%s", absolute_path)
         manager = await cls._get_manager(workspace_key)
         await manager.load_document(absolute_path)
+        logger.info("RAGManager.index_multimodal 完成 path=%s", absolute_path)
         return RagBackend.rag_manager, absolute_path
 
     @classmethod

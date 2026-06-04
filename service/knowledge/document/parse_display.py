@@ -97,6 +97,4 @@ def to_parsed_interface_item(item: dict[str, Any]) -> dict[str, Any]:
         "method": method,
         "path": path,
         "summary": summary or None,
-        "request_modules": format_request_modules(item) or None,
-        "api_path": format_api_doc_path(item) or None,
     }

@@ -8,7 +8,7 @@
         </el-button>
         <span class="default-layout__mobile-title">{{ t('common.appNameShort') }}</span>
       </header>
-      <main class="default-layout__main">
+      <main class="default-layout__main" :class="{ 'default-layout__main--flush-bottom': route.meta.flushBottom }">
         <router-view />
       </main>
     </div>
@@ -27,12 +27,14 @@
 
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { Menu } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import { useIsMobileSidebar } from '@/composables/useMediaQuery'
 
 const { t } = useI18n()
+const route = useRoute()
 const isMobile = useIsMobileSidebar()
 const drawerOpen = ref(false)
 const drawerSize = ref('50%')
@@ -98,6 +100,10 @@ onUnmounted(() => {
   min-height: 0;
   overflow: hidden;
   padding: 20px;
+
+  &--flush-bottom {
+    padding-bottom: 0;
+  }
 
   > * {
     flex: 1;

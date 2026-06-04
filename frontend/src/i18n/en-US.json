@@ -281,11 +281,25 @@
       }
     },
     "agent": {
+      "welcomePrefix": "Welcome to",
+      "welcomeBrand": "AI Test Platform",
       "functionalTab": "Functional Agent",
       "apiTab": "API Agent",
+      "composeHelpWrite": "Help me write",
+      "composeFunctionalMiddle": " manual test cases based on requirement",
+      "composeApiMiddle": " API test cases based on interface",
+      "selectRequirement": "Select requirement",
+      "selectInterface": "Select interface",
+      "composerPlaceholderFunctional": "Select a requirement or enter a custom description. Upload docs via the folder icon. Alt+Enter for newline, Enter to send.",
+      "composerPlaceholderApi": "Select an interface or paste API doc text. Alt+Enter for newline, Enter to send.",
+      "aiOptimize": "AI Optimize",
+      "aiOptimizeHint": "Inserted suggested prompt template",
+      "defaultFunctionalPrompt": "Generate manual test cases from the selected requirement",
+      "defaultApiPrompt": "Generate API test cases from the selected interface",
+      "apiBindingRequired": "Select an interface or enter API document text",
       "prompt": "Prompt",
       "promptPlaceholder": "Describe the test scenario…",
-      "chatPlaceholder": "Type a message, Ctrl+Enter to send…",
+      "chatPlaceholder": "Type a message. Alt+Enter for newline, Enter to send…",
       "generate": "Generate",
       "send": "Send",
       "save": "Save to Catalog",
@@ -449,7 +463,7 @@
     "parsing": "Parsing",
     "indexed": "Parsed",
     "parsed": "Parsed",
-    "failed": "Failed",
+    "failed": "Parse Failed",
     "na": "N/A"
   },
   "common": {
@@ -501,7 +515,7 @@
     "no": "No",
     "error": "Error",
     "success": "Success",
-    "failed": "Failed",
+    "failed": "Parse Failed",
     "message": "Message",
     "time": "Time",
     "warning": "Warning"
@@ -524,7 +538,7 @@
   },
   "execution": {
     "passed": "Passed",
-    "failed": "Failed",
+    "failed": "Parse Failed",
     "other": "Other",
     "noDefects": "No defects",
     "envSnapshot": "Environment snapshot",

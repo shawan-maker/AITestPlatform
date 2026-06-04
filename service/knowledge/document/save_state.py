@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from service.api_test.interface.models import ApiInterface
 from service.core.enums import IndexStatus, KnowledgeDocType, ParseStatus
-from service.functional_test.models import RequirementDoc
+from service.functional_test.requirement.models import RequirementCandidate, RequirementDoc
 from service.knowledge.document.import_marker import is_interfaces_imported
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
 
@@ -35,8 +35,13 @@ async def compute_version_save_state(
             source_document_id=document.id,
             source_document_version_id=version.id,
         ).exists()
+        has_candidate = await RequirementCandidate.filter(
+            source_document_id=document.id,
+            source_document_version_id=version.id,
+        ).exists()
         can_save_requirement = (
             not requirement_saved
+            and has_candidate
             and _enum_value(version.index_status) == IndexStatus.indexed.value
         )
 

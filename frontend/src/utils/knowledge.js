@@ -106,8 +106,6 @@ export function normalizeParsedInterfaceItem(item) {
     method,
     path,
     summary: item.summary ?? null,
-    request_modules: item.request_modules ?? item.requestModules ?? null,
-    api_path: item.api_path ?? item.apiPath ?? null,
     module_name: item.module_name ?? item.moduleName ?? null,
     catalog_path: item.catalog_path ?? item.catalogPath ?? null,
   }

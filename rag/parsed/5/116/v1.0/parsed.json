@@ -20,6 +20,9 @@
           "track_id": "scan_20250729_170612_abc123"
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -73,6 +76,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -134,6 +140,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -204,6 +213,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -267,6 +279,9 @@
           }
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -289,6 +304,9 @@
           "status": "success"
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -320,6 +338,9 @@
           "update_status": null
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -398,6 +419,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -441,6 +465,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -496,6 +523,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -559,6 +589,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -626,6 +659,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -740,6 +776,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -767,6 +806,9 @@
           }
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -790,6 +832,9 @@
           "track_id": ""
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -812,6 +857,9 @@
           "status": "cancellation_requested"
         }
       }
+    ],
+    "tags": [
+      "documents"
     ]
   },
   {
@@ -1042,6 +1090,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "query"
     ]
   },
   {
@@ -1261,6 +1312,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "query"
     ]
   },
   {
@@ -1539,6 +1593,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "query"
     ]
   },
   {
@@ -1558,6 +1615,9 @@
         "media_type": "application/json",
         "response_body": {}
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1602,6 +1662,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1652,6 +1715,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1708,6 +1774,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1752,6 +1821,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1825,6 +1897,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1890,6 +1965,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -1947,6 +2025,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -2012,6 +2093,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -2078,6 +2162,9 @@
           ]
         }
       }
+    ],
+    "tags": [
+      "graph"
     ]
   },
   {
@@ -2097,6 +2184,9 @@
         "media_type": "application/json",
         "response_body": {}
       }
+    ],
+    "tags": [
+      "ollama"
     ]
   },
   {
@@ -2116,6 +2206,9 @@
         "media_type": "application/json",
         "response_body": {}
       }
+    ],
+    "tags": [
+      "ollama"
     ]
   },
   {
@@ -2135,6 +2228,9 @@
         "media_type": "application/json",
         "response_body": {}
       }
+    ],
+    "tags": [
+      "ollama"
     ]
   },
   {
@@ -2154,6 +2250,9 @@
         "media_type": "application/json",
         "response_body": {}
       }
+    ],
+    "tags": [
+      "ollama"
     ]
   },
   {
@@ -2173,6 +2272,9 @@
         "media_type": "application/json",
         "response_body": {}
       }
+    ],
+    "tags": [
+      "ollama"
     ]
   },
   {
@@ -2192,7 +2294,8 @@
         "media_type": "application/json",
         "response_body": {}
       }
-    ]
+    ],
+    "tags": []
   },
   {
     "path": "/auth-status",
@@ -2211,7 +2314,8 @@
         "media_type": "application/json",
         "response_body": {}
       }
-    ]
+    ],
+    "tags": []
   },
   {
     "path": "/login",
@@ -2300,7 +2404,8 @@
           ]
         }
       }
-    ]
+    ],
+    "tags": []
   },
   {
     "path": "/health",
@@ -2319,6 +2424,7 @@
         "media_type": "application/json",
         "response_body": {}
       }
-    ]
+    ],
+    "tags": []
   }
 ]

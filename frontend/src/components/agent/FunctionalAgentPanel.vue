@@ -1,37 +1,46 @@
 <template>
-  <div class="functional-agent-panel agent-layout">
-    <AgentSessionSidebar
-      :title="t('page.agent.history')"
-      :sessions="sessions"
-      :active-id="activeSessionId"
-      :history-limit="historyLimit"
-      @new="showCreate = true"
-      @select="selectSession"
-    />
-    <AgentChatPanel
-      :messages="messages"
-      :streaming="streaming"
-      :streaming-text="streamingText"
-      :quick-tags="quickTags"
-      :placeholder="metaPlaceholder"
-      :disabled="!activeSessionId"
-      @send="sendMessage"
-      @stop="stopStream"
-    />
-    <FunctionalPreviewPanel
-      :output-payload="sessionDetail?.output_payload"
-      :catalogs="catalogs"
-      :can-edit="canEdit"
-      :saving="saving"
-      @save="saveCases"
-    />
+  <div class="functional-agent-panel" :class="{ 'functional-agent-panel--landing': composerMode }">
+    <template v-if="composerMode">
+      <div class="functional-agent-panel__landing">
+        <div class="functional-agent-panel__landing-spacer" />
+        <AgentComposer
+          agent-type="functional"
+          :streaming="streaming"
+          :disabled="!withProjectParams()"
+          :quick-tags="quickTags"
+          @send="handleComposerSend"
+        />
+      </div>
+    </template>
 
-    <CreateFunctionalSessionDialog
-      v-model="showCreate"
-      :loading="creating"
-      :initial-requirement="initialRequirement"
-      @submit="createSession"
-    />
+    <template v-else>
+      <div class="functional-agent-panel__workspace agent-layout">
+        <AgentSessionSidebar
+          :title="t('page.agent.history')"
+          :sessions="sessions"
+          :active-id="activeSessionId"
+          :history-limit="historyLimit"
+          @new="startNewSession"
+          @select="selectSession"
+        />
+        <AgentChatPanel
+          :messages="messages"
+          :streaming="streaming"
+          :streaming-text="streamingText"
+          :quick-tags="quickTags"
+          agent-type="functional"
+          @send="sendMessage"
+          @stop="stopStream"
+        />
+        <FunctionalPreviewPanel
+          :output-payload="sessionDetail?.output_payload"
+          :catalogs="catalogs"
+          :can-edit="canEdit"
+          :saving="saving"
+          @save="saveCases"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -54,13 +63,16 @@ import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import AgentSessionSidebar from '@/components/agent/AgentSessionSidebar.vue'
 import AgentChatPanel from '@/components/agent/AgentChatPanel.vue'
+import AgentComposer from '@/components/agent/AgentComposer.vue'
 import FunctionalPreviewPanel from '@/components/agent/FunctionalPreviewPanel.vue'
-import CreateFunctionalSessionDialog from '@/components/agent/CreateFunctionalSessionDialog.vue'
 
 const props = defineProps({
   autoNew: { type: Boolean, default: false },
   initialRequirement: { type: String, default: '' },
+  isActive: { type: Boolean, default: true },
 })
+
+const emit = defineEmits(['composer-mode-change'])
 
 const { t } = useI18n()
 const route = useRoute()
@@ -73,17 +85,16 @@ const sessionDetail = ref(null)
 const messages = ref([])
 const streaming = ref(false)
 const streamingText = ref('')
-const showCreate = ref(false)
 const creating = ref(false)
 const saving = ref(false)
 const catalogs = ref([])
 const meta = ref(null)
+const composerMode = ref(true)
 let abortController = null
 let tempMsgId = 0
 
 const historyLimit = computed(() => meta.value?.history_limit ?? 10)
 const quickTags = computed(() => meta.value?.functional_prompt_templates ?? [])
-const metaPlaceholder = computed(() => quickTags.value[0]?.placeholder ?? '')
 
 async function loadMeta() {
   try {
@@ -126,23 +137,45 @@ async function loadMessages() {
   messages.value = res.data.data ?? []
 }
 
+function setComposerMode(value) {
+  composerMode.value = value
+  emit('composer-mode-change', value)
+}
+
+function startNewSession() {
+  if (streaming.value) stopStream()
+  activeSessionId.value = null
+  sessionDetail.value = null
+  messages.value = []
+  setComposerMode(true)
+}
+
 async function selectSession(id) {
   if (streaming.value) stopStream()
   activeSessionId.value = id
+  setComposerMode(false)
   await Promise.all([refreshSession(), loadMessages()])
 }
 
-async function createSession(body) {
-  const params = withProjectParams()
-  if (!params) return
+async function createSessionFromComposer(payload) {
+  const params = withProjectParams({ project_id: payload.projectId })
+  if (!params) return null
+
   creating.value = true
   try {
-    const res = await createFunctionalSession({ ...params, ...body })
+    const body = {
+      ...params,
+      requirement_text: payload.requirementText,
+      knowledge_document_id: payload.knowledgeDocumentId,
+      user_prompt: payload.userPrompt,
+    }
+    const res = await createFunctionalSession(body)
     const session = res.data.data
-    showCreate.value = false
     await loadSessions()
-    await selectSession(session.id)
-    ElMessage.success(t('page.agent.sessionCreated'))
+    activeSessionId.value = session.id
+    setComposerMode(false)
+    await Promise.all([refreshSession(), loadMessages()])
+    return session
   } finally {
     creating.value = false
   }
@@ -161,7 +194,13 @@ async function sendMessage(content) {
   streamingText.value = ''
   abortController = new AbortController()
 
-  const userMsg = { id: `temp-${++tempMsgId}`, role: 'user', content, message_type: 'text', sequence: messages.value.length + 1 }
+  const userMsg = {
+    id: `temp-${++tempMsgId}`,
+    role: 'user',
+    content,
+    message_type: 'text',
+    sequence: messages.value.length + 1,
+  }
   messages.value = [...messages.value, userMsg]
 
   try {
@@ -225,6 +264,19 @@ async function sendMessage(content) {
   }
 }
 
+async function handleComposerSend(payload) {
+  if (streaming.value || creating.value) return
+
+  if (!payload.requirementText && !payload.knowledgeDocumentId) {
+    ElMessage.warning(t('page.agent.requirementRequired'))
+    return
+  }
+
+  const session = await createSessionFromComposer(payload)
+  if (!session) return
+  await sendMessage(payload.content)
+}
+
 async function saveCases(payload) {
   if (!activeSessionId.value) return
   saving.value = true
@@ -237,10 +289,18 @@ async function saveCases(payload) {
 }
 
 watch(
+  () => props.isActive,
+  (active) => {
+    if (active) emit('composer-mode-change', composerMode.value)
+  },
+  { immediate: true },
+)
+
+watch(
   () => route.query.requirement,
   (val) => {
     if (typeof val === 'string' && val && props.autoNew) {
-      showCreate.value = true
+      setComposerMode(true)
     }
   },
   { immediate: true },
@@ -249,20 +309,49 @@ watch(
 onMounted(async () => {
   await Promise.all([loadMeta(), loadCatalogs(), loadSessions()])
   if (props.autoNew || route.query.new === '1') {
-    showCreate.value = true
-  } else if (sessions.value.length) {
-    await selectSession(sessions.value[0].id)
+    setComposerMode(true)
   }
 })
 </script>
 
 <style scoped lang="scss">
+.functional-agent-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  &--landing {
+    justify-content: flex-end;
+  }
+}
+
+.functional-agent-panel__landing {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+
+.functional-agent-panel__landing-spacer {
+  flex: 1;
+  min-height: 24px;
+}
+
+.functional-agent-panel__workspace {
+  flex: 1;
+  min-height: 0;
+}
+
 .agent-layout {
   display: grid;
   grid-template-columns: 220px minmax(0, 1.1fr) minmax(0, 0.9fr);
-  min-height: 520px;
+  min-height: 0;
+  height: 100%;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 8px;
   overflow: hidden;
+  background: var(--el-bg-color);
 }
 </style>

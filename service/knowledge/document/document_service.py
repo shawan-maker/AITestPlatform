@@ -18,6 +18,7 @@ from service.knowledge.document.parsed_interface_service import resolve_parsed_i
 from service.knowledge.document.save_state import compute_version_save_state
 from service.knowledge.downstream.requirement_sync import _text_preview, default_candidate_title
 from service.knowledge.document.version_service import VersionService, version_label_from_seq
+from service.knowledge.pipeline.index_worker import IndexWorker
 from service.knowledge.document.workspace_service import WorkspaceService
 from service.knowledge.pipeline.index_worker import IndexWorker
 from service.knowledge.pipeline.rag_gateway import RagGateway
@@ -120,6 +121,7 @@ class DocumentService:
         user: User,
         query: KnowledgeDocumentListQuery,
     ) -> PaginatedKnowledgeDocuments:
+        await IndexWorker.detect_and_fail_timeouts()
         if query.project_id is not None:
             await ensure_project_viewer(query.project_id, user)
             qs = KnowledgeDocument.filter(project_id=query.project_id)

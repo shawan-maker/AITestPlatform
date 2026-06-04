@@ -24,17 +24,15 @@ def _interface_key(method: str, path: str) -> str:
 
 
 def item_needs_display_fields(item: ParsedInterfaceItem) -> bool:
-    return not (item.request_modules or item.api_path)
+    return not item.summary
 
 
 def build_parsed_item_from_raw(raw: dict[str, Any]) -> ParsedInterfaceItem | None:
     if not raw.get("method") or not raw.get("path"):
         return None
     display = to_parsed_interface_item(raw)
-    if not display.get("request_modules") and raw.get("request_modules"):
-        display["request_modules"] = raw.get("request_modules")
-    if not display.get("api_path") and raw.get("api_path"):
-        display["api_path"] = raw.get("api_path")
+    if not display.get("summary") and raw.get("summary"):
+        display["summary"] = str(raw["summary"])
     return ParsedInterfaceItem(**display)
 
 

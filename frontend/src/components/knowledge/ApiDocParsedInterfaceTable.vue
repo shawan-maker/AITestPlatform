@@ -17,22 +17,6 @@
         <template #default="{ row }">{{ row.summary || '—' }}</template>
       </AppTableColumn>
       <AppTableColumn
-        prop="request_modules"
-        variant="content"
-        :label="t('page.knowledge.requestModules')"
-        :min-width="160"
-      >
-        <template #default="{ row }">{{ row.request_modules || '—' }}</template>
-      </AppTableColumn>
-      <AppTableColumn
-        prop="api_path"
-        variant="content"
-        :label="t('page.knowledge.apiDocPath')"
-        :min-width="140"
-      >
-        <template #default="{ row }">{{ row.api_path || '—' }}</template>
-      </AppTableColumn>
-      <AppTableColumn
         v-if="showSavedColumns"
         prop="module_name"
         variant="content"

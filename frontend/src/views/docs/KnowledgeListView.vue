@@ -182,7 +182,7 @@ import CandidateConfirmDialog from '@/components/knowledge/CandidateConfirmDialo
 import KnowledgeImportWizard from '@/components/knowledge/KnowledgeImportWizard.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 
-const INDEX_STATUS_FILTER = INDEX_STATUS.filter((s) => s !== 'na')
+const INDEX_STATUS_FILTER = INDEX_STATUS.filter((s) => s !== 'na' && s !== 'parsing')
 
 const { t } = useI18n()
 const router = useRouter()
@@ -256,7 +256,6 @@ async function load(opts = {}) {
     total.value = res.data.data?.total ?? 0
   } finally {
     if (!opts.silent) loading.value = false
-    if (hasProcessingDocs.value) listPolling.start()
   }
 }
 
@@ -373,7 +372,10 @@ async function upload(formData) {
   }
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  if (hasProcessingDocs.value) listPolling.start()
+})
 
 watch(
   () => knowledgeStore.refreshSeq,

@@ -222,6 +222,7 @@ async function cancelCandidate(row) {
 async function removeRequirement(row) {
   await deleteRequirement(row.id)
   ElMessage.success(t('common.deleted'))
+  knowledgeStore.requestRefresh()
   load()
 }
 

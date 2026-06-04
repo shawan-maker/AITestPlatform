@@ -19,7 +19,6 @@ from service.core.enums import (
 )
 from service.core.exceptions import AppException
 from service.knowledge.document.permissions import ensure_document_viewer
-from service.knowledge.document.parse_display import format_api_doc_path, format_request_modules
 from service.knowledge.document.version_service import VersionService
 from service.project.models import ProjectModule
 from service.user.models import User
@@ -60,8 +59,6 @@ class ImportService:
                     method=method,
                     path=path,
                     summary=item.get("summary"),
-                    request_modules=format_request_modules(item) or None,
-                    api_path=format_api_doc_path(item) or None,
                     conflict=existing is not None,
                     existing_interface_id=existing.id if existing else None,
                 )
@@ -152,12 +149,21 @@ class ImportService:
                 if data.mode == "skip":
                     existing.source_document_id = data.document_id
                     existing.source_document_version_id = data.version_id
+                    if data.module_id is not None:
+                        existing.module_id = data.module_id
+                    if data.catalog_id:
+                        existing.catalog_id = data.catalog_id
                     existing.updated_by_id = user.id
-                    await existing.save(update_fields=[
+                    update_fields = [
                         "source_document_id",
                         "source_document_version_id",
                         "updated_by_id",
-                    ])
+                    ]
+                    if data.module_id is not None:
+                        update_fields.append("module_id")
+                    if data.catalog_id:
+                        update_fields.append("catalog_id")
+                    await existing.save(update_fields=update_fields)
                     skipped += 1
                     interface_ids.append(existing.id)
                     continue

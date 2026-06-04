@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from service.api_test.interface.models import ApiInterface, ApiInterfaceCatalog
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
-from service.knowledge.document.parse_display import format_api_doc_path, format_request_modules, to_parsed_interface_item
+from service.knowledge.document.parse_display import to_parsed_interface_item
 from service.knowledge.document.parse_enrich import load_raw_parse_items
 from service.knowledge.document.schemas import ParsedInterfaceItem
 from service.project.models import ProjectModule
@@ -74,10 +74,6 @@ def _enrich_from_saved(
         "module_name": module_name,
         "catalog_path": catalog_path or None,
     }
-    if not item.request_modules:
-        updates["request_modules"] = format_request_modules(raw) or None
-    if not item.api_path:
-        updates["api_path"] = format_api_doc_path(raw) or None
     if not item.summary and raw.get("summary"):
         updates["summary"] = str(raw["summary"])
     return item.model_copy(update=updates)
@@ -93,7 +89,6 @@ async def merge_saved_interface_info(
     saved_rows = list(
         await ApiInterface.filter(
             source_document_id=document.id,
-            source_document_version_id=version.id,
             is_current=True,
         ).values(
             "method",
@@ -111,7 +106,7 @@ async def merge_saved_interface_info(
         for item in items:
             key = f"{item.method.upper()}:{item.path}"
             raw = raw_by_key.get(key)
-            if raw and not (item.request_modules or item.api_path):
+            if raw:
                 enriched.append(ParsedInterfaceItem(**to_parsed_interface_item(raw)))
             else:
                 enriched.append(item)
@@ -162,7 +157,7 @@ async def merge_saved_interface_info(
         saved = saved_by_key.get(key)
         if saved is None:
             raw = raw_by_key.get(key)
-            if raw and not (item.request_modules or item.api_path):
+            if raw:
                 result.append(ParsedInterfaceItem(**to_parsed_interface_item(raw)))
             else:
                 result.append(item)

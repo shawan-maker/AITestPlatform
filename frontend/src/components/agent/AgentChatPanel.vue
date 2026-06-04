@@ -19,35 +19,21 @@
         <div class="chat-msg__bubble chat-msg__bubble--streaming">{{ streamingText }}</div>
       </div>
       <div v-if="streaming && !streamingText" class="chat-msg chat-msg--assistant">
-        <div class="chat-msg__bubble"><el-icon class="is-loading"><Loading /></el-icon> {{ t('page.agent.thinking') }}</div>
+        <div class="chat-msg__bubble">
+          <el-icon class="is-loading"><Loading /></el-icon>
+          {{ t('page.agent.thinking') }}
+        </div>
       </div>
     </el-scrollbar>
 
-    <div v-if="quickTags.length" class="agent-chat-panel__tags">
-      <el-tag
-        v-for="tag in quickTags"
-        :key="tag.id || tag.label"
-        class="quick-tag"
-        @click="appendTag(tag.placeholder || tag.label)"
-      >{{ tag.label }}</el-tag>
-    </div>
-
-    <div class="agent-chat-panel__input">
-      <el-input
-        v-model="draft"
-        type="textarea"
-        :rows="3"
-        :placeholder="placeholder || t('page.agent.chatPlaceholder')"
-        :disabled="disabled || streaming"
-        @keydown.ctrl.enter.prevent="send"
-      />
-      <div class="agent-chat-panel__actions">
-        <el-button type="primary" :loading="streaming" :disabled="disabled || !draft.trim()" @click="send">
-          {{ t('page.agent.send') }}
-        </el-button>
-        <el-button v-if="streaming" @click="$emit('stop')">{{ t('common.cancel') }}</el-button>
-      </div>
-    </div>
+    <AgentComposer
+      compact
+      hide-prompt-row
+      :agent-type="agentType"
+      :streaming="streaming"
+      :quick-tags="quickTags"
+      @send="onComposerSend"
+    />
   </div>
 </template>
 
@@ -55,20 +41,19 @@
 import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loading } from '@element-plus/icons-vue'
+import AgentComposer from '@/components/agent/AgentComposer.vue'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
   streaming: { type: Boolean, default: false },
   streamingText: { type: String, default: '' },
   quickTags: { type: Array, default: () => [] },
-  placeholder: { type: String, default: '' },
-  disabled: { type: Boolean, default: false },
+  agentType: { type: String, default: 'functional' },
 })
 
 const emit = defineEmits(['send', 'stop'])
 
 const { t } = useI18n()
-const draft = ref('')
 const scrollRef = ref(null)
 
 function roleLabel(role) {
@@ -81,15 +66,9 @@ function roleLabel(role) {
   return map[role] || role
 }
 
-function appendTag(text) {
-  draft.value = draft.value ? `${draft.value}\n${text}` : text
-}
-
-function send() {
-  const content = draft.value.trim()
-  if (!content || props.streaming || props.disabled) return
-  emit('send', content)
-  draft.value = ''
+function onComposerSend(payload) {
+  if (props.streaming) return
+  emit('send', payload.content)
 }
 
 watch(
@@ -107,36 +86,15 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 480px;
+  min-height: 0;
   border-right: 1px solid var(--el-border-color-lighter);
+  background: var(--el-bg-color);
 }
 
 .agent-chat-panel__messages {
   flex: 1;
+  min-height: 0;
   padding: 12px;
-}
-
-.agent-chat-panel__tags {
-  padding: 0 12px 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.quick-tag {
-  cursor: pointer;
-}
-
-.agent-chat-panel__input {
-  padding: 12px;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.agent-chat-panel__actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 .chat-msg {
