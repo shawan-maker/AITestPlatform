@@ -27,7 +27,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getFunctionFile, listEnvironments } from '@/api/environment'
 import { useProjectScope } from '@/composables/useProjectScope'
-import { useHalfScreenDialog } from '@/composables/useHalfScreenDialog'
+import { useHalfScreenDialog } from '@/composables/useContentDialog'
 import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 
 const props = defineProps({

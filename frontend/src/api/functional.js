@@ -46,8 +46,12 @@ export function getCaseCatalogTree(params = {}) {
   return request.get('/functional/case-catalogs/tree', { params })
 }
 
-export function createCaseCatalog(data) {
-  return request.post('/functional/case-catalogs', data)
+export function createCaseCatalog(data, params = {}) {
+  return request.post('/functional/case-catalogs', data, { params })
+}
+
+export function moveCaseCatalog(id, data) {
+  return request.post(`/functional/case-catalogs/${id}/move`, data)
 }
 
 export function updateCaseCatalog(id, data) {

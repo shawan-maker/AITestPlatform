@@ -71,6 +71,10 @@ class APIDocumentParserModel(BaseModel):
         default_factory=list,
         description="响应信息列表",
     )
+    tags: List[str] = Field(
+        default_factory=list,
+        description="OpenAPI/Swagger 标签分组",
+    )
 
     @field_validator("method")
     @classmethod

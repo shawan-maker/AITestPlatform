@@ -26,8 +26,13 @@ def resolve_parse_route(
 
     if ext in API_SPEC_EXTENSIONS:
         kind = detect_api_spec_kind(content)
+        if kind == "swagger":
+            return ActualParseRoute.swagger
+        if kind == "openapi":
+            return ActualParseRoute.openapi
         if kind is None:
             return ActualParseRoute.auto_text
+
     if ext in MULTIMODAL_EXTENSIONS:
         return ActualParseRoute.ai_multimodal
     return ActualParseRoute.ai_text

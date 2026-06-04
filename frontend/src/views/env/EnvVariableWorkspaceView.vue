@@ -2,7 +2,7 @@
   <div class="env-variable-workspace app-card">
     <PageHeader :title="t('page.env.variables.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <SplitView v-else>
+    <SplitView v-else :initial-width="380" :min-width="300" :max-width="560" :drawer-title="t('page.env.variables.envSection')">
       <template #left>
         <EnvVariableSidebar
           v-model:keyword="keyword"

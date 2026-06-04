@@ -8,9 +8,20 @@
       </template>
     </PageHeader>
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <SplitView v-else>
+    <SplitView v-else :initial-width="380" :min-width="300" :max-width="560" :drawer-title="t('page.functional.allCases')">
       <template #left>
-        <CatalogTree v-model="selectedCatalogId" :nodes="catalogTree" />
+        <FunctionalCatalogSidebar
+          :catalog-nodes="catalogTree"
+          :selected-catalog-id="selectedCatalogId"
+          :expanded-catalog-ids="expandedCatalogIds"
+          :can-edit="canEdit"
+          @select-root="selectRoot"
+          @select-catalog="selectCatalog"
+          @toggle-expand="onToggleExpand"
+          @section-command="onSectionCommand"
+          @catalog-command="onCatalogCommand"
+          @catalog-drop="onCatalogDrop"
+        />
       </template>
       <template #right>
         <SplitView :initial-width="360">
@@ -70,6 +81,15 @@
       :loading="batchUpdating"
       @submit="batchUpdate"
     />
+    <CatalogMoveDialog
+      v-model="showMoveDialog"
+      :catalog-nodes="catalogTree"
+      :exclude-catalog-id="moveCatalogId"
+      :dialog-title="t('page.functional.moveCatalog')"
+      :hint="t('page.functional.moveCatalogPrompt')"
+      :loading="moveLoading"
+      @confirm="confirmMoveCatalog"
+    />
   </div>
 </template>
 
@@ -77,17 +97,21 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   batchUpdateCases,
   createCase,
+  createCaseCatalog,
   deleteCase,
+  deleteCaseCatalog,
   exportCases as exportCasesApi,
   getCase,
   getCaseCatalogTree,
   listCases,
+  moveCaseCatalog,
   reorderCases,
   updateCase,
+  updateCaseCatalog,
 } from '@/api/functional'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
@@ -95,7 +119,6 @@ import { useDownload } from '@/composables/useDownload'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SplitView from '@/components/common/SplitView.vue'
-import CatalogTree from '@/components/tree/CatalogTree.vue'
 import SectionPanel from '@/components/common/SectionPanel.vue'
 import FormActionBar from '@/components/common/FormActionBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
@@ -103,6 +126,8 @@ import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import FunctionalCaseCreateDialog from '@/components/functional/FunctionalCaseCreateDialog.vue'
 import FunctionalBatchEditDialog from '@/components/functional/FunctionalBatchEditDialog.vue'
+import FunctionalCatalogSidebar from '@/components/tree/FunctionalCatalogSidebar.vue'
+import CatalogMoveDialog from '@/components/tree/CatalogMoveDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -112,6 +137,7 @@ const { downloadFromResponse } = useDownload()
 
 const catalogTree = ref([])
 const selectedCatalogId = ref(null)
+const expandedCatalogIds = ref([])
 const cases = ref([])
 const loading = ref(false)
 const selectedCase = ref(null)
@@ -125,6 +151,26 @@ const creating = ref(false)
 const batchUpdating = ref(false)
 const dragFromIndex = ref(null)
 
+const showMoveDialog = ref(false)
+const moveCatalogId = ref(null)
+const moveLoading = ref(false)
+
+function findCatalogNode(nodes, id) {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    if (node.children?.length) {
+      const found = findCatalogNode(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function getSiblingList(nodes, parentId) {
+  if (parentId == null) return nodes
+  return findCatalogNode(nodes, parentId)?.children ?? []
+}
+
 async function loadTree() {
   const params = withProjectParams()
   if (!params) return
@@ -133,7 +179,9 @@ async function loadTree() {
 }
 
 async function loadCases() {
-  const params = withProjectParams({ catalog_id: selectedCatalogId.value || undefined })
+  const params = withProjectParams({
+    catalog_id: selectedCatalogId.value || undefined,
+  })
   if (!params) return
   loading.value = true
   try {
@@ -141,6 +189,27 @@ async function loadCases() {
     cases.value = res.data.data?.items ?? []
   } finally {
     loading.value = false
+  }
+}
+
+function selectRoot() {
+  selectedCatalogId.value = null
+  selectedCase.value = null
+  loadCases()
+}
+
+function selectCatalog(catalogId) {
+  selectedCatalogId.value = catalogId
+  selectedCase.value = null
+  loadCases()
+}
+
+function onToggleExpand(catalogId) {
+  const idx = expandedCatalogIds.value.indexOf(catalogId)
+  if (idx >= 0) {
+    expandedCatalogIds.value = expandedCatalogIds.value.filter((id) => id !== catalogId)
+  } else {
+    expandedCatalogIds.value = [...expandedCatalogIds.value, catalogId]
   }
 }
 
@@ -189,6 +258,7 @@ async function createCaseItem(form) {
     ElMessage.success(t('common.saved'))
     showCreate.value = false
     loadCases()
+    loadTree()
   } finally {
     creating.value = false
   }
@@ -230,7 +300,110 @@ async function exportCases() {
   downloadFromResponse(res, 'cases.csv')
 }
 
+async function createCat(parentId = null) {
+  const params = withProjectParams()
+  if (!params) return
+  const { value } = await ElMessageBox.prompt(t('page.functional.catalogName'), t('page.functional.addCatalog'))
+  if (!value?.trim()) return
+  await createCaseCatalog({ name: value.trim(), parent_id: parentId ?? undefined }, params)
+  ElMessage.success(t('common.saved'))
+  await loadTree()
+}
+
+async function renameCat(catalog) {
+  const { value } = await ElMessageBox.prompt(t('page.functional.catalogName'), t('page.functional.renameCatalog'), {
+    inputValue: catalog.name,
+  })
+  if (!value?.trim() || value.trim() === catalog.name) return
+  await updateCaseCatalog(catalog.id, { name: value.trim() })
+  ElMessage.success(t('common.saved'))
+  await loadTree()
+}
+
+async function deleteCat(catalog) {
+  try {
+    await ElMessageBox.confirm(
+      t('page.functional.catalogDeleteConfirm', { name: catalog.name }),
+      t('common.warning'),
+      { type: 'warning' },
+    )
+    await deleteCaseCatalog(catalog.id)
+    if (selectedCatalogId.value === catalog.id) selectRoot()
+    ElMessage.success(t('common.deleted'))
+    await loadTree()
+  } catch (e) {
+    if (e !== 'cancel' && e?.response?.data?.message) {
+      ElMessage.error(e.response.data.message)
+    }
+  }
+}
+
+async function moveCat(catalogId, parentId, sortOrder) {
+  await moveCaseCatalog(catalogId, {
+    parent_id: parentId ?? 0,
+    sort_order: sortOrder,
+  })
+  await loadTree()
+}
+
+async function moveCatSibling(catalog, direction) {
+  const siblings = getSiblingList(catalogTree.value, catalog.parent_id)
+  const idx = siblings.findIndex((s) => s.id === catalog.id)
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= siblings.length) return
+  const other = siblings[targetIdx]
+  await moveCaseCatalog(catalog.id, { parent_id: catalog.parent_id ?? 0, sort_order: other.sort_order })
+  await moveCaseCatalog(other.id, { parent_id: other.parent_id ?? 0, sort_order: catalog.sort_order })
+  await loadTree()
+}
+
+function openMoveDialog(catalog) {
+  moveCatalogId.value = catalog.id
+  showMoveDialog.value = true
+}
+
+async function confirmMoveCatalog(parentId) {
+  if (!moveCatalogId.value) return
+  moveLoading.value = true
+  try {
+    await moveCat(moveCatalogId.value, parentId)
+    showMoveDialog.value = false
+    ElMessage.success(t('common.saved'))
+  } finally {
+    moveLoading.value = false
+  }
+}
+
+async function onCatalogDrop({ catalogId, targetParentId }) {
+  try {
+    await moveCat(catalogId, targetParentId)
+    ElMessage.success(t('common.saved'))
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  }
+}
+
+function onSectionCommand(cmd) {
+  if (cmd === 'catalog') createCat(null)
+}
+
+function onCatalogCommand(cmd, catalog) {
+  if (cmd === 'child') createCat(catalog.id)
+  else if (cmd === 'rename') renameCat(catalog)
+  else if (cmd === 'move') openMoveDialog(catalog)
+  else if (cmd === 'up') moveCatSibling(catalog, 'up')
+  else if (cmd === 'down') moveCatSibling(catalog, 'down')
+  else if (cmd === 'root') moveCat(catalog.id, 0)
+  else if (cmd === 'delete') deleteCat(catalog)
+}
+
+watch(projectId, () => {
+  loadTree()
+  loadCases()
+})
+
 watch(selectedCatalogId, loadCases)
+
 onMounted(async () => {
   await loadTree()
   await loadCases()

@@ -1,5 +1,11 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.env.function.debug')" width="640px">
+  <el-dialog
+    v-model="visible"
+    :title="t('page.env.function.debug')"
+    :width="dialogWidth"
+    :top="dialogTop"
+    :class="dialogClass"
+  >
     <el-form label-width="100px">
       <el-form-item :label="t('page.env.function.method')">
         <el-select v-model="selectedMethod" filterable style="width: 100%" @change="onMethodChange">
@@ -42,6 +48,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { debugFunctionFile, listEnvironments } from '@/api/environment'
 import { useProjectScope } from '@/composables/useProjectScope'
+import { useContentDialog } from '@/composables/useContentDialog'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -50,6 +57,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
+const { dialogWidth, dialogTop, dialogClass } = useContentDialog()
 const { withProjectParams } = useProjectScope()
 
 const visible = computed({

@@ -40,3 +40,5 @@ npm run dev
 ## 目录说明
 
 见 [service/design/04-前端页面的技术架构设计.md](../service/design/04-前端页面的技术架构设计.md)
+
+知识库「保存需求 / 保存接口」按钮与 API 解析列表展示规则见 [service/knowledge/README.md](../service/knowledge/README.md)。

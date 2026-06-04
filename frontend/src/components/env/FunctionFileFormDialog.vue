@@ -46,7 +46,7 @@ import {
   updateFunctionFile,
 } from '@/api/environment'
 import { useProjectScope } from '@/composables/useProjectScope'
-import { useHalfScreenDialog } from '@/composables/useHalfScreenDialog'
+import { useHalfScreenDialog } from '@/composables/useContentDialog'
 import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 
 const FUNCTION_FILE_PATTERN = /^[A-Za-z]([A-Za-z0-9_]*[A-Za-z0-9])?\.py$/

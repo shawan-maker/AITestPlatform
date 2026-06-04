@@ -32,6 +32,11 @@ class CatalogUpdateRequest(BaseModel):
     parent_id: int | None = None
 
 
+class CatalogMoveRequest(BaseModel):
+    parent_id: int | None = Field(default=None, ge=0, description="0 表示移到根级")
+    sort_order: int | None = Field(default=None, ge=0)
+
+
 class CatalogOut(BaseModel):
     id: int
     project_id: int

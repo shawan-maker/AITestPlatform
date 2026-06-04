@@ -316,6 +316,9 @@ class SwaggerDocumentParser:
         request_body = self._request_body_swagger2(spec, merged, operation)
         responses = self._build_responses(spec, operation)
 
+        tags_raw = operation.get("tags") or []
+        tags = [str(t) for t in tags_raw if t] if isinstance(tags_raw, list) else []
+
         return APIDocumentParserModel(
             path=path,
             method=method,
@@ -323,6 +326,7 @@ class SwaggerDocumentParser:
             parameters=params_bucket,
             requestBody=request_body,
             responses=responses,
+            tags=tags,
         )
 
     def _collect_parameters_swagger2(

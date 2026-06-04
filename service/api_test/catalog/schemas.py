@@ -13,7 +13,7 @@ class CatalogUpdateRequest(BaseModel):
 
 
 class CatalogMoveRequest(BaseModel):
-    parent_id: int | None = Field(default=None, ge=1)
+    parent_id: int | None = Field(default=None, ge=0, description="0 表示移到根级")
     sort_order: int | None = Field(default=None, ge=0)
 
 

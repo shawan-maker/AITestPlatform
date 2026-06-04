@@ -34,8 +34,8 @@
         @size-change="load"
       >
         <AppTableColumn prop="title" variant="content" :label="t('page.requirements.title')" />
-        <AppTableColumn v-if="activeTab === 'confirmed'" prop="module_name" variant="flex" :label="t('page.knowledge.module')" />
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
+        <AppTableColumn v-if="activeTab === 'confirmed'" prop="module_name" variant="flex" :label="t('page.knowledge.module')" :min-width="100" />
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="200">
           <template #default="{ row }">
             <template v-if="activeTab === 'pending'">
               <el-button v-if="canEdit" link type="primary" @click="openConfirm(row)">{{ t('page.requirements.confirm') }}</el-button>
@@ -57,14 +57,31 @@
     <CandidateConfirmDialog
       v-model="showConfirm"
       :candidate="selectedCandidate"
+      :document-id="selectedCandidate?.source_document_id"
+      :version-id="selectedCandidate?.source_document_version_id"
+      :document-title="selectedCandidate?.title"
       :loading="confirming"
       @confirm="doConfirm"
+      @cancel="onCancelCandidate"
     />
 
-    <el-dialog v-model="showCreate" :title="t('page.requirements.create')" width="480px">
+    <el-dialog
+      v-model="showCreate"
+      :title="t('page.requirements.create')"
+      :width="dialogWidth"
+      :top="dialogTop"
+      :class="dialogClass"
+    >
       <el-form label-width="80px">
         <el-form-item :label="t('page.requirements.title')"><el-input v-model="createForm.title" /></el-form-item>
-        <el-form-item :label="t('page.requirements.description')"><el-input v-model="createForm.description" type="textarea" /></el-form-item>
+        <el-form-item :label="t('page.requirements.description')">
+          <el-input
+            v-model="createForm.description"
+            type="textarea"
+            :rows="textareaRows"
+            :style="{ maxHeight: `${bodyMaxHeight}px` }"
+          />
+        </el-form-item>
         <el-form-item :label="t('page.knowledge.module')"><ModuleSelect v-model="createForm.module_id" /></el-form-item>
       </el-form>
       <template #footer>
@@ -76,7 +93,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -101,11 +118,16 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import ModuleSelect from '@/components/tree/ModuleSelect.vue'
 import CandidateConfirmDialog from '@/components/knowledge/CandidateConfirmDialog.vue'
+import { useContentDialog } from '@/composables/useContentDialog'
+import { useKnowledgeStore } from '@/stores/knowledge'
 
 const { t } = useI18n()
+const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(220)
+const textareaRows = computed(() => Math.max(8, Math.floor(bodyMaxHeight.value / 24)))
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
+const knowledgeStore = useKnowledgeStore()
 const { page, pageSize, total } = usePagination()
 
 const activeTab = ref('confirmed')
@@ -173,11 +195,21 @@ async function doConfirm(data) {
     await confirmCandidate(selectedCandidate.value.id, data)
     ElMessage.success(t('page.requirements.confirmed'))
     showConfirm.value = false
+    knowledgeStore.requestRefresh()
     loadPendingCount()
     load()
   } finally {
     confirming.value = false
   }
+}
+
+async function onCancelCandidate() {
+  if (!selectedCandidate.value) return
+  await deleteCandidate(selectedCandidate.value.id)
+  ElMessage.success(t('common.deleted'))
+  showConfirm.value = false
+  loadPendingCount()
+  load()
 }
 
 async function cancelCandidate(row) {

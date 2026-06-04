@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from typing import Literal
 
 from service.api_test.interface.models import ApiInterface
@@ -11,7 +10,7 @@ from service.api_test.interface.schemas import (
     ImportPreviewResult,
 )
 from service.api_test.permissions import ensure_api_editor, ensure_api_viewer
-from service.core.config import BASE_DIR
+from service.knowledge.document.parse_paths import resolve_parse_result_path
 from service.core.enums import (
     ActualParseRoute,
     ApiInterfaceSource,
@@ -20,6 +19,7 @@ from service.core.enums import (
 )
 from service.core.exceptions import AppException
 from service.knowledge.document.permissions import ensure_document_viewer
+from service.knowledge.document.parse_display import format_api_doc_path, format_request_modules
 from service.knowledge.document.version_service import VersionService
 from service.project.models import ProjectModule
 from service.user.models import User
@@ -60,6 +60,8 @@ class ImportService:
                     method=method,
                     path=path,
                     summary=item.get("summary"),
+                    request_modules=format_request_modules(item) or None,
+                    api_path=format_api_doc_path(item) or None,
                     conflict=existing is not None,
                     existing_interface_id=existing.id if existing else None,
                 )
@@ -148,6 +150,14 @@ class ImportService:
             )
             if existing is not None:
                 if data.mode == "skip":
+                    existing.source_document_id = data.document_id
+                    existing.source_document_version_id = data.version_id
+                    existing.updated_by_id = user.id
+                    await existing.save(update_fields=[
+                        "source_document_id",
+                        "source_document_version_id",
+                        "updated_by_id",
+                    ])
                     skipped += 1
                     interface_ids.append(existing.id)
                     continue
@@ -183,8 +193,8 @@ class ImportService:
 
     @staticmethod
     def _load_parse_items(parse_result_path: str) -> list[dict]:
-        parse_path = Path(BASE_DIR) / parse_result_path
-        if not parse_path.is_file():
+        parse_path = resolve_parse_result_path(parse_result_path)
+        if parse_path is None:
             raise AppException("解析结果文件不存在", 404)
         raw = parse_path.read_text(encoding="utf-8")
         items = json.loads(raw) if raw.strip() else []

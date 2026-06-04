@@ -22,11 +22,11 @@
         @page-change="load"
       >
         <AppTableColumn prop="connection_name" variant="content" :label="t('page.env.db.connectionName')" />
-        <AppTableColumn prop="server_name" variant="flex" :label="t('page.env.db.serverName')" />
-        <AppTableColumn prop="db_type" variant="flex" :label="t('page.env.db.dbType')" />
-        <AppTableColumn prop="username" variant="flex" :label="t('page.env.db.username')" />
+        <AppTableColumn prop="server_name" variant="fixed" :label="t('page.env.db.serverName')" :width="140" />
+        <AppTableColumn prop="db_type" variant="fixed" :label="t('page.env.db.dbType')" :width="100" />
+        <AppTableColumn prop="username" variant="fixed" :label="t('page.env.db.username')" :width="120" />
         <AppTableColumn prop="description" variant="content" :label="t('common.description')" />
-        <AppTableColumn prop="is_bound" variant="flex" :label="t('page.env.db.boundFilter')">
+        <AppTableColumn prop="is_bound" variant="fixed" :label="t('page.env.db.boundFilter')" :width="100">
           <template #default="{ row }">
             {{ row.is_bound ? t('page.env.db.bound') : t('page.env.db.unbound') }}
           </template>

@@ -125,6 +125,9 @@ class OpenAPIDocumentParser:
         request_body = self._request_body_oas3(spec, operation)
         responses = self._build_responses_oas3(spec, operation)
 
+        tags_raw = operation.get("tags") or []
+        tags = [str(t) for t in tags_raw if t] if isinstance(tags_raw, list) else []
+
         return APIDocumentParserModel(
             path=path,
             method=method,
@@ -132,6 +135,7 @@ class OpenAPIDocumentParser:
             parameters=params_bucket,
             requestBody=request_body,
             responses=responses,
+            tags=tags,
         )
 
     def _collect_parameters_oas3(

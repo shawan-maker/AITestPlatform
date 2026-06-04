@@ -2,7 +2,9 @@
   <el-dialog
     :model-value="modelValue"
     :title="t('page.agent.newSession')"
-    width="520px"
+    :width="dialogWidth"
+    :top="dialogTop"
+    :class="dialogClass"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <el-form label-width="100px">
@@ -10,13 +12,18 @@
         <el-input v-model="form.title" maxlength="200" show-word-limit />
       </el-form-item>
       <el-form-item :label="t('page.agent.requirement')">
-        <el-input v-model="form.requirement_text" type="textarea" :rows="4" />
+        <el-input
+          v-model="form.requirement_text"
+          type="textarea"
+          :rows="textareaRows"
+          :style="{ maxHeight: `${bodyMaxHeight}px` }"
+        />
       </el-form-item>
       <el-form-item :label="t('page.agent.knowledgeDoc')">
         <el-input-number v-model="form.knowledge_document_id" :min="1" controls-position="right" style="width: 100%" />
       </el-form-item>
       <el-form-item :label="t('page.agent.prompt')">
-        <el-input v-model="form.user_prompt" type="textarea" :rows="2" />
+        <el-input v-model="form.user_prompt" type="textarea" :rows="3" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -27,9 +34,10 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { useContentDialog } from '@/composables/useContentDialog'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -40,6 +48,8 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'submit'])
 
 const { t } = useI18n()
+const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(240)
+const textareaRows = computed(() => Math.max(6, Math.floor(bodyMaxHeight.value / 28)))
 
 const form = reactive({
   title: '',

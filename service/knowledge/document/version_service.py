@@ -130,7 +130,12 @@ class VersionService:
         document.updated_at = version.created_at
         await document.save(update_fields=["updated_at"])
         await KnowledgeStorage.enforce_retention(document.id)
-        IndexWorker.schedule(version.id)
+        await IndexWorker.start_processing(
+            version.id,
+            doc_type=document.doc_type,
+            parse_mode=document.parse_mode,
+            content=content,
+        )
         return version
 
     @classmethod
@@ -168,6 +173,7 @@ class VersionService:
             file_size=version.file_size,
             mime_type=version.mime_type,
             index_status=version.index_status,
+            parse_status=version.parse_status,
             index_error=version.index_error,
             file_expired=version.file_expired,
             created_by_id=version.created_by_id,

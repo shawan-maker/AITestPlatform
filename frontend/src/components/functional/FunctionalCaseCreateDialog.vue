@@ -1,5 +1,11 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.functional.create')" width="480px">
+  <el-dialog
+    v-model="visible"
+    :title="t('page.functional.create')"
+    :width="dialogWidth"
+    :top="dialogTop"
+    :class="dialogClass"
+  >
     <el-form :model="form" label-width="80px">
       <el-form-item :label="t('page.functional.caseName')" required>
         <el-input v-model="form.name" />
@@ -10,7 +16,12 @@
         </el-select>
       </el-form-item>
       <el-form-item :label="t('page.functional.steps')">
-        <el-input v-model="form.steps" type="textarea" :rows="5" />
+        <el-input
+          v-model="form.steps"
+          type="textarea"
+          :rows="textareaRows"
+          :style="{ maxHeight: `${bodyMaxHeight}px` }"
+        />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -23,6 +34,7 @@
 <script setup>
 import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useContentDialog } from '@/composables/useContentDialog'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -33,6 +45,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit'])
 const { t } = useI18n()
+const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(220)
+
+const textareaRows = computed(() => Math.max(8, Math.floor(bodyMaxHeight.value / 24)))
 
 const visible = computed({
   get: () => props.modelValue,

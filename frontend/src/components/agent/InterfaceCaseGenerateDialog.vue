@@ -2,7 +2,9 @@
   <el-dialog
     :model-value="modelValue"
     :title="t('page.apiCases.generateCases')"
-    width="640px"
+    :width="dialogWidth"
+    :top="dialogTop"
+    :class="dialogClass"
     destroy-on-close
     @update:model-value="$emit('update:modelValue', $event)"
     @closed="reset"
@@ -16,7 +18,7 @@
       </el-form-item>
     </el-form>
 
-    <div v-else v-loading="previewLoading">
+    <div v-else v-loading="previewLoading" class="case-preview-body" :style="{ maxHeight: `${bodyMaxHeight}px` }">
       <el-alert v-if="sessionError" type="error" :title="sessionError" show-icon :closable="false" />
       <el-checkbox-group v-else v-model="selectedIndexes">
         <div v-for="(item, index) in baseCases" :key="index" class="case-row">
@@ -52,6 +54,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmCaseGeneration, generateCasePreview } from '@/api/apiTest'
+import { useContentDialog } from '@/composables/useContentDialog'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 
 const props = defineProps({
@@ -62,6 +65,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'confirmed'])
 
 const { t } = useI18n()
+const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(220)
 
 const step = ref('form')
 const userPrompt = ref('')
@@ -138,6 +142,10 @@ async function runConfirm() {
 </script>
 
 <style scoped lang="scss">
+.case-preview-body {
+  overflow: auto;
+}
+
 .case-row {
   padding: 8px 0;
   border-bottom: 1px solid var(--el-border-color-lighter);

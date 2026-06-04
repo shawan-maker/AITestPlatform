@@ -36,6 +36,11 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import ModuleSelect from '@/components/tree/ModuleSelect.vue'
+import {
+  documentTitleFromFileName,
+  formatDocumentVersionTitle,
+  INITIAL_VERSION_LABEL,
+} from '@/utils/knowledge'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -68,15 +73,25 @@ watch(
   },
 )
 
+function inferParseModeFromFile(selected) {
+  if (!selected?.name) return 'ai'
+  const ext = selected.name.toLowerCase()
+  if (/\.(json|ya?ml)$/.test(ext)) return 'ai'
+  return form.parse_mode || 'ai'
+}
+
 function titleFromFile(selected) {
-  if (!selected?.name) return ''
-  return selected.name.replace(/\.[^.]+$/, '')
+  const base = documentTitleFromFileName(selected?.name)
+  return formatDocumentVersionTitle(base, INITIAL_VERSION_LABEL)
 }
 
 function onFileChange(e) {
   file.value = e.target.files?.[0] ?? null
-  if (file.value && !form.title.trim()) {
+  if (file.value) {
     form.title = titleFromFile(file.value)
+  }
+  if (file.value && form.doc_type === 'api_doc') {
+    form.parse_mode = inferParseModeFromFile(file.value)
   }
 }
 

@@ -7,23 +7,48 @@
       </template>
     </PageHeader>
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <SplitView v-else>
+    <SplitView v-else :initial-width="380" :min-width="300" :max-width="560" :drawer-title="t('page.apiCases.allInterfaces')">
       <template #left>
-        <CatalogTree v-model="selectedCatalogId" :nodes="catalogTree" />
+        <ApiCatalogSidebar
+          v-model:keyword="sidebarKeyword"
+          :catalog-nodes="catalogTree"
+          :selected-catalog-id="selectedCatalogId"
+          :selected-interface-id="selectedInterfaceId"
+          :expanded-catalog-ids="expandedCatalogIds"
+          :interfaces-by-catalog="interfacesByCatalog"
+          :can-edit="canEdit"
+          @select-root="selectRoot"
+          @select-catalog="selectCatalog"
+          @select-interface="selectInterfaceFromTree"
+          @toggle-expand="onToggleExpand"
+          @section-command="onSectionCommand"
+          @catalog-command="onCatalogCommand"
+          @interface-command="onInterfaceCommand"
+          @load-more-interfaces="loadMoreCatalogInterfaces"
+          @interface-reorder="onSidebarInterfaceReorder"
+          @catalog-drop="onCatalogDrop"
+        />
       </template>
       <template #right>
-        <div v-if="interfaces.length" class="interface-bar">
-          <el-select v-model="selectedInterfaceId" style="width: 280px">
-            <el-option v-for="i in interfaces" :key="i.id" :label="`${i.method} ${i.path}`" :value="i.id" />
-          </el-select>
-          <template v-if="selectedInterfaceId && canEdit">
-            <el-button link @click="openEditInterface">{{ t('common.edit') }}</el-button>
-            <el-button link type="danger" @click="removeInterface">{{ t('common.delete') }}</el-button>
-            <el-button link @click="copyCurrentInterface">{{ t('common.copy') }}</el-button>
-          </template>
-        </div>
-        <EmptyState v-else-if="selectedCatalogId" :title="t('page.apiCases.noInterface')" />
-        <el-tabs v-if="selectedInterfaceId" v-model="activeTab">
+        <InterfaceListPanel
+          v-model:search-query="listSearch"
+          :interfaces="interfaceList"
+          :loading="listLoading"
+          :total="listTotal"
+          :page="listPage"
+          :page-size="listPageSize"
+          :selected-interface-id="selectedInterfaceId"
+          :can-edit="canEdit"
+          @search="onListSearch"
+          @select="selectInterfaceFromList"
+          @edit="openEditInterface"
+          @copy="copyInterfaceItem"
+          @delete="removeInterfaceItem"
+          @page-change="onListPageChange"
+          @size-change="onListSizeChange"
+          @reorder="onListInterfaceReorder"
+        />
+        <el-tabs v-if="selectedInterfaceId" v-model="activeTab" class="interface-tabs">
           <el-tab-pane :label="t('page.apiCases.tabDebug')" name="debug">
             <el-form inline>
               <EnvironmentSelect v-model="environmentId" />
@@ -86,18 +111,25 @@
       </template>
     </SplitView>
 
-    <ImportInterfacesWizard v-model="showImport" :catalog-id="selectedCatalogId" @imported="loadInterfaces" />
+    <ImportInterfacesWizard v-model="showImport" :catalog-id="selectedCatalogId" @imported="onImported" />
     <InterfaceFormDrawer
       v-model="showInterfaceForm"
-      :catalog-id="selectedCatalogId"
+      :catalog-id="interfaceFormCatalogId"
       :interface-data="editingInterface"
-      @saved="loadInterfaces"
+      @saved="onInterfaceSaved"
     />
     <InterfaceCaseGenerateDialog
       v-if="selectedInterfaceId"
       v-model="showGenerate"
       :interface-id="selectedInterfaceId"
       @confirmed="loadCases"
+    />
+    <CatalogMoveDialog
+      v-model="showMoveDialog"
+      :catalog-nodes="catalogTree"
+      :exclude-catalog-id="moveCatalogId"
+      :loading="moveLoading"
+      @confirm="confirmMoveCatalog"
     />
   </div>
 </template>
@@ -109,7 +141,9 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   copyInterface,
+  createApiCatalog,
   debugRunInterface,
+  deleteApiCatalog,
   deleteInterface,
   fillDebugFromDoc,
   getApiCatalogTree,
@@ -117,16 +151,19 @@ import {
   getDocPreview,
   listApiCases,
   listDependencies,
+  listInterfaces as fetchInterfaces,
   listInterfacesByCatalog,
+  moveApiCatalog,
   reanalyzeDependencies,
+  reorderInterfaces,
   saveDebugTemplate,
+  updateApiCatalog,
 } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import SplitView from '@/components/common/SplitView.vue'
-import CatalogTree from '@/components/tree/CatalogTree.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
@@ -134,6 +171,9 @@ import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 import ImportInterfacesWizard from '@/components/api-test/ImportInterfacesWizard.vue'
 import InterfaceFormDrawer from '@/components/api-test/InterfaceFormDrawer.vue'
 import InterfaceCaseGenerateDialog from '@/components/agent/InterfaceCaseGenerateDialog.vue'
+import ApiCatalogSidebar from '@/components/tree/ApiCatalogSidebar.vue'
+import InterfaceListPanel from '@/components/api-test/InterfaceListPanel.vue'
+import CatalogMoveDialog from '@/components/tree/CatalogMoveDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -142,9 +182,19 @@ const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 
 const catalogTree = ref([])
-const selectedCatalogId = ref(Number(route.query.catalogId) || null)
-const interfaces = ref([])
-const selectedInterfaceId = ref(Number(route.query.interfaceId) || null)
+const selectedCatalogId = ref(route.query.catalogId ? Number(route.query.catalogId) : null)
+const selectedInterfaceId = ref(route.query.interfaceId ? Number(route.query.interfaceId) : null)
+const sidebarKeyword = ref('')
+const expandedCatalogIds = ref([])
+const interfacesByCatalog = ref({})
+
+const interfaceList = ref([])
+const listLoading = ref(false)
+const listTotal = ref(0)
+const listPage = ref(1)
+const listPageSize = ref(20)
+const listSearch = ref('')
+
 const activeTab = ref(route.query.tab || 'debug')
 const environmentId = ref(null)
 const requestJson = ref('{}')
@@ -161,9 +211,34 @@ const showImport = ref(false)
 const showInterfaceForm = ref(false)
 const showGenerate = ref(false)
 const editingInterface = ref(null)
+const interfaceFormCatalogId = ref(null)
+
+const showMoveDialog = ref(false)
+const moveCatalogId = ref(null)
+const moveLoading = ref(false)
 
 const depJson = computed(() => JSON.stringify(dependencies.value ?? {}, null, 2))
-const docPreviewJson = computed(() => docPreview.value ? JSON.stringify(docPreview.value, null, 2) : '')
+const docPreviewJson = computed(() => (docPreview.value ? JSON.stringify(docPreview.value, null, 2) : ''))
+
+function findCatalogNode(nodes, id) {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    if (node.children?.length) {
+      const found = findCatalogNode(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function findCatalogName(nodes, catalogId) {
+  return findCatalogNode(nodes, catalogId)?.name ?? String(catalogId)
+}
+
+function getSiblingList(nodes, parentId) {
+  if (parentId == null) return nodes
+  return findCatalogNode(nodes, parentId)?.children ?? []
+}
 
 async function loadTree() {
   const params = withProjectParams()
@@ -172,13 +247,101 @@ async function loadTree() {
   catalogTree.value = res.data.data?.items ?? res.data.data ?? []
 }
 
-async function loadInterfaces() {
-  if (!selectedCatalogId.value) return
-  const res = await listInterfacesByCatalog(selectedCatalogId.value, withProjectParams({ page: 1, page_size: 100 }))
-  interfaces.value = res.data.data?.items ?? []
-  if (!interfaces.value.find((i) => i.id === selectedInterfaceId.value)) {
-    selectedInterfaceId.value = interfaces.value[0]?.id ?? null
+async function loadInterfaceList() {
+  const params = withProjectParams()
+  if (!params) return
+  listLoading.value = true
+  try {
+    const query = {
+      page: listPage.value,
+      page_size: listPageSize.value,
+      q: listSearch.value.trim() || undefined,
+    }
+    let res
+    if (selectedCatalogId.value == null) {
+      res = await fetchInterfaces({ ...params, ...query })
+    } else {
+      res = await listInterfacesByCatalog(selectedCatalogId.value, query)
+    }
+    const data = res.data.data
+    interfaceList.value = data?.items ?? []
+    listTotal.value = data?.total ?? interfaceList.value.length
+  } finally {
+    listLoading.value = false
   }
+}
+
+async function loadCatalogInterfaces(catalogId, append = false) {
+  const prev = interfacesByCatalog.value[catalogId] || { items: [], page: 0, total: 0 }
+  const page = append ? prev.page + 1 : 1
+  if (append) {
+    interfacesByCatalog.value = {
+      ...interfacesByCatalog.value,
+      [catalogId]: { ...prev, loadingMore: true },
+    }
+  }
+  try {
+    const res = await listInterfacesByCatalog(catalogId, { page, page_size: 20 })
+    const items = res.data.data?.items ?? []
+    const total = res.data.data?.total ?? items.length
+    interfacesByCatalog.value = {
+      ...interfacesByCatalog.value,
+      [catalogId]: {
+        items: append ? [...prev.items, ...items] : items,
+        page,
+        total,
+        hasMore: page * 20 < total,
+        loadingMore: false,
+      },
+    }
+  } catch {
+    if (append) {
+      interfacesByCatalog.value = {
+        ...interfacesByCatalog.value,
+        [catalogId]: { ...prev, loadingMore: false },
+      }
+    }
+  }
+}
+
+function selectRoot() {
+  selectedCatalogId.value = null
+  selectedInterfaceId.value = null
+  listPage.value = 1
+  loadInterfaceList()
+}
+
+function selectCatalog(catalogId) {
+  selectedCatalogId.value = catalogId
+  selectedInterfaceId.value = null
+  listPage.value = 1
+  loadInterfaceList()
+}
+
+function selectInterfaceFromTree(iface, catalogId) {
+  selectedCatalogId.value = catalogId
+  selectedInterfaceId.value = iface.id
+}
+
+function selectInterfaceFromList(row) {
+  selectedInterfaceId.value = row.id
+  if (row.catalog_id != null) selectedCatalogId.value = row.catalog_id
+}
+
+function onToggleExpand(catalogId) {
+  const idx = expandedCatalogIds.value.indexOf(catalogId)
+  if (idx >= 0) {
+    expandedCatalogIds.value = expandedCatalogIds.value.filter((id) => id !== catalogId)
+  } else {
+    expandedCatalogIds.value = [...expandedCatalogIds.value, catalogId]
+    if (!interfacesByCatalog.value[catalogId]?.items?.length) {
+      loadCatalogInterfaces(catalogId)
+    }
+  }
+}
+
+function loadMoreCatalogInterfaces(catalogId) {
+  loadCatalogInterfaces(catalogId, true)
 }
 
 async function loadTemplate() {
@@ -260,28 +423,194 @@ async function reanalyze() {
 
 function openCreateInterface() {
   editingInterface.value = null
+  interfaceFormCatalogId.value = selectedCatalogId.value
   showInterfaceForm.value = true
 }
 
-function openEditInterface() {
-  editingInterface.value = interfaces.value.find((i) => i.id === selectedInterfaceId.value) ?? null
+function openEditInterface(row) {
+  editingInterface.value = row
+  interfaceFormCatalogId.value = row.catalog_id ?? selectedCatalogId.value
   showInterfaceForm.value = true
 }
 
-async function removeInterface() {
+async function removeInterfaceItem(row) {
+  const id = row?.id ?? selectedInterfaceId.value
   await ElMessageBox.confirm(t('common.deleteConfirm'), { type: 'warning' })
-  await deleteInterface(selectedInterfaceId.value)
-  selectedInterfaceId.value = null
-  await loadInterfaces()
+  await deleteInterface(id)
+  if (selectedInterfaceId.value === id) selectedInterfaceId.value = null
+  await refreshAfterInterfaceChange()
   ElMessage.success(t('common.deleted'))
 }
 
-async function copyCurrentInterface() {
-  const res = await copyInterface(selectedInterfaceId.value)
+async function copyInterfaceItem(row) {
+  const id = row?.id ?? selectedInterfaceId.value
+  const res = await copyInterface(id)
   const copied = res.data.data
   ElMessage.success(copied?.path ? `${t('common.copy')}: ${copied.path}` : t('common.saved'))
-  await loadInterfaces()
+  await refreshAfterInterfaceChange()
   if (copied?.id) selectedInterfaceId.value = copied.id
+}
+
+function onInterfaceCommand(cmd, iface) {
+  if (cmd === 'edit') openEditInterface(iface)
+  else if (cmd === 'copy') copyInterfaceItem(iface)
+  else if (cmd === 'delete') removeInterfaceItem(iface)
+}
+
+async function refreshAfterInterfaceChange() {
+  await loadTree()
+  await loadInterfaceList()
+  for (const catalogId of expandedCatalogIds.value) {
+    await loadCatalogInterfaces(catalogId)
+  }
+}
+
+function onImported() {
+  refreshAfterInterfaceChange()
+}
+
+function onInterfaceSaved() {
+  refreshAfterInterfaceChange()
+}
+
+function onListSearch() {
+  listPage.value = 1
+  loadInterfaceList()
+}
+
+function onListPageChange(page) {
+  listPage.value = page
+  loadInterfaceList()
+}
+
+function onListSizeChange(size) {
+  listPageSize.value = size
+  listPage.value = 1
+  loadInterfaceList()
+}
+
+async function applyInterfaceReorder(catalogId, orderedIds, targetCatalogId) {
+  await reorderInterfaces({
+    catalog_id: catalogId,
+    ordered_ids: orderedIds,
+    target_catalog_id: targetCatalogId,
+  })
+  await refreshAfterInterfaceChange()
+}
+
+async function onListInterfaceReorder({ fromIndex, toIndex }) {
+  const reordered = [...interfaceList.value]
+  const [item] = reordered.splice(fromIndex, 1)
+  reordered.splice(toIndex, 0, item)
+  interfaceList.value = reordered
+  const catalogId = selectedCatalogId.value ?? item.catalog_id
+  if (!catalogId) return
+  await applyInterfaceReorder(catalogId, reordered.map((i) => i.id))
+}
+
+async function onSidebarInterfaceReorder({ catalogId, fromIndex, toIndex }) {
+  const state = interfacesByCatalog.value[catalogId]
+  if (!state) return
+  const reordered = [...state.items]
+  const [item] = reordered.splice(fromIndex, 1)
+  reordered.splice(toIndex, 0, item)
+  interfacesByCatalog.value = {
+    ...interfacesByCatalog.value,
+    [catalogId]: { ...state, items: reordered },
+  }
+  await applyInterfaceReorder(catalogId, reordered.map((i) => i.id))
+}
+
+async function createCat(parentId = null) {
+  const params = withProjectParams()
+  if (!params) return
+  const { value } = await ElMessageBox.prompt(t('page.apiCases.catalogName'), t('page.apiCases.addCatalog'))
+  if (!value?.trim()) return
+  await createApiCatalog({ name: value.trim(), parent_id: parentId ?? undefined }, params)
+  ElMessage.success(t('common.saved'))
+  await loadTree()
+}
+
+async function renameCat(catalog) {
+  const { value } = await ElMessageBox.prompt(t('page.apiCases.catalogName'), t('page.apiCases.renameCatalog'), {
+    inputValue: catalog.name,
+  })
+  if (!value?.trim() || value.trim() === catalog.name) return
+  await updateApiCatalog(catalog.id, { name: value.trim() })
+  ElMessage.success(t('common.saved'))
+  await loadTree()
+}
+
+async function deleteCat(catalog) {
+  await ElMessageBox.confirm(
+    t('page.apiCases.catalogDeleteConfirm', { name: catalog.name }),
+    t('common.warning'),
+    { type: 'warning' },
+  )
+  await deleteApiCatalog(catalog.id)
+  if (selectedCatalogId.value === catalog.id) selectRoot()
+  ElMessage.success(t('common.deleted'))
+  await loadTree()
+  await loadInterfaceList()
+}
+
+async function moveCat(catalogId, parentId, sortOrder) {
+  await moveApiCatalog(catalogId, {
+    parent_id: parentId ?? 0,
+    sort_order: sortOrder,
+  })
+  await loadTree()
+}
+
+async function moveCatSibling(catalog, direction) {
+  const siblings = getSiblingList(catalogTree.value, catalog.parent_id)
+  const idx = siblings.findIndex((s) => s.id === catalog.id)
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= siblings.length) return
+  const other = siblings[targetIdx]
+  await moveApiCatalog(catalog.id, { parent_id: catalog.parent_id ?? 0, sort_order: other.sort_order })
+  await moveApiCatalog(other.id, { parent_id: other.parent_id ?? 0, sort_order: catalog.sort_order })
+  await loadTree()
+}
+
+function openMoveDialog(catalog) {
+  moveCatalogId.value = catalog.id
+  showMoveDialog.value = true
+}
+
+async function confirmMoveCatalog(parentId) {
+  if (!moveCatalogId.value) return
+  moveLoading.value = true
+  try {
+    await moveCat(moveCatalogId.value, parentId)
+    showMoveDialog.value = false
+    ElMessage.success(t('common.saved'))
+  } finally {
+    moveLoading.value = false
+  }
+}
+
+async function onCatalogDrop({ catalogId, targetParentId }) {
+  try {
+    await moveCat(catalogId, targetParentId)
+    ElMessage.success(t('common.saved'))
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  }
+}
+
+function onSectionCommand(cmd) {
+  if (cmd === 'catalog') createCat(null)
+}
+
+function onCatalogCommand(cmd, catalog) {
+  if (cmd === 'child') createCat(catalog.id)
+  else if (cmd === 'rename') renameCat(catalog)
+  else if (cmd === 'move') openMoveDialog(catalog)
+  else if (cmd === 'up') moveCatSibling(catalog, 'up')
+  else if (cmd === 'down') moveCatSibling(catalog, 'down')
+  else if (cmd === 'root') moveCat(catalog.id, 0)
+  else if (cmd === 'delete') deleteCat(catalog)
 }
 
 function goAgentCenter() {
@@ -295,16 +624,27 @@ function goAgentCenter() {
   })
 }
 
-watch(selectedCatalogId, () => { loadInterfaces() })
-watch(selectedInterfaceId, () => {
-  loadTemplate()
-  loadCases()
-  loadDeps()
-  loadDocPreview()
+watch(projectId, () => {
+  loadTree()
+  loadInterfaceList()
 })
+
+watch(selectedCatalogId, () => {
+  loadInterfaceList()
+})
+
+watch(selectedInterfaceId, () => {
+  if (selectedInterfaceId.value) {
+    loadTemplate()
+    loadCases()
+    loadDeps()
+    loadDocPreview()
+  }
+})
+
 onMounted(async () => {
   await loadTree()
-  await loadInterfaces()
+  await loadInterfaceList()
   if (selectedInterfaceId.value) {
     await loadTemplate()
     await loadCases()
@@ -315,14 +655,30 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.interface-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.interface-tabs {
+  margin-top: 16px;
+}
+
+.editor-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.editor-label {
+  font-size: 13px;
+  margin-bottom: 4px;
+  color: var(--el-text-color-secondary);
+}
+
+.doc-dep-toolbar,
+.case-toolbar {
   margin-bottom: 12px;
 }
-.editor-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-.editor-label { font-size: 13px; margin-bottom: 4px; color: var(--el-text-color-secondary); }
-.doc-dep-toolbar, .case-toolbar { margin-bottom: 12px; }
-h4 { font-size: 14px; margin: 0 0 8px; }
+
+h4 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
 </style>

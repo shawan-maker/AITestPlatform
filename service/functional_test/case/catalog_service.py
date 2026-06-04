@@ -3,6 +3,7 @@ from service.functional_test.case.models import FunctionalCase, FunctionalCaseCa
 from service.functional_test.permissions import ensure_case_editor, ensure_case_viewer
 from service.functional_test.case.schemas import (
     CatalogCreateRequest,
+    CatalogMoveRequest,
     CatalogOut,
     CatalogTreeNode,
     CatalogUpdateRequest,
@@ -11,7 +12,7 @@ from service.user.models import User
 
 
 class CatalogService:
-    MAX_LEVEL = 3
+    MAX_LEVEL = 5
 
     @classmethod
     async def _get_catalog_or_404(
@@ -108,7 +109,7 @@ class CatalogService:
         if data.parent_id is not None:
             parent = await cls._get_catalog_or_404(data.parent_id, project_id)
             if parent.level >= cls.MAX_LEVEL:
-                raise AppException("目录层级不能超过 3 级", 400)
+                raise AppException(f"目录层级不能超过 {cls.MAX_LEVEL} 级", 400)
             level = parent.level + 1
         name = data.name.strip()
         await cls._ensure_unique_sibling_name(project_id, data.parent_id, name)
@@ -139,7 +140,7 @@ class CatalogService:
             else:
                 parent = await cls._get_catalog_or_404(data.parent_id, catalog.project_id)
                 if parent.level >= cls.MAX_LEVEL:
-                    raise AppException("目录层级不能超过 3 级", 400)
+                    raise AppException(f"目录层级不能超过 {cls.MAX_LEVEL} 级", 400)
                 level = parent.level + 1
                 parent_id = data.parent_id
 
@@ -152,6 +153,32 @@ class CatalogService:
         if data.parent_id is not None:
             catalog.parent_id = parent_id
             catalog.level = level
+        await catalog.save()
+        return cls._to_out(catalog)
+
+    @classmethod
+    async def move(
+        cls, user: User, catalog_id: int, data: CatalogMoveRequest
+    ) -> CatalogOut:
+        catalog = await cls._get_catalog_or_404(catalog_id)
+        await ensure_case_editor(catalog.project_id, user)
+        if data.parent_id is not None:
+            if data.parent_id == catalog_id:
+                raise AppException("不能将目录移动到自身", 400)
+            if data.parent_id == 0:
+                catalog.parent_id = None
+                catalog.level = 1
+            else:
+                parent = await cls._get_catalog_or_404(data.parent_id, catalog.project_id)
+                if parent.level >= cls.MAX_LEVEL:
+                    raise AppException(f"目录层级不能超过 {cls.MAX_LEVEL} 级", 409)
+                subtree_ids = await cls._collect_subtree_ids(catalog_id)
+                if data.parent_id in subtree_ids:
+                    raise AppException("不能将目录移动到其子目录下", 400)
+                catalog.parent_id = data.parent_id
+                catalog.level = parent.level + 1
+        if data.sort_order is not None:
+            catalog.sort_order = data.sort_order
         await catalog.save()
         return cls._to_out(catalog)
 

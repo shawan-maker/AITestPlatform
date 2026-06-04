@@ -10,6 +10,11 @@
     </PageHeader>
 
     <SectionPanel v-if="req" :title="t('page.requirements.title')">
+      <el-descriptions v-if="req.source_version_label" :column="1" border class="source-meta">
+        <el-descriptions-item :label="t('page.knowledge.versionNo')">
+          {{ req.source_version_label }}
+        </el-descriptions-item>
+      </el-descriptions>
       <el-form :model="form" label-width="100px" class="detail-form">
         <el-form-item :label="t('page.requirements.title')"><el-input v-model="form.title" /></el-form-item>
         <el-form-item :label="t('page.requirements.description')"><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item>
@@ -99,6 +104,12 @@ onMounted(load)
 </script>
 
 <style scoped>
+.source-meta {
+  margin-bottom: 16px;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
 .detail-form {
   max-width: 640px;
   margin: 0 auto;

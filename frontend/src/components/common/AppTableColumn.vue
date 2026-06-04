@@ -41,6 +41,7 @@ const props = defineProps({
   columnKey: { type: String, default: undefined },
   width: { type: [Number, String], default: undefined },
   minWidth: { type: [Number, String], default: undefined },
+  maxWidth: { type: [Number, String], default: undefined },
   showOverflowTooltip: { type: Boolean, default: true },
   actions: { type: Boolean, default: false },
 })
@@ -58,7 +59,9 @@ const columnAttrs = computed(() => {
 })
 
 const resolvedWidth = computed(() => {
-  if (props.variant === 'fixed') return props.width ?? 100
+  if (props.variant === 'fixed' && !layout?.widths.value?.[columnId]) {
+    return props.width ?? 100
+  }
   const assigned = layout?.widths.value?.[columnId]
   if (assigned) return assigned
   return undefined
@@ -87,8 +90,10 @@ onMounted(() => {
     prop: props.prop,
     label: props.label,
     columnKey: props.columnKey,
+    actions: props.actions,
     width: props.type === 'selection' ? (props.width ?? 48) : props.width,
     minWidth: props.minWidth ? Number(props.minWidth) : undefined,
+    maxWidth: props.maxWidth ? Number(props.maxWidth) : undefined,
   })
 })
 
@@ -101,9 +106,10 @@ onUnmounted(() => {
 .app-table-column__actions {
   display: flex;
   align-items: center;
-  justify-content: space-evenly;
+  justify-content: center;
+  flex-wrap: wrap;
   width: 100%;
-  gap: 4px;
+  gap: 2px 4px;
 
   :deep(.el-button) {
     margin: 0;

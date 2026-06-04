@@ -20,14 +20,25 @@ export const USER_STATUS = {
   INACTIVE: false,
 }
 
-export const INDEX_STATUS = ['pending', 'indexing', 'parsing', 'indexed', 'failed']
+export const INDEX_STATUS = ['pending', 'indexing', 'parsing', 'indexed', 'failed', 'na']
 
+export const INDEX_STATUS_TYPES = {
+  pending: 'info',
+  indexing: 'warning',
+  parsing: 'warning',
+  indexed: 'success',
+  failed: 'danger',
+  na: 'info',
+}
+
+/** @deprecated use INDEX_STATUS_TYPES + i18n indexStatus.* */
 export const INDEX_STATUS_MAP = {
   pending: { type: 'info', label: 'pending' },
   indexing: { type: 'warning', label: 'indexing' },
   parsing: { type: 'warning', label: 'parsing' },
   indexed: { type: 'success', label: 'indexed' },
   failed: { type: 'danger', label: 'failed' },
+  na: { type: 'info', label: 'na' },
 }
 
 export const DEFECT_STATUS = ['init', 'open', 'in_progress', 'resolved', 'closed']

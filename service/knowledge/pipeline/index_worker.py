@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -8,15 +9,20 @@ from service.core.enums import (
     ActualParseRoute,
     IndexStatus,
     KnowledgeDocType,
+    ParseMode,
     ParseStatus,
 )
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
 from service.knowledge.document.storage import KnowledgeStorage
+from service.knowledge.document.parse_enrich import merge_raw_with_display
 from service.knowledge.downstream.requirement_sync import sync_requirement_candidate
 from service.knowledge.pipeline.rag_gateway import RagGateway
+from service.knowledge.rules.file_rules import detect_api_spec_kind
 from service.knowledge.rules.parse_router import resolve_parse_route
 from utils.parser.openapi_document_parser import parse_openapi_file
 from utils.parser.swagger_document_parser import parse_swagger_file
+
+logger = logging.getLogger(__name__)
 
 _AI_ROUTES = {
     ActualParseRoute.ai_text,
@@ -26,9 +32,48 @@ _AI_ROUTES = {
 
 
 class IndexWorker:
+    _tasks: set[asyncio.Task] = set()
+
     @classmethod
     def schedule(cls, version_id: int) -> asyncio.Task:
-        return asyncio.create_task(cls.process_version(version_id))
+        task = asyncio.create_task(cls._run_version(version_id))
+        cls._tasks.add(task)
+        task.add_done_callback(cls._tasks.discard)
+        return task
+
+    @classmethod
+    async def _run_version(cls, version_id: int) -> None:
+        try:
+            await cls.process_version(version_id)
+        except Exception:
+            logger.exception("知识库版本 %s 索引/解析失败", version_id)
+
+    @classmethod
+    async def start_processing(
+        cls,
+        version_id: int,
+        *,
+        doc_type: KnowledgeDocType,
+        parse_mode: ParseMode,
+        content: bytes,
+    ) -> None:
+        """接口规范文件同步解析，其余文档异步索引（避免 create_task 被 GC 或未调度）。"""
+        if cls._should_process_inline(doc_type, parse_mode, content):
+            await cls.process_version(version_id)
+        else:
+            cls.schedule(version_id)
+
+    @staticmethod
+    def _should_process_inline(
+        doc_type: KnowledgeDocType,
+        parse_mode: ParseMode,
+        content: bytes,
+    ) -> bool:
+        if doc_type != KnowledgeDocType.api_doc:
+            return False
+        if parse_mode in (ParseMode.swagger, ParseMode.openapi):
+            return True
+        return detect_api_spec_kind(content) in ("swagger", "openapi")
 
     @classmethod
     async def process_version(cls, version_id: int) -> None:
@@ -213,7 +258,10 @@ class IndexWorker:
         )
         dest_dir.mkdir(parents=True, exist_ok=True)
         dest = dest_dir / "parsed.json"
-        dest.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        enriched = [
+            merge_raw_with_display(item) for item in data if isinstance(item, dict)
+        ]
+        dest.write_text(json.dumps(enriched, ensure_ascii=False, indent=2), encoding="utf-8")
         return str(dest.relative_to(BASE_DIR))
 
     @classmethod

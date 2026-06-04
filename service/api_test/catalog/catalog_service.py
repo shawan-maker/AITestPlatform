@@ -168,14 +168,18 @@ class CatalogService:
         if data.parent_id is not None:
             if data.parent_id == catalog_id:
                 raise AppException("不能将目录移动到自身", 400)
-            parent = await cls._get_catalog_or_404(data.parent_id, catalog.project_id)
-            if parent.level >= cls.MAX_LEVEL:
-                raise AppException(f"目录层级不能超过 {cls.MAX_LEVEL} 级", 409)
-            subtree_ids = await cls._collect_subtree_ids(catalog_id)
-            if data.parent_id in subtree_ids:
-                raise AppException("不能将目录移动到其子目录下", 400)
-            catalog.parent_id = data.parent_id
-            catalog.level = parent.level + 1
+            if data.parent_id == 0:
+                catalog.parent_id = None
+                catalog.level = 1
+            else:
+                parent = await cls._get_catalog_or_404(data.parent_id, catalog.project_id)
+                if parent.level >= cls.MAX_LEVEL:
+                    raise AppException(f"目录层级不能超过 {cls.MAX_LEVEL} 级", 409)
+                subtree_ids = await cls._collect_subtree_ids(catalog_id)
+                if data.parent_id in subtree_ids:
+                    raise AppException("不能将目录移动到其子目录下", 400)
+                catalog.parent_id = data.parent_id
+                catalog.level = parent.level + 1
         if data.sort_order is not None:
             catalog.sort_order = data.sort_order
         await catalog.save()

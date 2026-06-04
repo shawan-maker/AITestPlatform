@@ -22,6 +22,10 @@ export function moveApiCatalog(id, data) {
 }
 
 // Interfaces
+export function listInterfaces(params = {}) {
+  return request.get('/api-test/interfaces', { params })
+}
+
 export function listInterfacesByCatalog(catalogId, params = {}) {
   return request.get(`/api-test/catalogs/${catalogId}/interfaces`, { params })
 }

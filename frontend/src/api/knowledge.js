@@ -21,8 +21,8 @@ export function uploadVersion(documentId, formData) {
   })
 }
 
-export function listVersions(documentId) {
-  return request.get(`/knowledge/documents/${documentId}/versions`)
+export function listVersions(documentId, params = {}) {
+  return request.get(`/knowledge/documents/${documentId}/versions`, { params })
 }
 
 export function downloadDocument(documentId) {
@@ -43,10 +43,32 @@ export function deleteDocument(documentId) {
   return request.delete(`/knowledge/documents/${documentId}`)
 }
 
-export function previewImport(documentId, data) {
-  return request.post(`/knowledge/documents/${documentId}/import-interfaces/preview`, data)
+export function getRequirementCandidate(documentId) {
+  return request.get(`/knowledge/documents/${documentId}/requirement-candidate`)
 }
 
-export function confirmImport(documentId, data) {
-  return request.post(`/knowledge/documents/${documentId}/import-interfaces`, data)
+export function getVersionTextPreview(documentId, versionId) {
+  return request.get(`/knowledge/documents/${documentId}/versions/${versionId}/text-preview`)
+}
+
+export function getParsedInterfaces(documentId, versionId, config = {}) {
+  return request.get(
+    `/knowledge/documents/${documentId}/versions/${versionId}/parsed-interfaces`,
+    { silentError: true, ...config },
+  )
+}
+
+export function previewImport(documentId, versionId, config = {}) {
+  return request.post(
+    `/knowledge/documents/${documentId}/versions/${versionId}/import-interfaces/preview`,
+    null,
+    config,
+  )
+}
+
+export function confirmImport(documentId, versionId, data) {
+  return request.post(
+    `/knowledge/documents/${documentId}/versions/${versionId}/import-interfaces`,
+    data,
+  )
 }

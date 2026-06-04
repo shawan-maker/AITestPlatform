@@ -108,6 +108,7 @@ class CandidateConfirmRequest(BaseModel):
     description: str | None = None
     priority: int = Field(default=3, ge=1, le=4)
     status: RequirementStatus = RequirementStatus.draft
+    direct_save: bool = False
 
 
 PaginatedCandidates = Paginated[CandidateBrief]

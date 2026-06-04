@@ -2,6 +2,7 @@ from pathlib import Path
 
 from service.core.config import BASE_DIR, KNOWLEDGE_UPLOAD_ROOT
 from service.knowledge.document.models import KnowledgeDocumentVersion
+from service.knowledge.document.parse_paths import resolve_storage_file_path
 
 
 class KnowledgeStorage:
@@ -33,7 +34,10 @@ class KnowledgeStorage:
 
     @classmethod
     def absolute_path(cls, relative_path: str) -> Path:
-        return BASE_DIR / relative_path
+        resolved = resolve_storage_file_path(relative_path)
+        if resolved is not None:
+            return resolved
+        return BASE_DIR / relative_path.replace("\\", "/")
 
     @classmethod
     def delete_file(cls, relative_path: str | None) -> None:

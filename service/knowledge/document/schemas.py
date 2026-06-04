@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from service.core.enums import IndexStatus, KnowledgeDocType, ParseMode
+from service.core.enums import IndexStatus, KnowledgeDocType, ParseMode, ParseStatus
 from service.core.pagination import Paginated
 
 
@@ -26,6 +26,7 @@ class KnowledgeVersionBrief(BaseModel):
     file_size: int | None
     mime_type: str | None
     index_status: IndexStatus
+    parse_status: ParseStatus | None = None
     index_error: str | None
     file_expired: bool
     created_by_id: int | None
@@ -37,21 +38,45 @@ class KnowledgeDocumentBrief(BaseModel):
     id: int
     project_id: int
     project_name: str
+    module_id: int | None = None
+    module_name: str | None = None
     title: str
     doc_type: KnowledgeDocType
     parse_mode: ParseMode
     version_label: str | None
+    current_version_id: int | None = None
     index_status: IndexStatus | None
+    parse_status: ParseStatus | None = None
+    requirement_saved: bool = False
+    can_save_requirement: bool = False
+    interfaces_saved: bool = False
+    can_save_interfaces: bool = False
     updated_at: datetime
     updated_by_username: str | None
 
 
+class ParsedInterfaceItem(BaseModel):
+    method: str
+    path: str
+    summary: str | None = None
+    request_modules: str | None = None
+    api_path: str | None = None
+    module_name: str | None = None
+    catalog_path: str | None = None
+
+
 class KnowledgeDocumentDetail(KnowledgeDocumentBrief):
-    module_id: int | None
     workspace_id: int
     current_version: KnowledgeVersionBrief | None
     created_at: datetime
+    parsed_interfaces: list[ParsedInterfaceItem] = Field(default_factory=list)
 
 
 PaginatedKnowledgeDocuments = Paginated[KnowledgeDocumentBrief]
 PaginatedKnowledgeVersions = Paginated[KnowledgeVersionBrief]
+
+
+class ParsedInterfaceListResult(BaseModel):
+    document_id: int
+    version_id: int
+    items: list[ParsedInterfaceItem]

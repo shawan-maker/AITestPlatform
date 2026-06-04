@@ -8,25 +8,50 @@ from service.knowledge.document.storage import KnowledgeStorage
 _PREVIEW_LEN = 8000
 
 
-def _text_preview(version: KnowledgeDocumentVersion) -> str | None:
+def read_version_full_text(version: KnowledgeDocumentVersion) -> str | None:
     if version.file_expired or not version.file_path:
         return None
     path = KnowledgeStorage.absolute_path(version.file_path)
     if not path.is_file():
         return None
     try:
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        preview = text[:_PREVIEW_LEN].strip()
-        return preview or None
+        text = path.read_text(encoding="utf-8", errors="ignore").strip()
+        return text or None
     except OSError:
         return None
+
+
+import re
+
+_VERSION_SUFFIX_RE = re.compile(r"_v\d+\.\d+$")
+
+
+def default_candidate_title(
+    document: KnowledgeDocument,
+    version: KnowledgeDocumentVersion,
+) -> str:
+    doc_name = (document.title or "document").strip()
+    label = version.version_label
+    suffix = f"_{label}"
+    if doc_name.endswith(suffix):
+        return doc_name
+    base = _VERSION_SUFFIX_RE.sub("", doc_name).strip() or doc_name
+    return f"{base}_{label}"
+
+
+def _text_preview(version: KnowledgeDocumentVersion) -> str | None:
+    text = read_version_full_text(version)
+    if not text:
+        return None
+    preview = text[:_PREVIEW_LEN].strip()
+    return preview or None
 
 
 async def sync_requirement_candidate(
     document: KnowledgeDocument,
     version: KnowledgeDocumentVersion,
 ) -> RequirementCandidate:
-    title = f"{document.title} ({version.version_label})"
+    title = default_candidate_title(document, version)
     description = _text_preview(version)
     now = datetime.now(timezone.utc)
 

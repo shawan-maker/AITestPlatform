@@ -11,7 +11,7 @@ from service.user.models import User
 
 
 class CatalogService:
-    MAX_LEVEL = 3
+    MAX_LEVEL = 5
 
     @classmethod
     async def _get_catalog_or_404(cls, catalog_id: int, project_id: int | None = None) -> EnvCatalog:

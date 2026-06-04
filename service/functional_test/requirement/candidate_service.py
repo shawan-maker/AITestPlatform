@@ -1,3 +1,5 @@
+import re
+
 from tortoise.transactions import in_transaction
 
 from service.core.enums import IndexStatus, RequirementSourceType
@@ -122,6 +124,65 @@ class CandidateService:
         return await cls._to_detail(cand)
 
     @classmethod
+    async def _resolve_confirm_title(
+        cls,
+        project_id: int,
+        cand: RequirementCandidate,
+        data: CandidateConfirmRequest,
+    ) -> str:
+        from service.knowledge.document.models import KnowledgeDocument
+
+        document = await KnowledgeDocument.get_or_none(id=cand.source_document_id)
+        default_title = document.title if document else cand.title
+        title = (data.title or default_title).strip()
+        if not title:
+            raise AppException("需求标题不能为空", 400)
+        if await RequirementDoc.filter(project_id=project_id, title=title).exists():
+            if data.direct_save:
+                title = await cls._unique_title(project_id, title)
+            else:
+                raise AppException("同一项目内需求标题已存在", 409)
+        return title
+
+    @staticmethod
+    async def _unique_title(project_id: int, base: str) -> str:
+        stem = re.sub(r"_copy\d*$", "", base)
+        candidate = f"{stem}_copy"
+        suffix = 2
+        while await RequirementDoc.filter(project_id=project_id, title=candidate).exists():
+            candidate = f"{stem}_copy{suffix}"
+            suffix += 1
+        return candidate
+
+    @classmethod
+    async def get_for_document_version(
+        cls,
+        user: User,
+        document_id: int,
+        version_id: int | None = None,
+    ) -> CandidateDetail | None:
+        from service.knowledge.document.models import KnowledgeDocument
+        from service.knowledge.document.permissions import ensure_document_viewer
+
+        document = await ensure_document_viewer(document_id, user)
+        vid = version_id or document.current_version_id
+        if not vid:
+            return None
+        cand = await RequirementCandidate.get_or_none(
+            source_document_id=document_id,
+            source_document_version_id=vid,
+        )
+        if cand is None:
+            return None
+        existing = await RequirementDoc.get_or_none(
+            source_document_id=document_id,
+            source_document_version_id=vid,
+        )
+        if existing is not None:
+            return None
+        return await cls._to_detail(cand)
+
+    @classmethod
     async def confirm(
         cls,
         user: User,
@@ -141,11 +202,7 @@ class CandidateService:
         module_id = data.module_id if data.module_id is not None else cand.module_id
         await cls._validate_module(cand.project_id, module_id)
 
-        title = (data.title or cand.title).strip()
-        if not title:
-            raise AppException("需求标题不能为空", 400)
-        if await RequirementDoc.filter(project_id=cand.project_id, title=title).exists():
-            raise AppException("同一项目内需求标题已存在", 409)
+        title = await cls._resolve_confirm_title(cand.project_id, cand, data)
 
         async with in_transaction():
             doc = await RequirementDoc.create(

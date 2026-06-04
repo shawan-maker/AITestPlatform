@@ -69,6 +69,8 @@ class ImportPreviewItem(BaseModel):
     method: str
     path: str
     summary: str | None
+    request_modules: str | None = None
+    api_path: str | None = None
     conflict: bool = False
     existing_interface_id: int | None = None
 

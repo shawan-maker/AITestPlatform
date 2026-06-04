@@ -3,7 +3,11 @@ from fastapi import APIRouter, Depends, Query
 from service.core.deps import get_current_active_user
 from service.core.response import success
 from service.functional_test.case.catalog_service import CatalogService
-from service.functional_test.case.schemas import CatalogCreateRequest, CatalogUpdateRequest
+from service.functional_test.case.schemas import (
+    CatalogCreateRequest,
+    CatalogMoveRequest,
+    CatalogUpdateRequest,
+)
 from service.user.models import User
 
 router = APIRouter(tags=["功能测试-用例目录"])
@@ -45,3 +49,13 @@ async def delete_catalog(
 ):
     await CatalogService.delete(user, catalog_id)
     return success(message="目录删除成功")
+
+
+@router.post("/case-catalogs/{catalog_id}/move", summary="移动用例目录")
+async def move_catalog(
+    catalog_id: int,
+    body: CatalogMoveRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await CatalogService.move(user, catalog_id, body)
+    return success(data=data, message="目录移动成功")

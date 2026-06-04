@@ -10,8 +10,13 @@ from service.knowledge.document.schemas import (
     KnowledgeDocumentDetail,
     KnowledgeDocumentListQuery,
     PaginatedKnowledgeDocuments,
+    ParsedInterfaceItem,
+    ParsedInterfaceListResult,
 )
 from service.knowledge.document.storage import KnowledgeStorage
+from service.knowledge.document.parsed_interface_service import resolve_parsed_interfaces
+from service.knowledge.document.save_state import compute_version_save_state
+from service.knowledge.downstream.requirement_sync import _text_preview, default_candidate_title
 from service.knowledge.document.version_service import VersionService, version_label_from_seq
 from service.knowledge.document.workspace_service import WorkspaceService
 from service.knowledge.pipeline.index_worker import IndexWorker
@@ -101,7 +106,12 @@ class DocumentService:
         document.current_version_id = version.id
         await document.save(update_fields=["current_version_id"])
         if version.index_status == IndexStatus.pending:
-            IndexWorker.schedule(version.id)
+            await IndexWorker.start_processing(
+                version.id,
+                doc_type=doc_type,
+                parse_mode=parse_mode,
+                content=content,
+            )
         return await cls.get_detail(user, document.id)
 
     @classmethod
@@ -161,17 +171,30 @@ class DocumentService:
             if current_version:
                 current = await VersionService._to_brief(current_version)
         brief = await cls._to_brief(document)
+        parsed_interfaces: list[ParsedInterfaceItem] = []
+        if (
+            document.doc_type == KnowledgeDocType.api_doc
+            and document.current_version_id
+        ):
+            current_version = await KnowledgeDocumentVersion.get_or_none(
+                id=document.current_version_id
+            )
+            if current_version:
+                parsed_interfaces = await resolve_parsed_interfaces(
+                    document, current_version
+                )
         return KnowledgeDocumentDetail(
             **brief.model_dump(),
-            module_id=document.module_id,
             workspace_id=document.workspace_id,
             current_version=current,
             created_at=document.created_at,
+            parsed_interfaces=parsed_interfaces,
         )
 
     @classmethod
     async def delete(cls, user: User, document_id: int) -> None:
         document = await ensure_document_editor(document_id, user)
+        await VersionService.assert_not_processing(document)
         workspace = await document.workspace
         versions = await KnowledgeDocumentVersion.filter(document_id=document.id)
         for version in versions:
@@ -185,18 +208,91 @@ class DocumentService:
         await document.delete()
 
     @classmethod
+    async def get_version_text_preview(
+        cls,
+        user: User,
+        document_id: int,
+        version_id: int | None = None,
+    ) -> dict:
+        document = await ensure_document_viewer(document_id, user)
+        vid = version_id or document.current_version_id
+        if not vid:
+            raise AppException("文档尚无可用版本", 404)
+        version = await KnowledgeDocumentVersion.get_or_none(
+            id=vid, document_id=document_id
+        )
+        if version is None:
+            raise AppException("文档版本不存在", 404)
+        if version.file_expired or not version.file_path:
+            raise AppException("该版本原件已清理，无法读取全文", 410)
+        path = KnowledgeStorage.absolute_path(version.file_path)
+        if not path.is_file():
+            raise AppException("文件已丢失", 404)
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        preview = _text_preview(version)
+        stripped = text.strip()
+        truncated = preview is not None and len(stripped) > len(preview or "")
+        return {
+            "text": text,
+            "truncated": truncated,
+            "version_label": version.version_label,
+            "document_title": document.title,
+            "suggested_title": default_candidate_title(document, version),
+        }
+
+    @classmethod
+    async def get_version_parsed_interfaces(
+        cls,
+        user: User,
+        document_id: int,
+        version_id: int,
+    ) -> ParsedInterfaceListResult:
+        document = await ensure_document_viewer(document_id, user)
+        if document.doc_type != KnowledgeDocType.api_doc:
+            raise AppException("仅接口文档支持查看解析接口", 400)
+        version = await KnowledgeDocumentVersion.get_or_none(
+            id=version_id, document_id=document_id
+        )
+        if version is None:
+            raise AppException("文档版本不存在", 404)
+        items = await resolve_parsed_interfaces(document, version)
+        return ParsedInterfaceListResult(
+            document_id=document_id,
+            version_id=version_id,
+            items=items,
+        )
+
+    @classmethod
     async def _to_brief(cls, document: KnowledgeDocument) -> KnowledgeDocumentBrief:
         project = document.project
         if not hasattr(project, "name"):
             project = await document.project
+        module_name = None
+        if document.module_id:
+            module = document.module
+            if not hasattr(module, "name"):
+                module = await document.module
+            if module is not None:
+                module_name = module.name
         version_label = None
         index_status = None
+        parse_status = None
+        requirement_saved = False
+        can_save_requirement = False
+        interfaces_saved = False
+        can_save_interfaces = False
         updated_by_username = None
         if document.current_version_id:
             version = await KnowledgeDocumentVersion.get_or_none(id=document.current_version_id)
             if version:
                 version_label = version.version_label
                 index_status = version.index_status
+                parse_status = version.parse_status
+                save_state = await compute_version_save_state(document, version)
+                requirement_saved = save_state.requirement_saved
+                can_save_requirement = save_state.can_save_requirement
+                interfaces_saved = save_state.interfaces_saved
+                can_save_interfaces = save_state.can_save_interfaces
                 if version.created_by_id:
                     creator = await version.created_by
                     if creator is not None:
@@ -205,11 +301,19 @@ class DocumentService:
             id=document.id,
             project_id=document.project_id,
             project_name=project.name,
+            module_id=document.module_id,
+            module_name=module_name,
             title=document.title,
             doc_type=document.doc_type,
             parse_mode=document.parse_mode,
             version_label=version_label,
+            current_version_id=document.current_version_id,
             index_status=index_status,
+            parse_status=parse_status,
+            requirement_saved=requirement_saved,
+            can_save_requirement=can_save_requirement,
+            interfaces_saved=interfaces_saved,
+            can_save_interfaces=can_save_interfaces,
             updated_at=document.updated_at,
             updated_by_username=updated_by_username,
         )

@@ -1,5 +1,11 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.apiCases.importInterfaces')" width="720px">
+  <el-dialog
+    v-model="visible"
+    :title="t('page.apiCases.importInterfaces')"
+    :width="dialogWidth"
+    :top="dialogTop"
+    :class="dialogClass"
+  >
     <el-form inline style="margin-bottom: 12px">
       <el-form-item :label="t('page.knowledge.titleCol')">
         <el-input-number v-model="documentId" :min="1" />
@@ -50,6 +56,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { confirmApiImport, previewApiImport } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
+import { useContentDialog } from '@/composables/useContentDialog'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 
@@ -61,6 +68,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'imported'])
 const { t } = useI18n()
 const { projectId } = useProjectScope()
+const { dialogWidth, dialogTop, dialogClass } = useContentDialog(200)
 
 const visible = computed({
   get: () => props.modelValue,

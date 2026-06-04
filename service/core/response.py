@@ -13,5 +13,15 @@ class ApiResponse(BaseModel, Generic[T]):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+def _jsonable_data(data: Any) -> Any:
+    if isinstance(data, BaseModel):
+        return data.model_dump(mode="json")
+    return data
+
+
 def success(data: Any = None, message: str = "success", code: int = 200) -> dict:
-    return ApiResponse(code=code, message=message, data=data).model_dump(mode="json")
+    return ApiResponse(
+        code=code,
+        message=message,
+        data=_jsonable_data(data),
+    ).model_dump(mode="json")

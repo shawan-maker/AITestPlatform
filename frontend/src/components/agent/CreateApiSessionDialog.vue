@@ -2,7 +2,9 @@
   <el-dialog
     :model-value="modelValue"
     :title="t('page.agent.newSession')"
-    width="560px"
+    :width="dialogWidth"
+    :top="dialogTop"
+    :class="dialogClass"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <el-form label-width="120px">
@@ -19,10 +21,15 @@
         <el-input-number v-model="form.interface_id" :min="1" controls-position="right" style="width: 100%" />
       </el-form-item>
       <el-form-item v-else :label="t('page.agent.apiDoc')" required>
-        <el-input v-model="form.api_doc_text" type="textarea" :rows="6" />
+        <el-input
+          v-model="form.api_doc_text"
+          type="textarea"
+          :rows="textareaRows"
+          :style="{ maxHeight: `${bodyMaxHeight}px` }"
+        />
       </el-form-item>
       <el-form-item :label="t('page.agent.prompt')">
-        <el-input v-model="form.user_prompt" type="textarea" :rows="2" />
+        <el-input v-model="form.user_prompt" type="textarea" :rows="3" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -33,9 +40,10 @@
 </template>
 
 <script setup>
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { useContentDialog } from '@/composables/useContentDialog'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -46,6 +54,8 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'submit'])
 
 const { t } = useI18n()
+const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(260)
+const textareaRows = computed(() => Math.max(6, Math.floor(bodyMaxHeight.value / 28)))
 const mode = ref('interface')
 
 const form = reactive({

@@ -113,7 +113,9 @@ service.interceptors.response.use(
     }
 
     if (status !== 401) {
-      ElMessage.error(message)
+      if (!config?.silentError) {
+        ElMessage.error(message)
+      }
     }
     return Promise.reject(Object.assign(error, { message }))
   },

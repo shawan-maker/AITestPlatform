@@ -1,7 +1,7 @@
 <template>
   <div class="default-layout">
     <AppSidebar v-if="!isMobile" class="default-layout__sidebar" />
-    <div class="default-layout__main-wrap">
+    <div ref="mainWrapRef" class="default-layout__main-wrap">
       <header v-if="isMobile" class="default-layout__mobile-bar">
         <el-button text :icon="Menu" @click="drawerOpen = true">
           {{ t('common.openMenu') }}
@@ -16,17 +16,17 @@
     <el-drawer
       v-model="drawerOpen"
       direction="ltr"
-      :size="280"
+      :size="drawerSize"
       :with-header="false"
       class="sidebar-drawer"
     >
-      <AppSidebar @navigate="drawerOpen = false" />
+      <AppSidebar @navigate="onSidebarNavigate" />
     </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { Menu } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
@@ -35,6 +35,26 @@ import { useIsMobileSidebar } from '@/composables/useMediaQuery'
 const { t } = useI18n()
 const isMobile = useIsMobileSidebar()
 const drawerOpen = ref(false)
+const drawerSize = ref('50%')
+const mainWrapRef = ref(null)
+
+function updateDrawerSize() {
+  const mainWidth = mainWrapRef.value?.clientWidth ?? window.innerWidth
+  drawerSize.value = `${Math.round(mainWidth * 0.5)}px`
+}
+
+function onSidebarNavigate() {
+  drawerOpen.value = false
+}
+
+onMounted(() => {
+  updateDrawerSize()
+  window.addEventListener('resize', updateDrawerSize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateDrawerSize)
+})
 </script>
 
 <style scoped lang="scss">

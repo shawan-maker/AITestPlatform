@@ -126,6 +126,11 @@
 /* Tree sidebar */
 .ui-tree-sidebar {
   padding: 4px 0;
+
+  .ui-tree-node-row {
+    padding: 7px 8px;
+    gap: 4px;
+  }
 }
 
 .ui-tree-node-row {
@@ -194,9 +199,9 @@
 .ui-tree-nested {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 18px;
+  padding: 0 0 0 9px;
   border-left: 1px dashed var(--el-border-color);
-  margin-left: 14px;
+  margin-left: 7px;
 }
 
 .ui-tree-list {
@@ -252,16 +257,26 @@
   color: #4b5563;
 }
 
-/* 函数编辑/详情：半屏弹窗，上下边距对称（top 25vh + height 50vh） */
-.env-function-code-dialog {
+/* 半屏内容弹窗：宽 50vw，高 50vh，垂直居中 */
+.env-function-code-dialog,
+.ui-dialog--content-half {
+  width: 50vw !important;
+  max-width: calc(100vw - 32px);
+  min-width: 320px;
   height: 50vh;
   max-height: 50vh;
   display: flex;
   flex-direction: column;
+  margin-bottom: 0;
 
   .el-dialog__body {
     flex: 1;
     min-height: 0;
     overflow: auto;
   }
+}
+
+.confirm-delete-trigger {
+  display: inline-flex;
+  align-items: center;
 }

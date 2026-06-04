@@ -1,0 +1,1 @@
+[{"method": "GET", "path": "/ping", "summary": "p", "parameters": {"query": [{"name": "q", "type": "string", "description": "", "required": false}]}, "tags": ["Health"]}]

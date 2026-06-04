@@ -7,13 +7,21 @@ from service.core.enums import KnowledgeDocType, ParseStatus
 from service.core.exceptions import AppException
 from service.knowledge.document.permissions import ensure_document_editor
 from service.knowledge.document.version_service import VersionService
-from service.knowledge.downstream.schemas import ImportInterfacesResult
+from service.knowledge.document.import_marker import mark_interfaces_imported
+from service.knowledge.downstream.schemas import ImportInterfacesRequest, ImportInterfacesResult
 from service.project.models import ProjectModule
 from service.user.models import User
 
 
 class ImportService:
-    """Thin proxy → api_test.interface.import_service (legacy knowledge path)."""
+    @classmethod
+    async def preview_interfaces(
+        cls,
+        user: User,
+        document_id: int,
+        version_id: int,
+    ):
+        return await ApiTestImportService.preview(user, document_id, version_id)
 
     @classmethod
     async def import_interfaces(
@@ -21,10 +29,7 @@ class ImportService:
         user: User,
         document_id: int,
         version_id: int,
-        module_id: int,
-        import_mode: Literal["skip", "upsert"] = "skip",
-        *,
-        catalog_id: int | None = None,
+        body: ImportInterfacesRequest,
     ) -> ImportInterfacesResult:
         document = await ensure_document_editor(document_id, user)
         if document.doc_type != KnowledgeDocType.api_doc:
@@ -36,12 +41,13 @@ class ImportService:
         if not version.parse_result_path:
             raise AppException("解析结果不存在", 400)
 
-        if not await ProjectModule.filter(
-            id=module_id, project_id=document.project_id
-        ).exists():
-            raise AppException("项目模块不存在", 404)
+        if body.module_id is not None:
+            if not await ProjectModule.filter(
+                id=body.module_id, project_id=document.project_id
+            ).exists():
+                raise AppException("项目模块不存在", 404)
 
-        resolved_catalog_id = catalog_id
+        resolved_catalog_id = body.catalog_id
         if resolved_catalog_id is None:
             default_cat = await ApiInterfaceCatalog.get_or_none(
                 project_id=document.project_id, parent_id=None, name="默认"
@@ -54,32 +60,47 @@ class ImportService:
                 )
             resolved_catalog_id = default_cat.id
 
-        items_raw = ApiTestImportService._load_parse_items(version.parse_result_path)
-        items = [
-            ImportConfirmItem(
-                method=(i.get("method") or "").upper(),
-                path=i.get("path") or "",
-                summary=i.get("summary"),
-                parameters=i.get("parameters"),
-                request_body=i.get("requestBody"),
-                responses=i.get("responses"),
-            )
-            for i in items_raw
-            if i.get("method") and i.get("path")
-        ]
+        if body.items:
+            items = [
+                ImportConfirmItem(
+                    method=(i.get("method") or "").upper(),
+                    path=i.get("path") or "",
+                    summary=i.get("summary"),
+                    parameters=i.get("parameters"),
+                    request_body=i.get("requestBody") or i.get("request_body"),
+                    responses=i.get("responses"),
+                )
+                for i in body.items
+                if i.get("method") and i.get("path")
+            ]
+        else:
+            items_raw = ApiTestImportService._load_parse_items(version.parse_result_path)
+            items = [
+                ImportConfirmItem(
+                    method=(i.get("method") or "").upper(),
+                    path=i.get("path") or "",
+                    summary=i.get("summary"),
+                    parameters=i.get("parameters"),
+                    request_body=i.get("requestBody"),
+                    responses=i.get("responses"),
+                )
+                for i in items_raw
+                if i.get("method") and i.get("path")
+            ]
 
         result = await ApiTestImportService.confirm(
             user,
             ImportConfirmRequest(
                 project_id=document.project_id,
                 catalog_id=resolved_catalog_id,
-                module_id=module_id,
+                module_id=body.module_id,
                 document_id=document_id,
                 version_id=version_id,
-                mode=import_mode,
+                mode=body.import_mode,
                 items=items,
             ),
         )
+        mark_interfaces_imported(version.parse_result_path)
         return ImportInterfacesResult(
             created=result.created,
             updated=result.updated,

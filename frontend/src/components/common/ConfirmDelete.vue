@@ -1,5 +1,5 @@
 <template>
-  <span @click="open">
+  <span class="confirm-delete-trigger" @click="open">
     <slot />
   </span>
 </template>

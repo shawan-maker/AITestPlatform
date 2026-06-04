@@ -1,0 +1,21 @@
+[
+  {
+    "path": "/ping",
+    "method": "GET",
+    "summary": "ping",
+    "parameters": {
+      "header": [],
+      "path": [],
+      "query": []
+    },
+    "requestBody": null,
+    "responses": [
+      {
+        "http_code": "200",
+        "description": "ok",
+        "media_type": "application/json",
+        "response_body": {}
+      }
+    ]
+  }
+]

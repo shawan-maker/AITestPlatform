@@ -54,7 +54,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getDbConnection, listEnvironments } from '@/api/environment'
 import { useProjectScope } from '@/composables/useProjectScope'
-import { useHalfScreenDialog } from '@/composables/useHalfScreenDialog'
+import { useHalfScreenDialog } from '@/composables/useContentDialog'
 import SectionPanel from '@/components/common/SectionPanel.vue'
 import DbTestLogTable from '@/components/env/DbTestLogTable.vue'
 
