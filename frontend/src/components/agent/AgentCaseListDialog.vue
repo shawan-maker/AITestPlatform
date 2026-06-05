@@ -1,0 +1,334 @@
+<template>
+  <el-dialog
+    v-model="visible"
+    :title="t('page.agent.caseListTitle')"
+    width="95%"
+    top="3vh"
+    destroy-on-close
+    append-to-body
+  >
+    <!-- Toolbar: tabs + save button -->
+    <div class="case-list-toolbar">
+      <div class="case-list-tabs">
+        <el-radio-group v-model="activeTab" size="small" @change="onTabChange">
+          <el-radio-button value="all">{{ t('page.agent.tabAll') }}</el-radio-button>
+          <el-radio-button value="功能">{{ t('page.agent.tabFunction') }}</el-radio-button>
+          <el-radio-button value="安全">{{ t('page.agent.tabSecurity') }}</el-radio-button>
+          <el-radio-button value="兼容">{{ t('page.agent.tabCompat') }}</el-radio-button>
+          <el-radio-button value="易用">{{ t('page.agent.tabUsability') }}</el-radio-button>
+          <el-radio-button value="性能">{{ t('page.agent.tabPerformance') }}</el-radio-button>
+        </el-radio-group>
+      </div>
+      <el-button type="primary" @click="showSaveDialog = true">
+        <el-icon><Plus /></el-icon> {{ t('page.agent.saveToCatalog') }}
+      </el-button>
+    </div>
+
+    <!-- Case table -->
+    <el-table
+      :data="pagedCases"
+      stripe
+      highlight-current-row
+      @selection-change="onSelectionChange"
+      max-height="55vh"
+      class="case-table"
+    >
+      <el-table-column type="selection" width="45" />
+      <el-table-column type="index" :label="t('common.index')" width="60" />
+      <el-table-column prop="case_name" :label="t('functional.caseName')" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="case_type" :label="t('functional.type')" width="90">
+        <template #default="{ row }">
+          <el-tag size="small" type="primary" effect="light">{{ row.case_type || '功能' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="priority" :label="t('functional.priority')" width="70">
+        <template #default="{ row }">
+          <el-tag size="small" type="warning" effect="light">{{ row.priority || 'L1' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="precondition" :label="t('functional.preconditions')" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="steps" :label="t('functional.steps')" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="expected_result" :label="t('functional.expectedResult')" min-width="160" show-overflow-tooltip />
+      <el-table-column :label="t('common.actions')" width="80" fixed="right">
+        <template #default="{ row, $index }">
+          <el-link type="primary" @click="openEditor(row, getRealIndex($index))">编辑</el-link>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- Pagination -->
+    <div class="case-list-pagination">
+      <span>{{ t('page.agent.totalCount', { count: filteredCases.length }) }}</span>
+      <el-pagination
+        small
+        layout="prev, pager, next"
+        :total="filteredCases.length"
+        :page-size="pageSize"
+        v-model:current-page="currentPage"
+      />
+    </div>
+
+    <!-- ===== Edit Drawer ===== -->
+    <el-drawer
+      v-model="editorVisible"
+      :title="t('page.agent.editCase')"
+      direction="rtl"
+      size="450px"
+      append-to-body
+    >
+      <el-form v-if="editingCase" :model="editingCase" label-position="top" size="large">
+        <el-form-item :label="t('functional.testPoint')">
+          <el-input v-model="editingCase.test_point" :placeholder="t('functional.testPoint')" />
+        </el-form-item>
+        <el-form-item label="* {{ t('functional.preconditions') }}">
+          <el-input
+            v-model="editingCase.precondition"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('functional.preconditionsPlaceholder')"
+          />
+        </el-form-item>
+        <el-form-item :label="t('functional.testData')">
+          <el-input
+            v-model="editingCase.test_data"
+            type="textarea"
+            :rows="2"
+            :placeholder="t('functional.testDataPlaceholder')"
+          />
+        </el-form-item>
+        <el-form-item label="* {{ t('functional.steps') }}">
+          <el-input
+            v-model="editingCase.steps"
+            type="textarea"
+            :rows="5"
+            placeholder="1. ...&#10;2. ..."
+          />
+        </el-form-item>
+        <el-form-item label="* {{ t('functional.expectedResult') }}">
+          <el-input
+            v-model="editingCase.expected_result"
+            type="textarea"
+            :rows="4"
+            :placeholder="t('functional.expectedResultPlaceholder')"
+          />
+        </el-form-item>
+      </el-form>
+      <div class="editor-hint">{{ t('page.agent.aiGeneratedHint') }}</div>
+      <template #footer>
+        <el-button @click="editorVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="saveEditedCase">{{ t('common.save') }}</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- ===== Save to Catalog Dialog ===== -->
+    <el-dialog
+      v-model="showSaveDialog"
+      :title="t('page.agent.saveToCatalog')"
+      width="500px"
+      append-to-body
+    >
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 16px;">
+        {{ t('page.agent.saveToHint') }}
+        <el-link type="primary">{{ t('page.agent.goToView') }} 🔗</el-link>
+      </el-alert>
+      <p class="save-hint-text">
+        {{ t('page.agent.selectedCount', { count: selectedCases.length }) }}
+      </p>
+      <el-form :label-width="100">
+        <el-form-item :label="t('page.agent.projectVersion')">
+          <el-select
+            v-model="saveForm.projectVersion"
+            :placeholder="t('page.agent.selectProjectVersion')"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="pv in projectVersions"
+              :key="pv.id"
+              :label="pv.name"
+              :value="pv.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('page.agent.catalog')">
+          <el-select
+            v-model="saveForm.catalogId"
+            :placeholder="saveForm.projectVersion ? t('page.agent.selectCatalog') : t('page.agent.selectProjectFirst')"
+            style="width: 100%"
+            :disabled="!saveForm.projectVersion"
+          >
+            <el-option
+              v-for="cat in catalogs"
+              :key="cat.id"
+              :label="cat.name"
+              :value="cat.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showSaveDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button
+          type="primary"
+          :disabled="!saveForm.catalogId || selectedCases.length === 0"
+          :loading="saving"
+          @click="confirmSave"
+        >{{ t('common.confirm') }}</el-button>
+      </template>
+    </el-dialog>
+  </el-dialog>
+</template>
+
+<script setup>
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
+
+const props = defineProps({
+  payload: { type: Object, default: null },
+  genType: { type: String, default: 'functional' },
+  catalogs: { type: Array, default: () => [] },
+})
+
+const emit = defineEmits(['save'])
+
+const { t } = useI18n()
+
+// Dialog visibility (controlled by parent via v-model)
+const visible = defineModel({ type: Boolean, default: false })
+
+// Tab filtering
+const activeTab = ref('all')
+const currentPage = ref(1)
+const pageSize = 10
+
+// Selection
+const selectedCases = ref([])
+
+// Editor drawer
+const editorVisible = ref(false)
+const editingCase = ref(null)
+const editingIndex = ref(-1)
+
+// Save dialog
+const showSaveDialog = ref(false)
+const saving = ref(false)
+const saveForm = ref({
+  projectVersion: null,
+  catalogId: null,
+})
+const projectVersions = ref([])
+
+// Computed: all cases from payload
+const allCases = computed(() => {
+  if (!props.payload) return []
+  return props.payload.cases || props.payload.test_points?.flatMap(tp => tp.cases || []) || []
+})
+
+// Computed: filtered by tab
+const filteredCases = computed(() => {
+  const cases = allCases.value
+  if (activeTab.value === 'all') return cases
+  // Filter by case_type matching the tab name
+  return cases.filter(c => {
+    const ct = (c.case_type || '功能').trim()
+    return ct.includes(activeTab.value) || activeTab.value === 'all'
+  })
+})
+
+// Computed: paged cases
+const pagedCases = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  return filteredCases.value.slice(start, start + pageSize)
+})
+
+function onSelectionChange(rows) {
+  selectedCases.value = rows
+}
+
+function onTabChange() {
+  currentPage.value = 1
+}
+
+function getRealIndex(pageIdx) {
+  return (currentPage.value - 1) * pageSize + pageIdx
+}
+
+function openEditor(caseRow, realIndex) {
+  editingCase.value = { ...caseRow }
+  editingIndex.value = realIndex
+  editorVisible.value = true
+}
+
+function saveEditedCase() {
+  if (editingIndex.value >= 0 && editingCase.value) {
+    // Update local case data in payload
+    const cases = allCases.value
+    if (cases[editingIndex.value]) {
+      Object.assign(cases[editingIndex.value], editingCase.value)
+    }
+  }
+  editorVisible.value = false
+  ElMessage.success(t('common.saved'))
+}
+
+async function confirmSave() {
+  if (!saveForm.value.catalogId || !selectedCases.value.length) return
+  saving.value = true
+  try {
+    emit('save', {
+      catalog_id: saveForm.value.catalogId,
+      case_indexes: selectedCases.value.map((c, i) => {
+        const idx = allCases.value.indexOf(c)
+        return idx >= 0 ? idx : i
+      }),
+      project_version_id: saveForm.value.projectVersion,
+    })
+    showSaveDialog.value = false
+    ElMessage.success(t('page.agent.saved'))
+  } finally {
+    saving.value = false
+  }
+}
+</script>
+
+<style scoped lang="scss">
+.case-list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.case-list-tabs {
+  flex: 1;
+}
+
+.case-list-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.editor-hint {
+  margin-top: 16px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.save-hint-text {
+  margin-bottom: 16px;
+  color: var(--el-text-color-regular);
+  font-size: 14px;
+}
+
+.case-table {
+  width: 100%;
+}
+</style>

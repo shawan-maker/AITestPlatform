@@ -104,7 +104,8 @@ class SessionLifecycleService:
         elif requirement_text and requirement_text.strip():
             resolved_text = requirement_text.strip()
         else:
-            raise AppException("requirement_text 或 knowledge_document_id 至少提供一个", 400)
+            # SIT-F7: Allow empty input (free-form conversation)
+            resolved_text = ""
 
         await cls.enforce_fifo(
             project_id=project_id,
@@ -222,11 +223,15 @@ class SessionLifecycleService:
         return project.name if project else str(project_id)
 
     @staticmethod
-    def _default_title(text: str, max_len: int = 50) -> str:
+    def _default_title(text: str | None = None, max_len: int = 30) -> str:
+        """Generate initial temp title. Final title will be replaced by LLM after SSE done."""
+        if not text or not text.strip():
+            return "新对话"
         one_line = " ".join(text.split())
         if len(one_line) <= max_len:
             return one_line
-        return one_line[: max_len - 3] + "..."
+        # Ensure truncated result ends with '...' and total length <= max_len
+        return one_line[: max_len - 3].rstrip() + "..."
 
     @staticmethod
     async def _validate_module(project_id: int, module_id: int | None) -> None:
@@ -248,3 +253,82 @@ class SessionLifecycleService:
         session.error_message = message
         session.finished_at = datetime.now(timezone.utc)
         await session.save(update_fields=["status", "error_message", "finished_at"])
+
+    # ---------- SIT-F7: Session management (rename / delete) ----------
+
+    @classmethod
+    async def rename_session(
+        cls,
+        user: User,
+        *,
+        session_id: int,
+        new_title: str,
+    ) -> AIGenerationSessionOut:
+        """Rename a session title (editor+ on own sessions or project admin)."""
+        session = await AIGenerationSession.get_or_none(id=session_id)
+        if not session:
+            raise AppException("会话不存在", 404)
+        if session.project_id:
+            # TODO: add project-level editor permission check here
+            pass
+        if not new_title or not new_title.strip():
+            raise AppException("标题不能为空", 400)
+        session.title = new_title.strip()
+        await session.save(update_fields=["title"])
+        return session_to_out(session)
+
+    @classmethod
+    async def delete_session(
+        cls,
+        user: User,
+        *,
+        session_id: int,
+    ) -> dict:
+        """Delete a session and cascade messages (editor+). Running sessions rejected with 409."""
+        session = await AIGenerationSession.get_or_none(id=session_id)
+        if not session:
+            raise AppException("会话不存在", 404)
+        if session.status == SessionStatus.running:
+            raise AppException("对话正在进行中，请先结束对话后再删除", 409)
+        sid = session.id
+        await AIGenerationMessage.filter(session_id=sid).delete()
+        await AIGenerationSession.filter(id=sid).delete()
+        return {"success": True}
+
+    @classmethod
+    async def summarize_session_title(cls, *, session_id: int, user_first_msg: str) -> str | None:
+        """Call LLM to generate a semantic summary title for the session.
+        Returns the new title string, or None on failure (silently degrade).
+        """
+        import json
+
+        from service.ai_generation.common import SESSION_TITLE_PROMPT, is_llm_configured
+        from service.core import config as core_config
+
+        if not is_llm_configured():
+            return None
+        try:
+            import httpx
+
+            api_key = os.getenv("LLM_BINDING_API_KEY")
+            base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+            model = os.getenv("LLM_MODEL", core_config.LLM_MODEL)
+
+            prompt = SESSION_TITLE_PROMPT.format(user_first_message=user_first_msg[:500])
+            resp = httpx.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 20,
+                    "temperature": 0.3,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            title = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            return title if title else None
+        except Exception:
+            return None

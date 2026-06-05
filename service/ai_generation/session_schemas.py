@@ -50,3 +50,7 @@ class AIGenerationPreviewUpdateRequest(BaseModel):
 
 class AgentMessageRequest(BaseModel):
     content: str
+
+
+class SessionRenameRequest(BaseModel):
+    title: str

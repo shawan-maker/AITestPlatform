@@ -40,6 +40,16 @@ export function saveFunctionalSession(sessionId, data) {
   return request.post(`/ai-generation/functional/sessions/${sessionId}/save`, data)
 }
 
+// --- SIT-F7: Session management ---
+
+export function renameFunctionalSession(sessionId, title) {
+  return request.patch(`/ai-generation/functional/sessions/${sessionId}`, { title })
+}
+
+export function deleteFunctionalSession(sessionId) {
+  return request.delete(`/ai-generation/functional/sessions/${sessionId}`)
+}
+
 /** @deprecated Phase 1 one-shot generate */
 export function generateFunctional(data) {
   return request.post('/ai-generation/functional/generate', data)
@@ -78,6 +88,16 @@ export function patchApiPreview(sessionId, data) {
 
 export function confirmApiGeneration(data) {
   return request.post('/ai-generation/api/confirm', data)
+}
+
+// --- SIT-F7: Session management ---
+
+export function renameApiSession(sessionId, title) {
+  return request.patch(`/ai-generation/api/sessions/${sessionId}`, { title })
+}
+
+export function deleteApiSession(sessionId) {
+  return request.delete(`/ai-generation/api/sessions/${sessionId}`)
 }
 
 /** @deprecated Phase 1 */

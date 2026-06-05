@@ -12,8 +12,8 @@ load_dotenv(_BASE_DIR / ".env")
 class RAGClient:
     """通过 HTTP 接入 LightRAG Server。"""
 
-    def __init__(self, timeout: float = 30.0):
-        self.timeout = timeout
+    def __init__(self, timeout: float | None = None):
+        self.timeout = timeout or float(os.getenv("RAG_CLIENT_TIMEOUT", "60"))
         self.headers = {
             "Content-Type": "application/json",
             "X-API-Key": os.getenv("RAG_API_KEY") or "",

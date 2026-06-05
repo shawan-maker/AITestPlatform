@@ -6,10 +6,6 @@
       :description="t('common.selectProjectHint')"
     />
     <template v-else>
-      <div class="agent-center-view__header">
-        <AgentWelcomeHeader v-if="showLandingHeader" />
-        <AgentTypeTabs v-model="activeTab" />
-      </div>
       <div class="agent-center-view__body">
         <FunctionalAgentPanel
           v-show="activeTab === 'functional'"
@@ -37,8 +33,6 @@ import { useI18n } from 'vue-i18n'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { useProjectStore } from '@/stores/project'
 import EmptyState from '@/components/common/EmptyState.vue'
-import AgentWelcomeHeader from '@/components/agent/AgentWelcomeHeader.vue'
-import AgentTypeTabs from '@/components/agent/AgentTypeTabs.vue'
 import FunctionalAgentPanel from '@/components/agent/FunctionalAgentPanel.vue'
 import ApiAgentPanel from '@/components/agent/ApiAgentPanel.vue'
 
@@ -49,8 +43,6 @@ const { projectId } = useProjectScope()
 const projectStore = useProjectStore()
 const activeTab = ref(route.query.tab === 'api' ? 'api' : 'functional')
 const composerMode = ref(true)
-
-const showLandingHeader = computed(() => composerMode.value)
 
 const functionalRequirement = computed(() => {
   const q = route.query.requirement
@@ -83,27 +75,32 @@ watch(
 )
 </script>
 
-<style scoped lang="scss">
+<style scoped>
+/* Layout - Body fills entire area (child panels handle row layout with sidebar) */
 .agent-center-view {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  height: 100%;
   width: 100%;
   padding: 0;
   background: transparent;
   box-shadow: none;
-}
+  overflow: hidden;
 
-.agent-center-view__header {
-  flex-shrink: 0;
-  padding: 0 4px;
-}
+  .agent-center-view__body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
 
-.agent-center-view__body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+  /* Active panel fills the body completely */
+  .agent-center-view__body > * {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+  }
 }
 </style>

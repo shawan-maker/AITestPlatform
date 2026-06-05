@@ -22,7 +22,7 @@ async def list_interfaces(
     catalog_id: int | None = Query(default=None, ge=1),
     q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=200),
     user: User = Depends(get_current_active_user),
 ):
     query = InterfaceListQuery(
@@ -40,7 +40,7 @@ async def list_interfaces(
 async def list_catalog_interfaces(
     catalog_id: int,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=200),
     user: User = Depends(get_current_active_user),
 ):
     data = await InterfaceService.list_by_catalog(

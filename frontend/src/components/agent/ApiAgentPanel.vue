@@ -1,52 +1,107 @@
 <template>
-  <div class="api-agent-panel" :class="{ 'api-agent-panel--landing': composerMode }">
-    <template v-if="composerMode">
-      <div class="api-agent-panel__landing">
-        <div class="api-agent-panel__landing-spacer" />
-        <AgentComposer
-          agent-type="api"
-          :streaming="streaming"
-          :disabled="!withProjectParams()"
-          :quick-tags="quickTags"
-          @send="handleComposerSend"
-        />
-      </div>
-    </template>
+  <!-- SIT-F7: Sidebar (always visible, collapsible) + Main Content -->
+  <div class="api-agent-panel">
+    <!-- Sidebar: always rendered, collapsible -->
+    <AgentSessionSidebar
+      :title="t('page.agent.history')"
+      :sessions="sessions"
+      :active-id="activeSessionId"
+      :history-limit="historyLimit"
+      agent-type="api"
+      :disabled="streaming"
+      :collapsed="sidebarCollapsed"
+      @new="startNewSession"
+      @select="selectSession"
+      @toggle="sidebarCollapsed = !sidebarCollapsed"
+    />
 
-    <template v-else>
-      <div class="api-agent-panel__workspace agent-layout">
-        <AgentSessionSidebar
-          :title="t('page.agent.history')"
-          :sessions="sessions"
-          :active-id="activeSessionId"
-          :history-limit="historyLimit"
-          @new="startNewSession"
-          @select="selectSession"
-        />
-        <AgentChatPanel
-          :messages="messages"
-          :streaming="streaming"
-          :streaming-text="streamingText"
-          :quick-tags="quickTags"
-          agent-type="api"
-          @send="sendMessage"
-          @stop="stopStream"
-        />
-        <ApiPreviewPanel
-          :output-payload="sessionDetail?.output_payload"
-          :catalogs="catalogs"
-          :interface-id="boundInterfaceId"
-          :can-edit="canEdit"
-          :confirming="confirming"
-          @confirm="confirmCases"
-        />
-      </div>
-    </template>
+    <!-- Main content area -->
+    <main class="api-agent-panel__main" :class="{ 'api-agent-panel__main--landing': composerMode }">
+      <!-- Landing mode: welcome + tabs + composer (centered vertically) -->
+      <template v-if="composerMode">
+        <div class="api-agent-panel__landing">
+          <AgentWelcomeHeader />
+          <AgentTypeTabs v-model="sharedActiveTab" />
+          <div class="api-agent-panel__landing-spacer" />
+          <AgentComposer
+            agent-type="api"
+            :streaming="streaming"
+            :disabled="!withProjectParams()"
+            :quick-tags="quickTags"
+            @send="handleComposerSend"
+          />
+        </div>
+      </template>
+
+      <!-- Chat mode: context bar + chat panel + composer (fixed bottom) -->
+      <template v-else>
+        <div class="api-agent-panel__chat-layout">
+          <AgentContextBar
+            :input-ref-type="sessionDetail?.input_ref_type"
+            :interface-method="sessionDetail?.interface_method"
+            :interface-path="sessionDetail?.interface_path"
+          />
+
+          <AgentChatPanel
+            :messages="messages"
+            :streaming="streaming"
+            :streaming-text="streamingText"
+            :has-stage-progress="hasStageProgress"
+            :stage-log-lines="stageLogLines"
+            :quick-tags="quickTags"
+            agent-type="api"
+            @send="sendMessage"
+            @stop="stopStream"
+            @open-case-list="handleOpenCaseList"
+          >
+            <template #after-messages>
+              <AgentPayloadCard
+                v-if="sessionDetail?.output_payload?.base_cases?.length && !hasAgentResponse"
+                gen-type="api_base"
+                :payload="sessionDetail.output_payload"
+                :can-edit="canEdit"
+                :saving="confirming"
+                @confirm="confirmCasesFromCard"
+              />
+            </template>
+          </AgentChatPanel>
+
+          <!-- Composer in chat mode (compact) -->
+          <AgentComposer
+            agent-type="api"
+            :streaming="streaming"
+            :disabled="!withProjectParams()"
+            :compact="true"
+            :hide-prompt-row="true"
+            @send="sendMessageForComposer"
+          />
+        </div>
+      </template>
+    </main>
+
+    <!-- Keep confirm dialog at root level -->
+    <ApiAgentConfirmDialog
+      v-model="showConfirm"
+      :catalogs="catalogs"
+      :default-indexes="selectedIndexes"
+      :interface-id="boundInterfaceId"
+      :loading="confirming"
+      @submit="onConfirmDialog"
+    />
+
+    <!-- Case list dialog for API cases -->
+    <AgentCaseListDialog
+      v-model="caseListVisible"
+      :payload="caseListPayload"
+      gen-type="api_base"
+      :catalogs="catalogs"
+      @save="saveCasesFromDialog"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -65,7 +120,12 @@ import { usePermission } from '@/composables/usePermission'
 import AgentSessionSidebar from '@/components/agent/AgentSessionSidebar.vue'
 import AgentChatPanel from '@/components/agent/AgentChatPanel.vue'
 import AgentComposer from '@/components/agent/AgentComposer.vue'
-import ApiPreviewPanel from '@/components/agent/ApiPreviewPanel.vue'
+import AgentPayloadCard from '@/components/agent/AgentPayloadCard.vue'
+import AgentContextBar from '@/components/agent/AgentContextBar.vue'
+import AgentWelcomeHeader from '@/components/agent/AgentWelcomeHeader.vue'
+import AgentTypeTabs from '@/components/agent/AgentTypeTabs.vue'
+import ApiAgentConfirmDialog from '@/components/agent/ApiAgentConfirmDialog.vue'
+import AgentCaseListDialog from '@/components/agent/AgentCaseListDialog.vue'
 
 const props = defineProps({
   autoNew: { type: Boolean, default: false },
@@ -86,14 +146,31 @@ const sessionDetail = ref(null)
 const messages = ref([])
 const streaming = ref(false)
 const streamingText = ref('')
+const hasStageProgress = ref(false)
+// Legacy stage log lines
+const stageLogLines = ref([])
 const creating = ref(false)
 const confirming = ref(false)
 const catalogs = ref([])
 const meta = ref(null)
 const boundInterfaceId = ref(null)
 const composerMode = ref(true)
+const showConfirm = ref(false)
+const selectedIndexes = ref([])
+const sidebarCollapsed = ref(false)
+const sharedActiveTab = ref('api')
+
+// Case list dialog state
+const caseListVisible = ref(false)
+const caseListPayload = ref(null)
+
 let abortController = null
 let tempMsgId = 0
+
+// Check if current messages contain a unified agent response
+const hasAgentResponse = computed(() =>
+  messages.value.some(m => m.role === 'agent')
+)
 
 const historyLimit = computed(() => meta.value?.history_limit ?? 10)
 const quickTags = computed(() => meta.value?.api_prompt_templates ?? [])
@@ -138,7 +215,57 @@ async function loadMessages() {
     return
   }
   const res = await listApiMessages(activeSessionId.value)
-  messages.value = res.data.data ?? []
+  const raw = res.data.data ?? []
+
+  // Merge legacy messages (role=assistant/tool/system) into unified agent responses
+  const merged = []
+  let currentAgent = null
+  for (const msg of raw) {
+    if (msg.role === 'user') {
+      if (currentAgent) {
+        currentAgent.isStreaming = false
+        merged.push(currentAgent)
+        currentAgent = null
+      }
+      merged.push({ ...msg })
+    } else {
+      if (!currentAgent) {
+        currentAgent = {
+          id: `agent-history-${merged.length}`,
+          role: 'agent',
+          isStreaming: false,
+          stages: [],
+          finalText: '',
+          payload: null,
+          streamingText: '',
+        }
+      }
+      if (msg.message_type === 'custom' || msg.role === 'system') {
+        const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour12: false }) : ''
+        _addLogToAgent(currentAgent, 'default', `[${time}] ${msg.content}`)
+      } else if (msg.message_type === 'tool_call' && msg.tool_name) {
+        _addLogToAgent(currentAgent, 'default', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
+      } else if (msg.role === 'assistant' && msg.content) {
+        currentAgent.finalText += (currentAgent.finalText ? '\n' : '') + msg.content
+      } else if (msg.content) {
+        _addLogToAgent(currentAgent, 'default', msg.content)
+      }
+    }
+  }
+  if (currentAgent) {
+    currentAgent.isStreaming = false
+    merged.push(currentAgent)
+  }
+  messages.value = merged
+}
+
+function _addLogToAgent(agent, stageName, line) {
+  let stage = agent.stages.find(s => s.name === stageName)
+  if (!stage) {
+    stage = { name: stageName, status: 'done', text: '', logs: [] }
+    agent.stages.push(stage)
+  }
+  stage.logs.push(line)
 }
 
 function setComposerMode(value) {
@@ -152,18 +279,22 @@ function startNewSession() {
   sessionDetail.value = null
   messages.value = []
   setComposerMode(true)
+  loadSessions()
 }
 
 async function selectSession(id) {
   if (streaming.value) stopStream()
   activeSessionId.value = id
   setComposerMode(false)
-  await Promise.all([refreshSession(), loadMessages()])
+  await Promise.all([refreshSession(), loadMessages(), loadSessions()])
 }
 
 async function createSessionFromComposer(payload) {
   const params = withProjectParams({ project_id: payload.projectId })
-  if (!params) return null
+  if (!params) {
+    ElMessage.warning(t('common.selectProjectHint'))
+    return null
+  }
 
   creating.value = true
   try {
@@ -174,7 +305,10 @@ async function createSessionFromComposer(payload) {
       user_prompt: payload.userPrompt,
     }
     const res = await createApiSession(body)
-    const session = res.data.data
+    const session = res?.data?.data
+    if (!session?.id) {
+      throw new Error(t('common.requestFailed'))
+    }
     if (payload.interfaceId) boundInterfaceId.value = payload.interfaceId
     await loadSessions()
     activeSessionId.value = session.id
@@ -191,14 +325,26 @@ function stopStream() {
   abortController = null
   streaming.value = false
   streamingText.value = ''
+  hasStageProgress.value = false
+  stageLogLines.value = []
+}
+
+/** Detect which stage a text belongs to */
+function detectStageFromText(text) {
+  const str = String(text)
+  if (str.includes('检索') || str.includes('搜索') || str.includes('\u{1F50D}') || str.includes('search')) return 'search_api_document'
+  if (str.includes('用例') || str.includes('生成') || str.includes('generate')) return 'generate_base_cases'
+  return 'default'
 }
 
 async function sendMessage(content) {
   if (!activeSessionId.value || streaming.value) return
   streaming.value = true
   streamingText.value = ''
+  hasStageProgress.value = false
   abortController = new AbortController()
 
+  // Add user message
   messages.value = [...messages.value, {
     id: `temp-${++tempMsgId}`,
     role: 'user',
@@ -208,79 +354,180 @@ async function sendMessage(content) {
   }]
 
   try {
+    // ===== Create unified agent response object =====
+    const agentResponse = reactive({
+      id: `agent-${Date.now()}`,
+      role: 'agent',
+      isStreaming: true,
+      stages: [],
+      finalText: '',
+      payload: null,
+      streamingText: '',
+    })
+
+    // Push only ONE message
+    messages.value = [...messages.value, agentResponse]
+
+    const getStage = (name) => {
+      let stage = agentResponse.stages.find(s => s.name === name)
+      if (!stage) {
+        stage = { name, status: 'running', text: '', logs: [] }
+        agentResponse.stages = [...agentResponse.stages, stage]
+      }
+      return stage
+    }
+
+    const _addLog = (stageName, line) => {
+      const stage = getStage(stageName)
+      const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+      stage.logs = [...stage.logs.slice(-29), `[${time}] ${line}`]
+      stageLogLines.value = [...stageLogLines.value.slice(-49), `[${time}] ${line}`]
+    }
+
+    stageLogLines.value = []
+
     await streamApiMessage(
       activeSessionId.value,
       content,
       {
+        stage: (data) => {
+          hasStageProgress.value = true
+          if (data?.name) {
+            const stage = getStage(data.name)
+            stage.text = data.text || ''
+            stage.status = data.status || 'running'
+          }
+        },
         custom: (data) => {
-          messages.value = [...messages.value, {
-            id: `temp-${++tempMsgId}`,
-            role: 'tool',
-            message_type: 'custom',
-            content: String(data),
-            sequence: messages.value.length + 1,
-          }]
+          hasStageProgress.value = true
+          const text = String(data)
+          const stageName = detectStageFromText(text)
+          _addLog(stageName, text)
         },
         messages: (data) => {
-          streamingText.value += String(data)
+          agentResponse.streamingText += String(data)
+          agentResponse.finalText += String(data)
+          streamingText.value = agentResponse.streamingText
         },
         tool_call: (data) => {
-          messages.value = [...messages.value, {
-            id: `temp-${++tempMsgId}`,
-            role: 'tool',
-            message_type: 'tool_call',
-            tool_name: data?.name,
-            content: JSON.stringify(data?.content ?? data),
-            sequence: messages.value.length + 1,
-          }]
+          hasStageProgress.value = true
+          if (data?.name) _addLog(data.name, `调用工具: ${data.name}`)
+          else _addLog('default', '工具调用')
         },
         payload_updated: async () => {
+          _addLog('default', '结果已保存到会话')
           await refreshSession()
+          agentResponse.payload = sessionDetail.value?.output_payload || null
         },
         error: (data) => {
-          ElMessage.error(data?.message || t('common.requestFailed'))
+          const errorMsg = data?.message || t('common.requestFailed')
+          ElMessage.error(errorMsg)
+          _addLog('default', `[错误] ${errorMsg}`)
         },
         done: async () => {
-          if (streamingText.value) {
-            messages.value = [...messages.value, {
-              id: `temp-${++tempMsgId}`,
-              role: 'assistant',
-              message_type: 'text',
-              content: streamingText.value,
-              sequence: messages.value.length + 1,
-            }]
-            streamingText.value = ''
-          }
+          agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
+          agentResponse.isStreaming = false
+          _addLog('default', '执行完成')
           await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+          if (!agentResponse.payload) {
+            agentResponse.payload = sessionDetail.value?.output_payload || null
+          }
+          streamingText.value = ''
         },
       },
       abortController.signal,
     )
   } catch (err) {
     if (err.name !== 'AbortError') {
-      ElMessage.error(err.message || t('common.requestFailed'))
+      const msg = err.message || t('common.requestFailed')
+      ElMessage.error(msg)
+      messages.value = [...messages.value, {
+        id: `temp-${++tempMsgId}`,
+        role: 'tool',
+        message_type: 'custom',
+        content: `[连接中断] ${msg}`,
+        sequence: messages.value.length + 1,
+      }]
       await loadMessages()
     }
   } finally {
     streaming.value = false
     streamingText.value = ''
+    hasStageProgress.value = false
+    stageLogLines.value = []
     abortController = null
   }
 }
 
 async function handleComposerSend(payload) {
   if (streaming.value || creating.value) return
-
   if (!payload.interfaceId && !payload.apiDocText) {
     ElMessage.warning(t('page.agent.apiBindingRequired'))
     return
   }
-
   const session = await createSessionFromComposer(payload)
   if (!session) return
-  await sendMessage(payload.content)
+  await sendMessage(payload.content || '')
 }
 
+/* SIT-F7: Composer in chat mode sends directly */
+async function sendMessageForComposer(payload) {
+  if (streaming.value || creating.value) return
+  if (!activeSessionId.value) {
+    try {
+      const session = await createSessionFromComposer(payload)
+      if (!session) return
+    } catch (err) {
+      console.error('sendMessageForComposer error:', err)
+      ElMessage.error(err.message || t('common.requestFailed'))
+      return
+    }
+  }
+  const content = payload.content || ''
+  if (content) {
+    await sendMessage(content)
+  }
+}
+
+/* Handle open case list */
+function handleOpenCaseList(payload) {
+  caseListPayload.value = payload
+  caseListVisible.value = true
+}
+
+/* Save from case list dialog */
+async function saveCasesFromDialog(saveData) {
+  // For API type, delegate to confirm logic
+  showConfirm.value = true
+  selectedIndexes.value = saveData.case_indexes || []
+}
+
+/* Confirm cases from embedded PayloadCard */
+function confirmCasesFromCard() {
+  showConfirm.value = true
+}
+
+/* Handle confirm dialog submit */
+async function onConfirmDialog(payload) {
+  if (!activeSessionId.value) return
+  confirming.value = true
+  try {
+    const indexes = payload.selected_indexes?.length ? payload.selected_indexes : selectedIndexes.value
+    await confirmApiGeneration({
+      session_id: activeSessionId.value,
+      selected_indexes: indexes,
+      environment_id: payload.environment_id,
+      catalog_id: payload.catalog_id,
+      interface_id: payload.interface_id ?? boundInterfaceId.value ?? undefined,
+    })
+    ElMessage.success(t('page.agent.saved'))
+    showConfirm.value = false
+  } finally {
+    confirming.value = false
+  }
+}
+
+/* Kept for backward compatibility - delegates to dialog */
 async function confirmCases(payload) {
   if (!activeSessionId.value) return
   confirming.value = true
@@ -324,43 +571,58 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
+/* Row layout - Sidebar (left, always visible) + Main (right) */
 .api-agent-panel {
+  display: flex;
+  flex-direction: row;
   flex: 1;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Main content area */
+.api-agent-panel__main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 
   &--landing {
-    justify-content: flex-end;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow-y: auto;
   }
 }
 
+/* Landing mode inner layout (centered vertically) */
 .api-agent-panel__landing {
-  flex: 1;
-  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding-bottom: 0;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 800px;
+  gap: 20px;
+  min-height: 0;
+}
+
+/* Chat mode layout: context bar + chat + fixed composer */
+.api-agent-panel__chat-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
 .api-agent-panel__landing-spacer {
   flex: 1;
-  min-height: 24px;
-}
-
-.api-agent-panel__workspace {
-  flex: 1;
-  min-height: 0;
-}
-
-.agent-layout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1.1fr) minmax(0, 0.9fr);
-  min-height: 0;
-  height: 100%;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--el-bg-color);
+  min-height: 40px;
 }
 </style>

@@ -8,7 +8,7 @@ from service.ai_generation.schemas import (
     FunctionalPreviewUpdateRequest,
     FunctionalSaveRequest,
 )
-from service.ai_generation.session_schemas import AgentMessageRequest
+from service.ai_generation.session_schemas import AgentMessageRequest, SessionRenameRequest
 from service.core.deps import get_current_active_user
 from service.core.response import success
 from service.user.models import User
@@ -96,3 +96,26 @@ async def functional_generate(
 ):
     data = await FunctionalAgentService.generate(user, body)
     return success(data=data, message="生成会话已创建")
+
+
+# ---------- SIT-F7: Session management (rename / delete) ----------
+
+@router.patch("/sessions/{session_id}", summary="重命名手工用例 Agent 会话")
+async def functional_rename_session(
+    session_id: int,
+    body: SessionRenameRequest,
+    user: User = Depends(get_current_active_user),
+):
+    from service.ai_generation.session_lifecycle import SessionLifecycleService
+    data = await SessionLifecycleService.rename_session(user, session_id=session_id, new_title=body.title)
+    return success(data=data, message="会话名称已更新")
+
+
+@router.delete("/sessions/{session_id}", summary="删除手工用例 Agent 会话")
+async def functional_delete_session(
+    session_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    from service.ai_generation.session_lifecycle import SessionLifecycleService
+    data = await SessionLifecycleService.delete_session(user, session_id=session_id)
+    return success(data=data, message="会话已删除")

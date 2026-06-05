@@ -41,6 +41,14 @@ def api_test_gen_use_mock() -> bool:
 LLM_NOT_CONFIGURED_MSG = "未配置 LLM_BINDING_API_KEY，无法执行 AI 生成"
 
 
+SESSION_TITLE_PROMPT = """请根据以下对话的第一条用户消息，用不超过15个中文汉字概括该对话的主题。
+仅输出概括文字，不要任何解释或标点。
+
+用户消息：{user_first_message}
+
+概括："""
+
+
 def compute_prompt_hash(source_text: str, user_prompt: str | None) -> str:
     """Return sha256 hex digest of source text combined with optional user prompt."""
     parts = [source_text]

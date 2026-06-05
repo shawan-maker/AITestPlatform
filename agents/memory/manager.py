@@ -151,6 +151,7 @@ class DualMemoryManager:
         """准备 Agent 输入消息 —— 核心入口方法
         
         流程：
+          Step 0: 注入项目上下文（每次都注入，确保LLM感知当前项目）
           Step 1: 判断是否需要注入长期记忆（按 thread_id 去重）
           Step 2: 如需注入 → 加载全部历史记忆 → 组装 System Message 放在消息头部
           Step 3: 追加用户当前问题
@@ -160,11 +161,16 @@ class DualMemoryManager:
             query:   用户本轮输入的问题
         
         Returns:
-            {"messages": [SystemMessage(可选), HumanMessage, ...]} 格式的字典
+            {"messages": [SystemMessage(项目上下文), SystemMessage(可选), HumanMessage, ...]} 格式的字典
         """
         from langchain_core.messages import AIMessage, SystemMessage as _SysMsg
 
         messages = []
+
+        # ---- Step 0: 每次对话都注入项目上下文（让LLM知道当前项目）----
+        project_context_msg = self._build_project_context_message(context)
+        if project_context_msg:
+            messages.append(project_context_msg)
 
         # ---- Step 1 & 2: 首次调用 → 注入完整长期记忆 ----
         if self.should_inject(context):
@@ -185,6 +191,43 @@ class DualMemoryManager:
         messages.append(HumanMessage(content=query))
 
         return {"messages": messages}
+
+    def _build_project_context_message(self, context: RuntimeContext) -> SystemMessage | None:
+        """构建项目上下文系统消息
+        
+        让 LLM 在每轮对话中都能感知到当前工作项目的名称和模块信息，
+        避免出现"请告诉我项目名称是什么"这类不必要的追问。
+        
+        Args:
+            context: 包含 project_name 和 module_id 的运行时上下文
+            
+        Returns:
+            包含项目信息的 SystemMessage；如果信息不足则返回 None
+        """
+        parts = []
+        
+        # 项目名称（必填）
+        if context.project_name and context.project_name.strip():
+            parts.append(f"- **当前项目**: {context.project_name}")
+        else:
+            return None  # 项目名是必须的
+            
+        # 模块ID（可选）
+        if context.module_id and context.module_id.strip() and context.module_id != "None":
+            parts.append(f"- **模块标识**: {context.module_id}")
+            
+        if not parts:
+            return None
+            
+        content = (
+            f"【当前工作环境】\n"
+            + "\n".join(parts)
+            + "\n\n"
+            + "重要提示：你已经在上述项目中工作，无需再次询问项目名称。"
+            + "直接基于用户输入的需求/指令执行任务即可。"
+        )
+        
+        return SystemMessage(content=content)
 
     # ==================== 【写入侧】====================
 

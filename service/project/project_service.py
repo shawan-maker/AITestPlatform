@@ -104,7 +104,7 @@ class ProjectService:
             await project.fetch_related("owner")
         is_member = membership is not None
         my_role = membership.role if membership else None
-        member_count = await ProjectMember.filter(project_id=project.id).count()
+        member_count = int(await ProjectMember.filter(project_id=project.id).count())
         return ProjectBrief(
             id=project.id,
             name=project.name,

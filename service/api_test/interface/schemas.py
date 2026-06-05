@@ -56,7 +56,7 @@ class InterfaceListQuery(BaseModel):
     catalog_id: int | None = Field(default=None, ge=1)
     q: str | None = None
     page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    page_size: int = Field(default=20, ge=1, le=200)
 
 
 class InterfaceReorderRequest(BaseModel):

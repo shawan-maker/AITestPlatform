@@ -68,6 +68,9 @@ class RequirementDoc(models.Model):
     created_by = fields.ForeignKeyField(
         "models.User", related_name="created_requirements", on_delete=fields.RESTRICT
     )
+    updated_by = fields.ForeignKeyField(
+        "models.User", related_name="updated_requirements", null=True, on_delete=fields.SET_NULL
+    )
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 

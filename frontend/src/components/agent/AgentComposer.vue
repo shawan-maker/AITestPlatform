@@ -170,10 +170,12 @@ const selectedRequirement = computed(() =>
 const canSend = computed(() => {
   if (props.hidePromptRow) return Boolean(draft.value.trim())
   if (!localProjectId.value) return false
+  /* SIT-F7: Allow sending without selecting requirement/interface (empty conversation) */
+  if (draft.value.trim()) return true
   if (props.agentType === 'functional') {
-    return Boolean(draft.value.trim() || selectedRequirementKey.value)
+    return Boolean(selectedRequirementKey.value)
   }
-  return Boolean(draft.value.trim() || selectedInterfaceId.value)
+  return Boolean(selectedInterfaceId.value)
 })
 
 async function loadRequirementOptions(projectId) {
@@ -353,14 +355,21 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .agent-composer {
-  width: 100%;
-  max-width: 920px;
+  /* SIT-F7: 75% of main content area, max 900px */
+  width: 75%;
+  max-width: 900px;
   margin: 0 auto;
   flex-shrink: 0;
 
   &--compact {
     max-width: none;
+    width: 90%; /* SIT-F7: mobile */
     padding: 0 12px 12px;
+  }
+
+  @media (max-width: 767px) {
+    width: 90%;
+    max-width: none;
   }
 }
 

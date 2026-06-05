@@ -74,7 +74,6 @@ class CandidateService:
         return CandidateDetail(
             **brief.model_dump(),
             description=cand.description,
-            created_by_username=cand.created_by.username if cand.created_by else None,
         )
 
     @classmethod
