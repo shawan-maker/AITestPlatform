@@ -15,6 +15,7 @@ from service.functional_test.requirement.schemas import (
     CandidateConfirmRequest,
     CandidateDetail,
     CandidateListQuery,
+    CandidateUpdateRequest,
     PaginatedCandidates,
     RequirementDetail,
 )
@@ -48,7 +49,7 @@ class CandidateService:
 
     @classmethod
     async def _to_brief(cls, cand: RequirementCandidate) -> CandidateBrief:
-        await cand.fetch_related("project", "module")
+        await cand.fetch_related("project", "module", "created_by")
         return CandidateBrief(
             id=cand.id,
             project_id=cand.project_id,
@@ -56,11 +57,13 @@ class CandidateService:
             module_id=cand.module_id,
             module_name=cand.module.name if cand.module else None,
             title=cand.title,
+            source_type=RequirementSourceType.knowledge,
             source_document_id=cand.source_document_id,
             source_document_version_id=cand.source_document_version_id,
             source_version_label=cand.source_version_label,
             index_status=cand.index_status,
             indexed_at=cand.indexed_at,
+            created_by_username=cand.created_by.username if cand.created_by else None,
             created_at=cand.created_at,
         )
 
@@ -95,6 +98,8 @@ class CandidateService:
             qs = qs.filter(title__icontains=query.title.strip())
         if query.module_id is not None:
             qs = qs.filter(module_id=query.module_id)
+        if query.created_by is not None:
+            qs = qs.filter(created_by_id=query.created_by)
 
         qs = qs.order_by("-created_at")
         total, rows = await paginate(qs, query.page, query.page_size)
@@ -209,6 +214,7 @@ class CandidateService:
                 project_id=cand.project_id,
                 module_id=module_id,
                 title=title,
+                doc_no=None,
                 description=data.description if data.description is not None else cand.description,
                 priority=data.priority,
                 status=data.status,
@@ -219,6 +225,7 @@ class CandidateService:
                 index_status=cand.index_status or IndexStatus.indexed,
                 indexed_at=cand.indexed_at,
                 created_by_id=user.id,
+                updated_by_id=user.id,
             )
             await cand.delete()
 
@@ -231,3 +238,25 @@ class CandidateService:
         cand = await cls._get_or_404(candidate_id)
         await ensure_requirement_editor(cand.project_id, user)
         await cand.delete()
+
+    @classmethod
+    async def update(
+        cls,
+        user: User,
+        candidate_id: int,
+        data: CandidateUpdateRequest,
+    ) -> CandidateDetail:
+        cand = await cls._get_or_404(candidate_id)
+        await ensure_requirement_editor(cand.project_id, user)
+        if data.module_id is not None:
+            await cls._validate_module(cand.project_id, data.module_id)
+            cand.module_id = data.module_id
+        if data.title is not None:
+            title = data.title.strip()
+            if not title:
+                raise AppException("需求标题不能为空", 400)
+            cand.title = title
+        if data.description is not None:
+            cand.description = data.description
+        await cand.save()
+        return await cls._to_detail(cand)

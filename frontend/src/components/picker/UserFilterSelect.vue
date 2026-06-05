@@ -22,7 +22,7 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { listUsers } from '@/api/users'
+import { lookupUsers } from '@/api/users'
 
 const props = defineProps({
   modelValue: { type: Number, default: null },
@@ -44,7 +44,7 @@ watch(
 async function searchUsers(query) {
   loading.value = true
   try {
-    const res = await listUsers({ username: query?.trim() || undefined, page: 1, page_size: 30, is_active: true })
+    const res = await lookupUsers(query?.trim() || undefined, 1, 30)
     options.value = res.data.data?.items ?? []
   } catch {
     options.value = []

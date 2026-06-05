@@ -22,6 +22,7 @@ service/design/
 # 本地数据/缓存（按需）
 rag/output/
 rag/rag_storage/
+rag/parsed/
 rag/temp/
 rag/document/
 *.log

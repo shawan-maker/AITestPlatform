@@ -20,7 +20,10 @@ from service.functional_test.case.schemas import (
     PaginatedCases,
     TestPointBrief,
 )
-from service.functional_test.case.suite_guard import auto_remove_relations_for_cases
+from service.functional_test.case.suite_guard import (
+    auto_remove_relations_for_cases,
+    get_suite_names_for_cases,
+)
 from service.project.models import ProjectModule
 from service.user.models import User
 
@@ -46,6 +49,20 @@ class CaseService:
         return await CatalogService._get_catalog_or_404(catalog_id, project_id)
 
     @classmethod
+    async def _ensure_name_unique_in_catalog(
+        cls,
+        case_name: str,
+        catalog_id: int,
+        *,
+        exclude_id: int | None = None,
+    ) -> None:
+        qs = FunctionalCase.filter(catalog_id=catalog_id, case_name=case_name)
+        if exclude_id is not None:
+            qs = qs.exclude(id=exclude_id)
+        if await qs.exists():
+            raise AppException("同级目录下用例名称已存在", 409)
+
+    @classmethod
     async def _next_sort_order(cls, catalog_id: int) -> int:
         last = (
             await FunctionalCase.filter(catalog_id=catalog_id)
@@ -56,7 +73,7 @@ class CaseService:
 
     @classmethod
     async def _to_brief(cls, case: FunctionalCase) -> CaseBrief:
-        await case.fetch_related("catalog", "created_by")
+        await case.fetch_related("catalog", "created_by", "updated_by", "module")
         return CaseBrief(
             id=case.id,
             project_id=case.project_id,
@@ -72,7 +89,10 @@ class CaseService:
             source=case.source,
             sort_order=case.sort_order,
             jira_issue_key=case.jira_issue_key,
+            module_name=case.module.name if case.module else None,
             created_by_username=case.created_by.username if case.created_by else None,
+            updated_by_username=case.updated_by.username if case.updated_by else None,
+            created_at=case.created_at,
             updated_at=case.updated_at,
         )
 
@@ -113,6 +133,14 @@ class CaseService:
             qs = qs.filter(catalog_id__in=catalog_ids)
         if query.case_name:
             qs = qs.filter(case_name__icontains=query.case_name.strip())
+        if query.priority is not None:
+            qs = qs.filter(priority=query.priority)
+        if query.type is not None:
+            qs = qs.filter(type=query.type)
+        if query.exec_result is not None:
+            qs = qs.filter(exec_result=query.exec_result)
+        if query.jira_issue_key:
+            qs = qs.filter(jira_issue_key__icontains=query.jira_issue_key.strip())
         qs = qs.order_by("sort_order", "id")
         total, rows = await paginate(qs, query.page, query.page_size)
         items = [await cls._to_brief(row) for row in rows]
@@ -134,6 +162,7 @@ class CaseService:
         case_name = data.case_name.strip()
         if not case_name:
             raise AppException("用例名称不能为空", 400)
+        await cls._ensure_name_unique_in_catalog(case_name, data.catalog_id)
         sort_order = await cls._next_sort_order(data.catalog_id)
         case = await FunctionalCase.create(
             project_id=data.project_id,
@@ -172,6 +201,9 @@ class CaseService:
             name = data.case_name.strip()
             if not name:
                 raise AppException("用例名称不能为空", 400)
+            target_catalog_id = data.catalog_id if data.catalog_id is not None else case.catalog_id
+            if target_catalog_id is not None:
+                await cls._ensure_name_unique_in_catalog(name, target_catalog_id, exclude_id=case.id)
             case.case_name = name
         for field in (
             "priority",
@@ -199,17 +231,24 @@ class CaseService:
         return await cls._to_detail(case)
 
     @classmethod
-    async def delete(cls, user: User, case_id: int) -> None:
+    async def delete(cls, user: User, case_id: int) -> dict:
         case = await cls._get_case_or_404(case_id)
         await ensure_case_editor(case.project_id, user)
+        suite_names = await get_suite_names_for_cases([case_id])
         await auto_remove_relations_for_cases([case_id])
         await case.delete()
+        result: dict = {}
+        if suite_names:
+            result["warning"] = {"suite_names": suite_names}
+        return result
 
     @classmethod
     async def copy(cls, user: User, case_id: int) -> CaseDetail:
         case = await cls._get_case_or_404(case_id)
         await ensure_case_editor(case.project_id, user)
         new_name = cls._copy_name(case.case_name)
+        if case.catalog_id:
+            await cls._ensure_name_unique_in_catalog(new_name, case.catalog_id)
         sort_order = await cls._next_sort_order(case.catalog_id) if case.catalog_id else case.sort_order + 1
         copied = await FunctionalCase.create(
             project_id=case.project_id,
@@ -271,7 +310,19 @@ class CaseService:
     async def batch_update(cls, user: User, data: CaseBatchUpdateRequest) -> CaseBatchResult:
         if all(
             v is None
-            for v in (data.priority, data.status, data.exec_result, data.catalog_id, data.module_id)
+            for v in (
+                data.type,
+                data.priority,
+                data.status,
+                data.exec_result,
+                data.catalog_id,
+                data.module_id,
+                data.preconditions,
+                data.test_steps,
+                data.test_data,
+                data.expected_result,
+                data.jira_issue_key,
+            )
         ):
             raise AppException("批量更新字段不能全为空", 400)
 
@@ -284,18 +335,30 @@ class CaseService:
                 continue
             try:
                 await ensure_case_editor(case.project_id, user)
-                if data.catalog_id is not None:
-                    await cls._validate_catalog(case.project_id, data.catalog_id)
-                    case.catalog_id = data.catalog_id
-                if data.module_id is not None:
-                    await cls._validate_module(case.project_id, data.module_id)
-                    case.module_id = data.module_id
+                if data.type is not None:
+                    case.type = data.type
                 if data.priority is not None:
                     case.priority = data.priority
                 if data.status is not None:
                     case.status = data.status
                 if data.exec_result is not None:
                     case.exec_result = data.exec_result
+                if data.catalog_id is not None:
+                    await cls._validate_catalog(case.project_id, data.catalog_id)
+                    case.catalog_id = data.catalog_id
+                if data.module_id is not None:
+                    await cls._validate_module(case.project_id, data.module_id)
+                    case.module_id = data.module_id
+                if data.preconditions is not None:
+                    case.preconditions = data.preconditions
+                if data.test_steps is not None:
+                    case.test_steps = data.test_steps
+                if data.test_data is not None:
+                    case.test_data = data.test_data
+                if data.expected_result is not None:
+                    case.expected_result = data.expected_result
+                if data.jira_issue_key is not None:
+                    case.jira_issue_key = data.jira_issue_key
                 case.updated_by_id = user.id
                 await case.save()
                 success_count += 1
@@ -307,6 +370,7 @@ class CaseService:
     async def batch_delete(cls, user: User, data: CaseBatchDeleteRequest) -> CaseBatchResult:
         failures: list[BatchOperationFailure] = []
         success_count = 0
+        all_suite_names: list[str] = []
         for case_id in data.case_ids:
             case = await FunctionalCase.get_or_none(id=case_id)
             if case is None:
@@ -314,9 +378,15 @@ class CaseService:
                 continue
             try:
                 await ensure_case_editor(case.project_id, user)
+                suite_names = await get_suite_names_for_cases([case_id])
+                all_suite_names.extend(suite_names)
                 await auto_remove_relations_for_cases([case_id])
                 await case.delete()
                 success_count += 1
             except AppException as exc:
                 failures.append(BatchOperationFailure(case_id=case_id, reason=exc.message))
-        return CaseBatchResult(success_count=success_count, failures=failures)
+        result = CaseBatchResult(success_count=success_count, failures=failures)
+        if all_suite_names:
+            # 去重套件名称附加到结果中
+            result.warning = {"suite_names": list(dict.fromkeys(all_suite_names))}
+        return result

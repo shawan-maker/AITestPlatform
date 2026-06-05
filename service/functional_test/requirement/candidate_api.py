@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query
 from service.core.deps import get_current_active_user
 from service.core.response import success
 from service.functional_test.requirement.candidate_service import CandidateService
-from service.functional_test.requirement.schemas import CandidateConfirmRequest, CandidateListQuery
+from service.functional_test.requirement.schemas import CandidateConfirmRequest, CandidateListQuery, CandidateUpdateRequest
 from service.user.models import User
 
 router = APIRouter(tags=["功能测试-需求候选"])
@@ -13,6 +13,7 @@ def get_candidate_list_query(
     project_id: int | None = Query(None, ge=1),
     title: str | None = Query(None),
     module_id: int | None = Query(None, ge=1),
+    created_by: int | None = Query(None, ge=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> CandidateListQuery:
@@ -20,6 +21,7 @@ def get_candidate_list_query(
         project_id=project_id,
         title=title,
         module_id=module_id,
+        created_by=created_by,
         page=page,
         page_size=page_size,
     )
@@ -60,6 +62,16 @@ async def confirm_candidate(
 ):
     data = await CandidateService.confirm(user, candidate_id, body)
     return success(data=data, message="需求确认成功")
+
+
+@router.patch("/requirements/candidates/{candidate_id}", summary="编辑候选需求")
+async def update_candidate(
+    candidate_id: int,
+    body: CandidateUpdateRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await CandidateService.update(user, candidate_id, body)
+    return success(data=data, message="需求编辑成功")
 
 
 @router.delete("/requirements/candidates/{candidate_id}", summary="取消候选")

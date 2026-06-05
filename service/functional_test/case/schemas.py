@@ -57,6 +57,10 @@ class CaseListQuery(BaseModel):
     project_id: int = Field(..., ge=1)
     catalog_id: int | None = Field(default=None, ge=1)
     case_name: str | None = None
+    priority: int | None = Field(default=None, ge=1, le=4)
+    type: FunctionalCaseType | None = None
+    exec_result: FunctionalExecResult | None = None
+    jira_issue_key: str | None = Field(default=None, max_length=50)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -118,7 +122,10 @@ class CaseBrief(BaseModel):
     source: SourceType
     sort_order: int
     jira_issue_key: str | None
+    module_name: str | None = None
     created_by_username: str | None
+    updated_by_username: str | None = None
+    created_at: datetime = None
     updated_at: datetime
 
 
@@ -141,11 +148,17 @@ class CaseReorderRequest(BaseModel):
 
 class CaseBatchUpdateRequest(BaseModel):
     case_ids: list[int] = Field(..., min_length=1)
+    type: FunctionalCaseType | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
     status: FunctionalCaseStatus | None = None
     exec_result: FunctionalExecResult | None = None
     catalog_id: int | None = Field(default=None, ge=1)
     module_id: int | None = Field(default=None, ge=1)
+    preconditions: str | None = None
+    test_steps: str | None = None
+    test_data: str | None = None
+    expected_result: str | None = None
+    jira_issue_key: str | None = Field(default=None, max_length=50)
 
 
 class CaseBatchDeleteRequest(BaseModel):

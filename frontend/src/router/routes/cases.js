@@ -1,5 +1,6 @@
 import RequirementListView from '@/views/cases/RequirementListView.vue'
 import RequirementDetailView from '@/views/cases/RequirementDetailView.vue'
+import RequirementViewOnlyView from '@/views/cases/RequirementViewOnlyView.vue'
 import FunctionalCaseWorkspaceView from '@/views/cases/FunctionalCaseWorkspaceView.vue'
 import ApiTestWorkspaceView from '@/views/cases/ApiTestWorkspaceView.vue'
 import ApiCaseDetailView from '@/views/cases/ApiCaseDetailView.vue'
@@ -16,6 +17,12 @@ export default [
     name: 'RequirementDetail',
     component: RequirementDetailView,
     meta: { titleKey: 'menu.casesRequirements', projectRequired: true },
+  },
+  {
+    path: '/cases/requirements/:requirementId/view',
+    name: 'RequirementViewOnly',
+    component: RequirementViewOnlyView,
+    meta: { titleKey: 'page.requirements.viewDetail', projectRequired: true },
   },
   {
     path: '/cases/functional',

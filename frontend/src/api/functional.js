@@ -41,6 +41,10 @@ export function deleteCandidate(id) {
   return request.delete(`/functional/requirements/candidates/${id}`)
 }
 
+export function updateCandidate(id, data) {
+  return request.patch(`/functional/requirements/candidates/${id}`, data)
+}
+
 // Case catalogs
 export function getCaseCatalogTree(params = {}) {
   return request.get('/functional/case-catalogs/tree', { params })

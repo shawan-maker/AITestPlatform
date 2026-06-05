@@ -61,7 +61,7 @@ class RequirementService:
 
     @classmethod
     async def _to_brief(cls, doc: RequirementDoc) -> RequirementBrief:
-        await doc.fetch_related("project", "module", "created_by")
+        await doc.fetch_related("project", "module", "created_by", "updated_by")
         return RequirementBrief(
             id=doc.id,
             project_id=doc.project_id,
@@ -73,6 +73,7 @@ class RequirementService:
             priority=doc.priority,
             status=doc.status,
             created_by_username=doc.created_by.username if doc.created_by else None,
+            updated_by_username=doc.updated_by.username if doc.updated_by else None,
             created_at=doc.created_at,
             updated_at=doc.updated_at,
         )
@@ -121,6 +122,8 @@ class RequirementService:
             qs = qs.filter(source_type=query.source_type)
         if query.module_id is not None:
             qs = qs.filter(module_id=query.module_id)
+        if query.created_by is not None:
+            qs = qs.filter(created_by_id=query.created_by)
 
         qs = qs.order_by("-updated_at")
         total, rows = await paginate(qs, query.page, query.page_size)
@@ -155,6 +158,7 @@ class RequirementService:
             source_type=RequirementSourceType.manual,
             index_status=IndexStatus.na,
             created_by_id=user.id,
+            updated_by_id=user.id,
         )
         return await cls._to_detail(doc)
 
@@ -184,6 +188,7 @@ class RequirementService:
             doc.priority = data.priority
         if data.status is not None:
             doc.status = data.status
+        doc.updated_by_id = user.id
         await doc.save()
         return await cls._to_detail(doc)
 

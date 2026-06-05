@@ -18,6 +18,7 @@ class RequirementListQuery(BaseModel):
     project_name: str | None = None
     source_type: RequirementSourceType | None = None
     module_id: int | None = Field(default=None, ge=1)
+    created_by: int | None = Field(default=None, ge=1)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -52,6 +53,7 @@ class RequirementBrief(BaseModel):
     priority: int
     status: RequirementStatus
     created_by_username: str | None
+    updated_by_username: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -78,8 +80,15 @@ class CandidateListQuery(BaseModel):
     project_id: int | None = Field(default=None, ge=1)
     title: str | None = None
     module_id: int | None = Field(default=None, ge=1)
+    created_by: int | None = Field(default=None, ge=1)
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
+
+
+class CandidateUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    module_id: int | None = Field(default=None, ge=1)
+    description: str | None = None
 
 
 class CandidateBrief(BaseModel):
@@ -89,11 +98,13 @@ class CandidateBrief(BaseModel):
     module_id: int | None
     module_name: str | None
     title: str
+    source_type: RequirementSourceType = RequirementSourceType.knowledge
     source_document_id: int
     source_document_version_id: int
     source_version_label: str
     index_status: IndexStatus
     indexed_at: datetime | None
+    created_by_username: str | None = None
     created_at: datetime
 
 
