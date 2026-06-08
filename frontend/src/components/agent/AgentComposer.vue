@@ -8,6 +8,7 @@
             v-model="localProjectId"
             class="agent-composer__inline-select agent-composer__inline-select--project"
             filterable
+            popper-class="agent-composer-select-dropdown"
             :placeholder="t('common.selectProject')"
             :loading="projectStore.loading"
             @change="onProjectChange"
@@ -25,6 +26,7 @@
             class="agent-composer__inline-select agent-composer__inline-select--requirement"
             filterable
             clearable
+            popper-class="agent-composer-select-dropdown"
             :placeholder="t('page.agent.selectRequirement')"
             :loading="loadingOptions"
           >
@@ -42,6 +44,7 @@
             v-model="localProjectId"
             class="agent-composer__inline-select agent-composer__inline-select--project"
             filterable
+            popper-class="agent-composer-select-dropdown"
             :placeholder="t('common.selectProject')"
             :loading="projectStore.loading"
             @change="onProjectChange"
@@ -59,6 +62,7 @@
             class="agent-composer__inline-select agent-composer__inline-select--interface"
             filterable
             clearable
+            popper-class="agent-composer-select-dropdown"
             :placeholder="t('page.agent.selectInterface')"
             :loading="loadingOptions"
           >
@@ -185,32 +189,16 @@ async function loadRequirementOptions(projectId) {
   }
   loadingOptions.value = true
   try {
-    const [reqRes, docRes] = await Promise.all([
-      listRequirements({ project_id: projectId, page: 1, page_size: 100 }),
-      listDocuments({
-        project_id: projectId,
-        doc_type: 'requirement',
-        index_status: 'indexed',
-        page: 1,
-        page_size: 100,
-      }),
-    ])
-    const requirements = (reqRes.data.data?.items ?? []).map((item) => ({
+    const reqRes = await listRequirements({ project_id: projectId, page: 1, page_size: 100 })
+    const requirements = (reqRes.data?.data?.items ?? []).map((item) => ({
       key: `req-${item.id}`,
       label: item.title,
       type: 'requirement',
       requirementId: item.id,
       knowledgeDocumentId: null,
     }))
-    const documents = (docRes.data.data?.items ?? []).map((item) => ({
-      key: `doc-${item.id}`,
-      label: item.title,
-      type: 'knowledge',
-      requirementId: null,
-      knowledgeDocumentId: item.id,
-    }))
-    requirementOptions.value = [...requirements, ...documents]
-  } catch {
+    requirementOptions.value = requirements
+  } catch (error) {
     requirementOptions.value = []
   } finally {
     loadingOptions.value = false
@@ -355,9 +343,9 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .agent-composer {
-  /* SIT-F7: 75% of main content area, max 900px (landing mode) */
+  /* SIT-F7: 75% of main content area, max 1800px (landing mode) */
   width: 75%;
-  max-width: 900px;
+  max-width: 1800px; /* 加倍：从 900px 改为 1800px */
   margin: 0 auto;
   flex-shrink: 0;
 
@@ -366,7 +354,7 @@ onMounted(async () => {
     max-width: none;
     width: 100%; /* 与chat panel对齐 */
     margin: 0 auto; /* 居中 */
-    padding: 0 20px 12px; /* 与chat panel的messages区域padding保持一致 */
+    padding: 0 40px 24px; /* 加倍：从 20px 12px 改为 40px 24px */
     box-sizing: border-box;
   }
   
@@ -377,52 +365,63 @@ onMounted(async () => {
 }
 
 .agent-composer__box {
-  border: 1px solid rgba($color-primary, 0.35);
-  border-radius: 12px;
+  border: 2px solid rgba($color-primary, 0.35); /* 加粗边框：从 1px 改为 2px */
+  border-radius: 24px; /* 加倍：从 12px 改为 24px */
   background: var(--el-bg-color);
-  padding: 16px 18px 12px;
-  box-shadow: 0 2px 12px rgba($color-primary, 0.06);
+  padding: 32px 36px 24px; /* 加倍：从 16px 18px 12px 改为 32px 36px 24px */
+  box-shadow: 0 4px 24px rgba($color-primary, 0.06); /* 加倍：从 0 2px 12px 改为 0 4px 24px */
 }
 
 .agent-composer__prompt-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
-  margin-bottom: 12px;
-  font-size: 14px;
+  gap: 12px 16px; /* 加倍：从 6px 8px 改为 12px 16px */
+  margin-bottom: 24px; /* 加倍：从 12px 改为 24px */
+  font-size: 24px; /* 比tab字号(28px)小两号 */
   color: var(--el-text-color-primary);
-  line-height: 32px;
+  line-height: 48px; /* 调整行高以适应24px字体 */
 }
 
 .agent-composer__inline-select {
   :deep(.el-select__wrapper) {
     box-shadow: none !important;
-    border: 1px solid var(--el-border-color);
-    border-radius: 6px;
-    min-height: 32px;
-    padding: 0 8px;
+    border: 2px solid var(--el-border-color); /* 加粗边框：从 1px 改为 2px */
+    border-radius: 12px; /* 加倍：从 6px 改为 12px */
+    min-height: 64px; /* 加倍：从 32px 改为 64px */
+    padding: 0 16px; /* 加倍：从 0 8px 改为 0 16px */
+  }
+
+  /* 下拉框内文字字号比其它字体小一号(22px)，包括下拉查看和选中展示 */
+  :deep(.el-input__wrapper) {
+    font-size: 22px !important;
+  }
+  :deep(.el-input__inner) {
+    font-size: 22px !important;
+  }
+  :deep(.el-select__placeholder) {
+    font-size: 22px !important;
   }
 
   &--project {
-    width: 180px;
+    width: 240px; /* 缩小宽度，让提示词在同一行显示 */
   }
 
   &--requirement,
   &--interface {
-    width: 200px;
+    width: 280px; /* 缩小宽度，让提示词在同一行显示 */
   }
 }
 
 .agent-composer__textarea {
   width: 100%;
-  min-height: 120px;
-  max-height: 240px;
+  min-height: 240px; /* 加倍：从 120px 改为 240px */
+  max-height: 480px; /* 加倍：从 240px 改为 480px */
   border: none;
   outline: none;
   resize: vertical;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 24px; /* 比tab字号(28px)小两号，统一字号 */
+  line-height: 1.6; /* 调整行高以适应24px字体 */
   color: var(--el-text-color-primary);
   background: transparent;
   font-family: inherit;
@@ -438,25 +437,26 @@ onMounted(async () => {
 }
 
 .agent-composer--compact .agent-composer__textarea {
-  min-height: 72px;
-  max-height: 160px;
+  min-height: 144px; /* 加倍：从 72px 改为 144px */
+  max-height: 320px; /* 加倍：从 160px 改为 320px */
+  font-size: 13.5px; /* 与上方对话消息字体保持一致 */
 }
 
 .agent-composer__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 16px; /* 加倍：从 8px 改为 16px */
+  padding-top: 16px; /* 加倍：从 8px 改为 16px */
 }
 
 .agent-composer__link-btn {
   border: none;
   background: none;
   color: $color-primary;
-  font-size: 14px;
+  font-size: 24px; /* 比tab字号(28px)小两号，统一字号 */
   cursor: pointer;
-  padding: 4px 0;
+  padding: 8px 0; /* 加倍：从 4px 0 改为 8px 0 */
 
   &:disabled {
     opacity: 0.5;
@@ -467,20 +467,21 @@ onMounted(async () => {
 .agent-composer__actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 20px; /* 加倍：从 10px 改为 20px */
 }
 
 .agent-composer__icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 64px; /* 加倍：从 32px 改为 64px */
+  height: 64px; /* 加倍：从 32px 改为 64px */
   border: none;
   background: none;
   color: var(--el-text-color-secondary);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 12px; /* 加倍：从 6px 改为 12px */
+  font-size: 32px; /* 新增：增大图标字体大小 */
 
   &:hover:not(:disabled) {
     background: var(--el-fill-color-light);
@@ -497,14 +498,15 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 72px; /* 加倍：从 36px 改为 72px */
+  height: 72px; /* 加倍：从 36px 改为 72px */
   border: none;
   border-radius: 50%;
   background: linear-gradient(135deg, $color-primary, $color-primary-dark);
   color: #fff;
   cursor: pointer;
   transition: opacity 0.2s, transform 0.15s;
+  font-size: 36px; /* 新增：增大图标字体大小 */
 
   &:hover:not(:disabled) {
     transform: scale(1.04);
@@ -514,5 +516,15 @@ onMounted(async () => {
     opacity: 0.45;
     cursor: not-allowed;
   }
+}
+</style>
+
+<!-- 非 scoped 样式：修复 el-select-dropdown 字号（Teleport 到 body 导致 scoped 样式失效） -->
+<style>
+.agent-composer-select-dropdown .el-select-dropdown__item {
+  font-size: 22px !important;
+}
+.agent-composer-select-dropdown .el-select-dropdown__empty {
+  font-size: 22px !important;
 }
 </style>

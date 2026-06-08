@@ -33,8 +33,6 @@ class AIGenerationSession(models.Model):
         SourceChannel, default=SourceChannel.agent_center
     )
     title = fields.CharField(max_length=200, null=True)
-    # 记录Agent已完成的阶段，用于SSE断点续传，格式: ["search_requirement", "generate_testcases"]
-    completed_stages = fields.JSONField(null=True, default=list)
     created_by = fields.ForeignKeyField(
         "models.User", related_name="ai_generation_sessions", on_delete=fields.RESTRICT
     )

@@ -42,20 +42,20 @@ const tabs = computed(() => [
 .agent-type-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 20px; /* 加倍：从 10px 改为 20px */
   flex-shrink: 0;
 }
 
 .agent-type-tabs__item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: 1px solid var(--el-border-color);
+  gap: 16px; /* 加倍：从 8px 改为 16px */
+  padding: 16px 32px; /* 加倍：从 8px 16px 改为 16px 32px */
+  border: 2px solid var(--el-border-color); /* 加粗边框：从 1px 改为 2px */
   border-radius: 999px;
   background: var(--el-bg-color);
   color: var(--el-text-color-regular);
-  font-size: 14px;
+  font-size: 28px; /* 加倍：从 14px 改为 28px */
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s, color 0.2s;
 
@@ -76,9 +76,9 @@ const tabs = computed(() => [
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  font-size: 16px;
+  width: 44px; /* 加倍：从 22px 改为 44px */
+  height: 44px; /* 加倍：从 22px 改为 44px */
+  font-size: 32px; /* 加倍：从 16px 改为 32px */
   color: var(--el-text-color-secondary);
 
   &--functional {
@@ -90,11 +90,11 @@ const tabs = computed(() => [
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 44px; /* 加倍：从 22px 改为 44px */
+  height: 44px; /* 加倍：从 22px 改为 44px */
   border-radius: 50%;
-  border: 1.5px solid currentColor;
-  font-size: 8px;
+  border: 3px solid currentColor; /* 加粗边框：从 1.5px 改为 3px */
+  font-size: 16px; /* 加倍：从 8px 改为 16px */
   font-weight: 700;
   letter-spacing: -0.02em;
 }

@@ -85,14 +85,14 @@
       v-model="caseListVisible"
       :payload="caseListPayload"
       gen-type="functional"
-      :catalogs="catalogs"
+      :project-id="projectId"
       @save="saveCasesFromDialog"
     />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -129,7 +129,7 @@ const emit = defineEmits(['composer-mode-change'])
 
 const { t } = useI18n()
 const route = useRoute()
-const { withProjectParams } = useProjectScope()
+const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 
 const sessions = ref([])
@@ -335,6 +335,10 @@ function stopStream() {
   stageLogLines.value = []
 }
 
+// Promise to track payload_updated completion
+let payloadUpdatedPromise = null
+let payloadUpdatedResolve = null
+
 /** Detect which stage a text belongs to based on keywords */
 function detectStageFromText(text) {
   const str = String(text)
@@ -357,6 +361,12 @@ async function sendMessage(content) {
   streamingText.value = ''
   hasStageProgress.value = false
   abortController = new AbortController()
+  
+  // Initialize payload_updated tracking Promise
+  payloadUpdatedPromise = new Promise((resolve) => {
+    payloadUpdatedResolve = resolve
+  })
+  console.log('[SSE-EVENT] payloadUpdatedPromise initialized')
 
   // Add user message
   const userMsg = {
@@ -439,8 +449,10 @@ async function sendMessage(content) {
       content,
       {
         stage: (data) => {
+          console.log('[SSE-EVENT] stage event received:', data)
           hasStageProgress.value = true
           if (data?.name) {
+            console.log(`[SSE-EVENT] Stage "${data.name}" status: ${data.status}`)
             // 新阶段开始 → 先标记所有之前的 running 阶段为 done
             agentResponse.stages = agentResponse.stages.map(s =>
               s.name === data.name || s.status === 'done' ? s : { ...s, status: 'done' }
@@ -448,28 +460,41 @@ async function sendMessage(content) {
             const stage = getStage(data.name)
             stage.text = data.text || ''
             stage.status = data.status || 'running'
+            console.log(`[SSE-EVENT] Stage "${data.name}" updated, text: ${data.text}`)
+          } else {
+            console.warn('[SSE-EVENT] stage event received but no name provided')
           }
         },
         custom: (data) => {
+          console.log('[SSE-EVENT] custom event received:', data)
           hasStageProgress.value = true
           const text = String(data)
+          console.log(`[SSE-EVENT] custom text: ${text.substring(0, 100)}...`)
+          
           // Auto-detect which stage this belongs to
           const stageName = detectStageFromText(text)
+          console.log(`[SSE-EVENT] custom event detected stage: ${stageName}`)
           _addLog(stageName, text)
           
           // 问题2修复：在"检索需求文档"阶段完成后，添加等待状态提示
           if (text.includes('✅ [阶段1完成]') || text.includes('阶段1完成')) {
-            console.log('[DEBUG] 检索需求文档阶段完成，等待生成测试用例...')
-            // 这里不需要额外操作，因为阶段标记会在payload_updated中完成
-            // 但我们可以在UI上显示一些提示，告诉用户程序还在处理
+            console.log('[SSE-EVENT] ✅ 检索需求文档阶段完成，等待生成测试用例...')
+          }
+          
+          // 检测测试用例生成完成
+          if (text.includes('✅ [阶段2完成]') || text.includes('阶段2完成') || text.includes('测试用例生成成功')) {
+            console.log('[SSE-EVENT] ✅ 测试用例生成完成！')
           }
         },
         messages: (data) => {
           const text = String(data)
           // 过滤掉 [TRANSITIONAL] 过渡日志文本，避免出现在最终回复中
           if (text.includes('[TRANSITIONAL]')) {
+            console.log('[SSE-EVENT] messages: filtered out TRANSITIONAL text')
             return
           }
+          console.log(`[SSE-EVENT] messages: received ${text.length} chars`)
+          
           // 只追加到 agentResponse 的 finalText/streamingText（用于兼容和结果展示）
           agentResponse.streamingText += text
           agentResponse.finalText += text
@@ -478,75 +503,164 @@ async function sendMessage(content) {
           // 阶段详情框只展示 custom/tool_call 事件的结构化日志，避免跨阶段内容混乱
         },
         tool_call: (data) => {
+          console.log('[SSE-EVENT] tool_call event received:', data)
           hasStageProgress.value = true
           if (data?.name) {
+            console.log(`[SSE-EVENT] Tool called: ${data.name}`)
             _addLog(data.name, `调用工具: ${data.name}`)
           } else {
+            console.warn('[SSE-EVENT] tool_call event but no name provided')
             _addLog('default', `工具调用`)
           }
         },
         payload_updated: async () => {
+          console.log('[SSE-EVENT] 🚀 payload_updated event received at', new Date().toLocaleTimeString())
+          console.log('[SSE-EVENT] payload_updated: activeSessionId:', activeSessionId.value)
+          console.log('[SSE-EVENT] payload_updated: agentResponse.isStreaming before:', agentResponse.isStreaming)
+          
           // 不再创建 default 阶段，静默刷新 session 即可
-          console.log('[DEBUG] payload_updated event received')
+          console.log('[SSE-EVENT] payload_updated: calling refreshSession...')
           await refreshSession()
-          console.log('[DEBUG] after refreshSession, sessionDetail.output_payload:', sessionDetail.value?.output_payload)
+          console.log('[SSE-EVENT] payload_updated: after refreshSession')
+          console.log('[SSE-EVENT] payload_updated: sessionDetail.output_payload:', sessionDetail.value?.output_payload ? 'EXISTS' : 'NULL')
+          
           agentResponse.payload = sessionDetail.value?.output_payload || null
-          console.log('[DEBUG] agentResponse.payload set:', agentResponse.payload)
+          console.log('[SSE-EVENT] payload_updated: agentResponse.payload set, has payload:', !!agentResponse.payload)
+          
           // 卡片已出现，现在标记 generate_testcases 阶段完成并打印成功日志
           const stage = agentResponse.stages.find(s => s.name === 'generate_testcases')
           if (stage && stage.status !== 'done') {
+            console.log('[SSE-EVENT] payload_updated: marking generate_testcases stage as done')
             stage.status = 'done'
             const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
             stage.logs = [...(stage.logs || []), `[${time}] ✅ 测试用例的卡片生成成功`]
+          } else {
+            console.log('[SSE-EVENT] payload_updated: generate_testcases stage not found or already done')
+          }
+          
+          // 等待 DOM 更新并延迟，确保卡片渲染
+          console.log('[SSE-EVENT] payload_updated: waiting for nextTick...')
+          await nextTick()
+          console.log('[SSE-EVENT] payload_updated: nextTick completed')
+          
+          // 再等待 500ms 确保卡片已经渲染完成
+          console.log('[SSE-EVENT] payload_updated: waiting 500ms for card rendering...')
+          await new Promise(resolve => setTimeout(resolve, 500))
+          console.log('[SSE-EVENT] payload_updated: 500ms wait completed')
+          
+          // ⚠️ 不在这里设置 isStreaming = false，留给 done 事件统一处理
+          console.log('[SSE-EVENT] payload_updated: ✅ payload_updated completed, waiting for done event...')
+          console.log('[SSE-EVENT] payload_updated: agentResponse.isStreaming remains:', agentResponse.isStreaming)
+          
+          // ✅ 标记 payload_updated 完成
+          if (payloadUpdatedResolve) {
+            payloadUpdatedResolve()
+            console.log('[SSE-EVENT] payload_updated: ✅ Promise resolved')
           }
         },
         error: (data) => {
+          console.error('[SSE-EVENT] ❌ error event received:', data)
           const errorMsg = data?.message || t('common.requestFailed')
+          console.error('[SSE-EVENT] error message:', errorMsg)
           ElMessage.error(errorMsg)
           // 错误信息追加到最后一个阶段，不创建新的 default 阶段
           const stages = agentResponse.stages
           if (stages.length > 0) {
             const lastStage = stages[stages.length - 1]
             const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+            console.error('[SSE-EVENT] error: adding error log to stage:', lastStage.name)
             lastStage.logs = [...(lastStage.logs || []), `[${time}] [错误] ${errorMsg}`]
+          } else {
+            console.error('[SSE-EVENT] error: no stages available to add error log')
           }
         },
         done: async () => {
-          console.log('[DEBUG] SSE done event received at', new Date().toLocaleTimeString())
-          console.log('[DEBUG] activeSessionId:', activeSessionId.value)
+          console.log('[SSE-EVENT] 🏁 done event received at', new Date().toLocaleTimeString())
+          console.log('[SSE-EVENT] done: activeSessionId:', activeSessionId.value)
+          console.log('[SSE-EVENT] done: agentResponse.isStreaming before:', agentResponse.isStreaming)
+          console.log('[SSE-EVENT] done: has abortController:', !!abortController)
+          
+          // 强制停止 SSE 流，避免持续返回内容
+          if (abortController) {
+            console.log('[SSE-EVENT] done: aborting controller...')
+            abortController.abort()
+            console.log('[SSE-EVENT] done: controller aborted')
+          }
+          
+          // ⚠️ 关键：等待 payload_updated 完成，确保卡片已渲染
+          console.log('[SSE-EVENT] done: ⏳ Waiting for payload_updated to complete...')
+          if (payloadUpdatedPromise) {
+            await payloadUpdatedPromise
+            console.log('[SSE-EVENT] done: ✅ payload_updated completed, now safe to set isStreaming = false')
+          } else {
+            console.log('[SSE-EVENT] done: ⚠️ No payloadUpdatedPromise, proceeding anyway')
+          }
+          
           // 标记所有阶段为 done（但保留 generate_testcases 留给 payload_updated 处理）
+          console.log('[SSE-EVENT] done: marking stages as done...')
           agentResponse.stages = agentResponse.stages.map(s =>
             s.name === 'generate_testcases' ? s : { ...s, status: 'done' }
           )
+          console.log('[SSE-EVENT] done: stages updated')
+          
+          // 等待 DOM 更新后再标记完成，确保卡片已渲染
+          console.log('[SSE-EVENT] done: waiting for nextTick...')
+          await nextTick()
+          console.log('[SSE-EVENT] done: nextTick completed')
+          
+          // 再等待 500ms 确保卡片已渲染完成
+          console.log('[SSE-EVENT] done: waiting 500ms for card rendering...')
+          await new Promise(resolve => setTimeout(resolve, 500))
+          console.log('[SSE-EVENT] done: 500ms wait completed')
+          
           agentResponse.isStreaming = false
+          console.log('[SSE-EVENT] done: ✅ isStreaming set to false')
+          
           // 清理过渡日志（从所有阶段的logs中移除[TRANSITIONAL]标记的行），生成测试用例完成后不再显示
+          console.log('[SSE-EVENT] done: cleaning TRANSITIONAL logs...')
           agentResponse.stages.forEach(s => {
+            const before = (s.logs || []).length
             s.logs = (s.logs || []).filter(line => !line.includes('[TRANSITIONAL]'))
+            const after = s.logs.length
+            if (before !== after) {
+              console.log(`[SSE-EVENT] done: cleaned ${before - after} TRANSITIONAL logs from stage ${s.name}`)
+            }
           })
+          console.log('[SSE-EVENT] done: TRANSITIONAL logs cleaned')
 
           // 只刷新 session 以获取 payload，不要重新加载 messages（会丢失阶段信息）
+          console.log('[SSE-EVENT] done: refreshing session...')
           await refreshSession()
+          console.log('[SSE-EVENT] done: session refreshed, has payload:', !!sessionDetail.value?.output_payload)
+          
           if (!agentResponse.payload) {
+            console.log('[SSE-EVENT] done: setting payload from sessionDetail')
             agentResponse.payload = sessionDetail.value?.output_payload || null
+          } else {
+            console.log('[SSE-EVENT] done: payload already set')
           }
 
           // 只刷新侧边栏列表
+          console.log('[SSE-EVENT] done: loading sessions...')
           await loadSessions()
+          console.log('[SSE-EVENT] done: sessions loaded')
 
           // 生成会话标题（AI 总结）
           try {
-            console.log('[DEBUG] Calling summarizeFunctionalTitle with sessionId:', activeSessionId.value)
+            console.log('[SSE-EVENT] done: Calling summarizeFunctionalTitle with sessionId:', activeSessionId.value)
             const titleResult = await summarizeFunctionalTitle(activeSessionId.value)
-            console.log('[DEBUG] summarizeFunctionalTitle completed, result:', titleResult)
+            console.log('[SSE-EVENT] done: summarizeFunctionalTitle completed, result:', titleResult)
             await loadSessions() // 刷新侧边栏显示新标题
+            console.log('[SSE-EVENT] done: sessions reloaded after title generation')
           } catch (err) {
-            console.error('[DEBUG] summarizeFunctionalTitle failed:', err)
-            console.error('[DEBUG] Error details:', err.response?.data || err.message)
+            console.error('[SSE-EVENT] done: ❌ summarizeFunctionalTitle failed:', err)
+            console.error('[SSE-EVENT] done: Error details:', err.response?.data || err.message)
             // 标题生成失败不影响主流程
           }
 
           // Clear streaming text reference
           streamingText.value = ''
+          console.log('[SSE-EVENT] done: ✅ All done, streamingText cleared')
         },
       },
       abortController.signal,
@@ -661,6 +775,22 @@ watch(
   { immediate: true },
 )
 
+// 切换项目时，重新加载该项目的会话列表
+watch(
+  () => projectId.value,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      // 重置当前会话状态
+      activeSessionId.value = null
+      sessionDetail.value = null
+      messages.value = []
+      setComposerMode(true)
+      // 重新加载新项目的会话
+      loadSessions()
+    }
+  },
+)
+
 onMounted(async () => {
   await Promise.all([loadMeta(), loadCatalogs(), loadSessions()])
   if (props.autoNew || route.query.new === '1') {
@@ -676,7 +806,8 @@ onMounted(async () => {
   flex-direction: row;
   flex: 1;
   min-height: 0;
-  height: 100%;
+  min-height: 100vh; /* 让内容在屏幕正中间 */
+  height: auto;
   overflow: hidden;
 }
 
@@ -687,12 +818,14 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  font-size: 1.2rem; /* 增大字体：从默认约 1rem 改为 1.2rem */
 
   &--landing {
     align-items: center;
     justify-content: center;
-    padding: 24px;
+    padding: 48px; /* 加倍：从 24px 改为 48px */
     overflow-y: auto;
+    min-height: 100vh; /* 让landing内容在屏幕正中间 */
   }
 }
 
@@ -703,9 +836,10 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 800px;
-  gap: 20px;
+  max-width: 1600px; /* 加倍：从 800px 改为 1600px */
+  gap: 40px; /* 加倍：从 20px 改为 40px */
   min-height: 0;
+  font-size: 1.3rem; /* 增大字体 */
 }
 
 /* Chat mode layout: context bar + chat + fixed composer */
@@ -715,8 +849,9 @@ onMounted(async () => {
   flex-direction: column;
   min-height: 0;
   width: 100%;
-  max-width: 1200px;
+  max-width: 2400px; /* 加倍：从 1200px 改为 2400px */
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 32px; /* 加倍：从 16px 改为 32px */
+  font-size: 1.2rem; /* 增大字体 */
 }
 </style>

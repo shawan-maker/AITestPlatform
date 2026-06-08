@@ -93,8 +93,8 @@
     <AgentCaseListDialog
       v-model="caseListVisible"
       :payload="caseListPayload"
-      gen-type="api_base"
-      :catalogs="catalogs"
+      gen-type="api"
+      :project-id="projectId"
       @save="saveCasesFromDialog"
     />
   </div>
@@ -137,7 +137,7 @@ const emit = defineEmits(['composer-mode-change'])
 
 const { t } = useI18n()
 const route = useRoute()
-const { withProjectParams } = useProjectScope()
+const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 
 const sessions = ref([])
@@ -561,6 +561,20 @@ watch(
 watch(resolvedInterfaceId, (id) => {
   if (id) boundInterfaceId.value = id
 }, { immediate: true })
+
+// 切换项目时，重新加载该项目的会话列表
+watch(
+  () => projectId.value,
+  (newId, oldId) => {
+    if (newId && newId !== oldId) {
+      activeSessionId.value = null
+      sessionDetail.value = null
+      messages.value = []
+      setComposerMode(true)
+      loadSessions()
+    }
+  },
+)
 
 onMounted(async () => {
   await Promise.all([loadMeta(), loadCatalogs(), loadSessions()])

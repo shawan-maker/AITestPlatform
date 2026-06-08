@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
+
+_log = logging.getLogger(__name__)
 
 from service.ai_generation.common import compute_prompt_hash, load_knowledge_requirement_text
 from service.ai_generation.message_service import MessageService
@@ -357,7 +360,7 @@ class SessionLifecycleService:
             api_key = os.getenv("LLM_BINDING_API_KEY")
             # 修复：使用LLM_BINDING_HOST而不是LLM_BASE_URL
             base_url = os.getenv("LLM_BINDING_HOST", "https://api.openai.com/v1")
-            model = os.getenv("LLM_MODEL", core_config.LLM_MODEL)
+            model = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
             
             _log.info("[summarize_session_title] api_key存在: %s, base_url: %s, model: %s", 
                      bool(api_key), base_url, model)

@@ -409,10 +409,10 @@
       "saveToHint": "生成的用例将保存在手工测试",
       "goToView": "前往查看",
       "selectedCount": "本次共选择 {count} 条手工用例",
-      "projectVersion": "项目·版本",
+      "project": "项目",
       "catalog": "目录",
-      "selectProjectFirst": "请先选择项目·版本，再选择目录",
-      "selectProjectVersion": "请选择项目·版本",
+      "selectProjectFirst": "请先选择项目，再选择目录",
+      "selectProject": "请选择项目",
       "totalCount": "共 {count} 条"
     },
     "functional": {

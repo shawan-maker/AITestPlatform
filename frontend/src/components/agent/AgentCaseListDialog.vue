@@ -155,11 +155,12 @@
         {{ t('page.agent.selectedCount', { count: selectedCases.length }) }}
       </p>
       <el-form :label-width="100">
-        <el-form-item :label="t('page.agent.projectVersion')">
+        <el-form-item :label="t('page.agent.project')">
           <el-select
-            v-model="saveForm.projectVersion"
-            :placeholder="t('page.agent.selectProjectVersion')"
+            v-model="saveForm.projectId"
+            :placeholder="t('page.agent.selectProject')"
             style="width: 100%"
+            @change="onProjectChange"
           >
             <el-option
               v-for="pv in projectVersions"
@@ -172,9 +173,9 @@
         <el-form-item :label="t('page.agent.catalog')">
           <el-select
             v-model="saveForm.catalogId"
-            :placeholder="saveForm.projectVersion ? t('page.agent.selectCatalog') : t('page.agent.selectProjectFirst')"
+            :placeholder="saveForm.projectId ? t('page.agent.selectCatalog') : t('page.agent.selectProjectFirst')"
             style="width: 100%"
-            :disabled="!saveForm.projectVersion"
+            :disabled="!saveForm.projectId || catalogsLoading"
           >
             <el-option
               v-for="cat in catalogs"
@@ -203,11 +204,14 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import { listProjects } from '@/api/projects'
+import { getCaseCatalogTree } from '@/api/functional'
+import { getApiCatalogTree } from '@/api/apiTest'
 
 const props = defineProps({
   payload: { type: Object, default: null },
   genType: { type: String, default: 'functional' },
-  catalogs: { type: Array, default: () => [] },
+  projectId: { type: [Number, String], default: null }, // 当前项目ID，用于默认选中
 })
 
 const emit = defineEmits(['save'])
@@ -234,10 +238,12 @@ const editingIndex = ref(-1)
 const showSaveDialog = ref(false)
 const saving = ref(false)
 const saveForm = ref({
-  projectVersion: null,
+  projectId: null, // 改为 projectId，语义更清晰
   catalogId: null,
 })
-const projectVersions = ref([])
+const projectVersions = ref([]) // 实际是项目列表
+const catalogs = ref([]) // 本地维护目录列表，不再从prop传入
+const catalogsLoading = ref(false)
 
 // Computed: all cases from payload
 const allCases = computed(() => {
@@ -276,6 +282,22 @@ function getRealIndex(pageIdx) {
 
 function openEditor(caseRow, realIndex) {
   editingCase.value = { ...caseRow }
+  // 调试：查看test_data原始类型和值
+  console.log('[DEBUG] openEditor: test_data =', caseRow.test_data, ', typeof =', typeof caseRow.test_data)
+  // 修复：test_data为对象时JSON序列化，无数据时为空字符串
+  if (editingCase.value.test_data !== undefined && editingCase.value.test_data !== null) {
+    if (typeof editingCase.value.test_data === 'object') {
+      try {
+        editingCase.value.test_data = JSON.stringify(editingCase.value.test_data, null, 2)
+        console.log('[DEBUG] openEditor: stringified test_data =', editingCase.value.test_data)
+      } catch (e) {
+        console.error('[DEBUG] openEditor: JSON.stringify test_data failed', e)
+        editingCase.value.test_data = ''
+      }
+    }
+  } else {
+    editingCase.value.test_data = ''
+  }
   editingIndex.value = realIndex
   editorVisible.value = true
 }
@@ -296,13 +318,13 @@ async function confirmSave() {
   if (!saveForm.value.catalogId || !selectedCases.value.length) return
   saving.value = true
   try {
+    // 后端只需要 catalog_id 和 case_indexes，不需要 project_id
     emit('save', {
       catalog_id: saveForm.value.catalogId,
       case_indexes: selectedCases.value.map((c, i) => {
         const idx = allCases.value.indexOf(c)
         return idx >= 0 ? idx : i
       }),
-      project_version_id: saveForm.value.projectVersion,
     })
     showSaveDialog.value = false
     ElMessage.success(t('page.agent.saved'))
@@ -310,6 +332,61 @@ async function confirmSave() {
     saving.value = false
   }
 }
+
+// 项目切换时，重新加载该项目的目录列表
+async function onProjectChange(projectId) {
+  console.log('[DEBUG] onProjectChange: projectId =', projectId)
+  // 重置目录选择
+  saveForm.value.catalogId = null
+  catalogs.value = []
+  
+  if (!projectId) return
+  
+  catalogsLoading.value = true
+  try {
+    let res
+    if (props.genType === 'api') {
+      res = await getApiCatalogTree({ project_id: projectId })
+    } else {
+      res = await getCaseCatalogTree({ project_id: projectId })
+    }
+    catalogs.value = res.data.data?.items ?? res.data.data ?? []
+    console.log('[DEBUG] onProjectChange: loaded catalogs =', catalogs.value)
+  } catch (e) {
+    console.error('[DEBUG] onProjectChange: failed to load catalogs', e)
+    catalogs.value = []
+  } finally {
+    catalogsLoading.value = false
+  }
+}
+
+// 监听保存对话框打开，加载项目列表
+watch(() => showSaveDialog.value, async (visible) => {
+  if (visible) {
+    // 设置默认选中的项目（使用当前项目）
+    if (!saveForm.value.projectId && props.projectId) {
+      saveForm.value.projectId = props.projectId
+      // 加载默认项目的目录
+      await onProjectChange(props.projectId)
+    }
+    // 加载项目列表（只加载一次）
+    if (projectVersions.value.length === 0) {
+      console.log('[DEBUG] showSaveDialog opened, loading project list...')
+      try {
+        const res = await listProjects()
+        projectVersions.value = res.data.data?.items ?? res.data.data ?? []
+        console.log('[DEBUG] Loaded project list:', projectVersions.value)
+      } catch (e) {
+        console.error('[DEBUG] Failed to load project list:', e)
+      }
+    }
+  } else {
+    // 关闭对话框时重置表单
+    saveForm.value.projectId = null
+    saveForm.value.catalogId = null
+    catalogs.value = []
+  }
+})
 </script>
 
 <style scoped lang="scss">

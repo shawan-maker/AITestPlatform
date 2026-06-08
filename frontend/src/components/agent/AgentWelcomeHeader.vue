@@ -18,18 +18,18 @@ const { t } = useI18n()
 .agent-welcome-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 0 16px;
+  gap: 16px; /* 加倍：从 8px 改为 16px */
+  padding: 16px 0 32px; /* 加倍：从 8px 0 16px 改为 16px 0 32px */
   flex-shrink: 0;
 }
 
 .agent-welcome-header__emoji {
-  font-size: 28px;
+  font-size: 56px; /* 加倍：从 28px 改为 56px */
   line-height: 1;
 }
 
 .agent-welcome-header__text {
-  font-size: 22px;
+  font-size: 44px; /* 加倍：从 22px 改为 44px */
   font-weight: 500;
   color: var(--el-text-color-primary);
 }

@@ -1,8 +1,12 @@
 from collections.abc import AsyncIterator
+import logging
 
 from service.ai_generation.agent_stream import AgentStreamService, _sse
+
+_log = logging.getLogger(__name__)
 from service.ai_generation.common import load_knowledge_requirement_text
 from service.ai_generation.message_service import MessageService
+from service.ai_generation.models import AIGenerationSession
 from service.ai_generation.permissions import ensure_agent_editor, ensure_agent_viewer
 from service.ai_generation.schemas import (
     FunctionalCreateSessionRequest,
@@ -65,33 +69,29 @@ class FunctionalAgentService:
         session_id: int,
         body: AgentMessageRequest,
     ) -> AsyncIterator[str]:
+        _log.info("[stream_message] 🚀 开始执行 session=%s", session_id)
+        _log.info("[stream_message] 请求内容: %s", body.content[:100] if body.content else 'EMPTY')
+        
         session = await MessageService.ensure_session_access(session_id, user.id)
         if session.gen_type != GenType.functional:
+            _log.error("[stream_message] ❌ 非功能用例生成会话 session=%s", session_id)
             raise AppException("非功能用例生成会话", 400)
+        
         await ensure_agent_viewer(session.project_id, user)
+        _log.info("[stream_message] ✅ 权限检查通过 session=%s", session_id)
         
-        # 断点续传：检查session状态，避免重复执行
-        refreshed_session = await AIGenerationSession.get(id=session_id)
-        
-        # 如果session已经有output_payload，说明Agent已成功完成，直接返回结果
-        if refreshed_session.output_payload:
-            _log.info("[stream_message] session=%s 已有output_payload，直接返回结果", session_id)
-            yield _sse("payload_updated", {"session_id": session.id})
-            yield _sse("done", {})
-            return
-        
-        # 如果session正在运行（status=running），则返回错误提示
-        if refreshed_session.status == SessionStatus.running:
-            _log.warning("[stream_message] session=%s 正在执行中，拒绝重复执行", session_id)
-            yield _sse("error", {"message": "Agent正在执行中，请等待完成或查看已生成的结果"})
-            yield _sse("done", {})
-            return
-        
-        # 否则，正常执行Agent
+        # 正常执行Agent（移除断点续传检查，避免状态判断错误）
+        _log.info("[stream_message] 🔄 开始流式返回 session=%s", session_id)
+        chunk_count = 0
         async for chunk in AgentStreamService.stream_functional_message(
             session, body.content.strip()
         ):
+            chunk_count += 1
+            if chunk_count % 10 == 0:  # 每10个chunk记录一次
+                _log.info("[stream_message] 已发送 %s 个chunk session=%s", chunk_count, session_id)
             yield chunk
+        
+        _log.info("[stream_message] ✅ 流式返回完成，共 %s 个chunk session=%s", chunk_count, session_id)
 
     @classmethod
     async def list_messages(
