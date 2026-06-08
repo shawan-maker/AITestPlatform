@@ -355,10 +355,16 @@ class SessionLifecycleService:
             import httpx
 
             api_key = os.getenv("LLM_BINDING_API_KEY")
-            base_url = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+            # 修复：使用LLM_BINDING_HOST而不是LLM_BASE_URL
+            base_url = os.getenv("LLM_BINDING_HOST", "https://api.openai.com/v1")
             model = os.getenv("LLM_MODEL", core_config.LLM_MODEL)
+            
+            _log.info("[summarize_session_title] api_key存在: %s, base_url: %s, model: %s", 
+                     bool(api_key), base_url, model)
 
             prompt = SESSION_TITLE_PROMPT.format(user_first_message=user_first_msg[:500])
+            _log.info("[summarize_session_title] 正在调用LLM生成标题, prompt长度: %d", len(prompt))
+            
             resp = httpx.post(
                 f"{base_url.rstrip('/')}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -372,7 +378,11 @@ class SessionLifecycleService:
             )
             resp.raise_for_status()
             data = resp.json()
+            _log.info("[summarize_session_title] LLM响应: %s", str(data)[:200])
+            
             title = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            _log.info("[summarize_session_title] 生成的标题: %s", title)
             return title if title else None
-        except Exception:
+        except Exception as e:
+            _log.error("[summarize_session_title] 生成标题失败: %s", e, exc_info=True)
             return None

@@ -25,19 +25,49 @@ def session_id_from_config(config: dict[str, Any] | None) -> int | None:
 
 
 async def sync_functional_payload(session_id: int, workflow_result: dict[str, Any]) -> None:
+    import logging
+    _logger = logging.getLogger(__name__)
+    
     session = await AIGenerationSession.get_or_none(id=session_id)
     if session is None:
         return
     points = workflow_result.get("points") or workflow_result.get("test_points") or []
     cases = workflow_result.get("test_cases") or workflow_result.get("cases") or []
+    
+    _logger.info("[payload_sync] session=%s, points原始数量: %d, cases数量: %d", session_id, len(points), len(cases))
+    _logger.info("[payload_sync] points前3个: %s", str(points[:3])[:200])
+
+    # 将测试点格式化为前端期望的格式（每个测试点是一个带有name字段的对象）
+    formatted_points = []
+    for i, p in enumerate(points):
+        if isinstance(p, dict):
+            # p 是 {"type":"功能测试","dimension":"正向验证","test_point":"具体测试点描述"}
+            point_name = p.get("test_point", str(p))
+            formatted_points.append({
+                "name": point_name,  # 前端使用 tp.name 显示
+                "type": p.get("type", ""),
+                "dimension": p.get("dimension", ""),
+                "case_count": 0  # 稍后计算
+            })
+        else:
+            formatted_points.append({"name": str(p), "case_count": 0})
+
+    _logger.info("[payload_sync] formatted_points前3个: %s", str(formatted_points[:3])[:200])
 
     # 将测试点信息注入到对应的测试用例中（按索引一一对应）
-    if points and cases:
+    if formatted_points and cases:
         for i, case in enumerate(cases):
-            if i < len(points):
-                case["test_point"] = points[i]
+            if i < len(formatted_points):
+                case["test_point"] = formatted_points[i]["name"]
 
-    session.output_payload = {"test_points": points, "cases": cases}
+    # 计算每个测试点的用例数
+    for p in formatted_points:
+        p["case_count"] = sum(1 for c in cases if c.get("test_point") == p["name"])
+
+    _logger.info("[payload_sync] 最终test_points: %s", str(formatted_points)[:200])
+    _logger.info("[payload_sync] 最终cases数量: %d", len(cases))
+
+    session.output_payload = {"test_points": formatted_points, "cases": cases}
     session.status = SessionStatus.success
     session.error_message = None
     session.finished_at = datetime.now(timezone.utc)

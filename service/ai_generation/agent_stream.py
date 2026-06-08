@@ -205,6 +205,10 @@ class AgentStreamService:
             "generate_base_cases": ("🧪", "正在生成接口测试用例..."),
         }
 
+        # 用于检测阶段转换，在阶段间发送等待提示
+        _last_tool_name = None
+        _stage_transition_sent = False
+
         # ===== 使用 Queue 实现实时流式转发 =====
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
         _agent_error: list[Exception | None] = [None]
@@ -262,6 +266,16 @@ class AgentStreamService:
             elif kind == "tool_call":
                 tool_name = item.get("tool_name") or ""
                 stage_info = _stage_map.get(tool_name)
+                
+                # 检测阶段转换：如果工具名称变化，发送阶段间等待提示
+                if _last_tool_name is not None and _last_tool_name != tool_name:
+                    # 上一个阶段完成，当前阶段即将开始
+                    last_stage_info = _stage_map.get(_last_tool_name)
+                    if last_stage_info:
+                        transition_msg = f"✅ {last_stage_info[1]} 阶段完成，正在准备下一阶段，请稍候..."
+                        _log.info("[Agent] 阶段转换: %s -> %s, 发送等待消息: %s", _last_tool_name, tool_name, transition_msg)
+                        yield _sse("custom", transition_msg)
+                
                 if stage_info:
                     icon, stage_text = stage_info
                     stage_msg = f"{icon} {stage_text}"
@@ -273,6 +287,10 @@ class AgentStreamService:
                         content=stage_msg,
                         message_type=MessageType.custom,
                     )
+                    _stage_transition_sent = False  # 新阶段开始，重置标志
+                
+                _last_tool_name = tool_name  # 更新上一个工具名称
+                
                 await MessageService.append(
                     session.id,
                     role=MessageRole.tool,

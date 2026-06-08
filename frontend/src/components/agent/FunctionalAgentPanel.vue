@@ -156,10 +156,12 @@ const caseListPayload = ref(null)
 let abortController = null
 let tempMsgId = 0
 
-// Check if current messages contain a unified agent response
-const hasAgentResponse = computed(() =>
-  messages.value.some(m => m.role === 'agent')
-)
+// Check if current messages contain a completed agent response (not streaming)
+const hasAgentResponse = computed(() => {
+  const result = messages.value.some(m => m.role === 'agent' && !m.isStreaming)
+  console.log('[DEBUG] hasAgentResponse computed:', result, 'messages count:', messages.value.length)
+  return result
+})
 
 // Check if sessionDetail has valid payload data
 const hasPayloadData = computed(() => {
@@ -485,8 +487,11 @@ async function sendMessage(content) {
         },
         payload_updated: async () => {
           // 不再创建 default 阶段，静默刷新 session 即可
+          console.log('[DEBUG] payload_updated event received')
           await refreshSession()
+          console.log('[DEBUG] after refreshSession, sessionDetail.output_payload:', sessionDetail.value?.output_payload)
           agentResponse.payload = sessionDetail.value?.output_payload || null
+          console.log('[DEBUG] agentResponse.payload set:', agentResponse.payload)
           // 卡片已出现，现在标记 generate_testcases 阶段完成并打印成功日志
           const stage = agentResponse.stages.find(s => s.name === 'generate_testcases')
           if (stage && stage.status !== 'done') {
