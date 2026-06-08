@@ -35,20 +35,20 @@
     >
       <el-table-column type="selection" width="45" />
       <el-table-column type="index" :label="t('common.index')" width="60" />
-      <el-table-column prop="case_name" :label="t('functional.caseName')" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="case_type" :label="t('functional.type')" width="90">
+      <el-table-column prop="case_name" :label="t('page.functional.caseName')" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="type" :label="t('page.functional.type')" width="90">
         <template #default="{ row }">
-          <el-tag size="small" type="primary" effect="light">{{ row.case_type || '功能' }}</el-tag>
+          <el-tag size="small" type="primary" effect="light">{{ row.type || row.case_type || '功能' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="priority" :label="t('functional.priority')" width="70">
+      <el-table-column prop="priority" :label="t('page.functional.priority')" width="70">
         <template #default="{ row }">
           <el-tag size="small" type="warning" effect="light">{{ row.priority || 'L1' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="precondition" :label="t('functional.preconditions')" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="steps" :label="t('functional.steps')" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="expected_result" :label="t('functional.expectedResult')" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="preconditions" :label="t('page.functional.preconditions')" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="test_steps" :label="t('page.functional.steps')" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="expected_result" :label="t('page.functional.expectedResult')" min-width="160" show-overflow-tooltip />
       <el-table-column :label="t('common.actions')" width="80" fixed="right">
         <template #default="{ row, $index }">
           <el-link type="primary" @click="openEditor(row, getRealIndex($index))">编辑</el-link>
@@ -73,43 +73,63 @@
       v-model="editorVisible"
       :title="t('page.agent.editCase')"
       direction="rtl"
-      size="450px"
+      size="50%"
       append-to-body
     >
       <el-form v-if="editingCase" :model="editingCase" label-position="top" size="large">
-        <el-form-item :label="t('functional.testPoint')">
-          <el-input v-model="editingCase.test_point" :placeholder="t('functional.testPoint')" />
+        <el-form-item :label="t('page.functional.caseName')">
+          <el-input v-model="editingCase.case_name" :placeholder="t('page.functional.caseNamePlaceholder')" />
         </el-form-item>
-        <el-form-item label="* {{ t('functional.preconditions') }}">
+        <el-form-item :label="t('page.functional.priority')">
+          <el-select v-model="editingCase.priority" style="width: 100%">
+            <el-option label="P0" value="P0" />
+            <el-option label="P1" value="P1" />
+            <el-option label="P2" value="P2" />
+            <el-option label="P3" value="P3" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('page.functional.type')">
+          <el-select v-model="editingCase.type" style="width: 100%">
+            <el-option :label="t('page.functional.typeFunctional')" value="功能" />
+            <el-option label="安全" value="安全" />
+            <el-option label="兼容" value="兼容" />
+            <el-option label="易用" value="易用" />
+            <el-option label="性能" value="性能" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('page.functional.testPoint')">
+          <el-input v-model="editingCase.test_point" :placeholder="t('page.functional.testPoint')" />
+        </el-form-item>
+        <el-form-item :label="`* ${t('page.functional.preconditions')}`">
           <el-input
-            v-model="editingCase.precondition"
+            v-model="editingCase.preconditions"
             type="textarea"
             :rows="3"
-            :placeholder="t('functional.preconditionsPlaceholder')"
+            :placeholder="t('page.functional.preconditionsPlaceholder')"
           />
         </el-form-item>
-        <el-form-item :label="t('functional.testData')">
+        <el-form-item :label="t('page.functional.testData')">
           <el-input
             v-model="editingCase.test_data"
             type="textarea"
             :rows="2"
-            :placeholder="t('functional.testDataPlaceholder')"
+            :placeholder="t('page.functional.testDataPlaceholder')"
           />
         </el-form-item>
-        <el-form-item label="* {{ t('functional.steps') }}">
+        <el-form-item :label="`* ${t('page.functional.steps')}`">
           <el-input
-            v-model="editingCase.steps"
+            v-model="editingCase.test_steps"
             type="textarea"
             :rows="5"
             placeholder="1. ...&#10;2. ..."
           />
         </el-form-item>
-        <el-form-item label="* {{ t('functional.expectedResult') }}">
+        <el-form-item :label="`* ${t('page.functional.expectedResult')}`">
           <el-input
             v-model="editingCase.expected_result"
             type="textarea"
             :rows="4"
-            :placeholder="t('functional.expectedResultPlaceholder')"
+            :placeholder="t('page.functional.expectedResultPlaceholder')"
           />
         </el-form-item>
       </el-form>
@@ -229,9 +249,9 @@ const allCases = computed(() => {
 const filteredCases = computed(() => {
   const cases = allCases.value
   if (activeTab.value === 'all') return cases
-  // Filter by case_type matching the tab name
+  // Filter by type matching the tab name
   return cases.filter(c => {
-    const ct = (c.case_type || '功能').trim()
+    const ct = (c.type || c.case_type || '功能').trim()
     return ct.includes(activeTab.value) || activeTab.value === 'all'
   })
 })

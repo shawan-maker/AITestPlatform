@@ -137,8 +137,7 @@ class CaseDetail(CaseBrief):
     test_data: str | None
     expected_result: str | None
     actual_result: str | None
-    test_point: TestPointBrief | None
-    created_at: datetime
+    test_point: str | None
 
 
 class CaseReorderRequest(BaseModel):

@@ -100,15 +100,17 @@ class CaseService:
     async def _to_detail(cls, case: FunctionalCase) -> CaseDetail:
         await case.fetch_related("test_point")
         brief = await cls._to_brief(case)
-        tp = None
+        
+        # 调试代码：检查test_point字段类型
         if case.test_point:
-            tp = TestPointBrief(
-                id=case.test_point.id,
-                type=case.test_point.type,
-                dimension=case.test_point.dimension,
-                test_point=case.test_point.test_point,
-                source=case.test_point.source,
-            )
+            print(f"[DEBUG] case.test_point type: {type(case.test_point)}")
+            print(f"[DEBUG] case.test_point.test_point type: {type(case.test_point.test_point)}")
+            print(f"[DEBUG] case.test_point.test_point value: {case.test_point.test_point}")
+        
+        test_point_value = case.test_point.test_point if case.test_point else None
+        print(f"[DEBUG] test_point_value type: {type(test_point_value)}")
+        print(f"[DEBUG] test_point_value value: {test_point_value}")
+        
         return CaseDetail(
             **brief.model_dump(),
             module_id=case.module_id,
@@ -118,8 +120,7 @@ class CaseService:
             test_data=case.test_data,
             expected_result=case.expected_result,
             actual_result=case.actual_result,
-            test_point=tp,
-            created_at=case.created_at,
+            test_point=test_point_value,
         )
 
     @classmethod

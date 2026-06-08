@@ -3,7 +3,7 @@
     :model-value="visible"
     :title="t('page.functional.caseDetail')"
     direction="rtl"
-    size="75%"
+    size="50%"
     :close-on-click-modal="false"
     @update:model-value="(v) => $emit('update:visible', v)"
     @closed="onClosed"
@@ -38,6 +38,7 @@
           <el-descriptions-item :label="t('page.functional.status')">
             <StatusTag :type="statusTagType(caseDetail.status)">{{ statusText(caseDetail.status) }}</StatusTag>
           </el-descriptions-item>
+          <el-descriptions-item v-if="caseDetail.dimension" :label="t('page.functional.dimension')">{{ caseDetail.dimension }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.functional.execResult')">
             <ExecResultTag :value="caseDetail.exec_result" />
           </el-descriptions-item>
@@ -53,9 +54,7 @@
       <section v-if="caseDetail.test_point" class="detail-section">
         <h4 class="sec-title">{{ t('page.functional.testPoint') }}</h4>
         <div class="tp-card">
-          <span class="tp-tag"><TypeTag :value="caseDetail.test_point.type" /></span>
-          <span class="tp-dim">{{ caseDetail.test_point.dimension }}</span>
-          <p class="tp-text">{{ caseDetail.test_point.test_point }}</p>
+          <p class="tp-text">{{ caseDetail.test_point }}</p>
         </div>
       </section>
 
@@ -141,6 +140,16 @@ async function loadDetail() {
   try {
     const res = await getCase(props.caseId)
     caseDetail.value = res.data.data
+    // 调试代码：检查test_point字段类型
+    console.log('[DEBUG] caseDetail:', caseDetail.value)
+    console.log('[DEBUG] test_point type:', typeof caseDetail.value?.test_point)
+    console.log('[DEBUG] test_point value:', caseDetail.value?.test_point)
+    console.log('[DEBUG] test_point JSON:', JSON.stringify(caseDetail.value?.test_point))
+    // 如果test_point是对象，显示其属性和值
+    if (caseDetail.value?.test_point && typeof caseDetail.value?.test_point === 'object') {
+      console.log('[DEBUG] test_point is object, keys:', Object.keys(caseDetail.value.test_point))
+      console.log('[DEBUG] test_point.test_point:', caseDetail.value.test_point.test_point)
+    }
   } catch (e) {
     caseDetail.value = null
   } finally {
@@ -185,12 +194,6 @@ watch(() => props.visible, (val) => {
 watch(() => props.caseId, (id) => {
   if (props.visible && id) loadDetail()
 })
-
-// 内联子组件
-const TypeTag = {
-  props: ['value'],
-  template: '<el-tag size="small" type="primary">{{ value || "-" }}</el-tag>',
-}
 </script>
 
 <style scoped lang="scss">

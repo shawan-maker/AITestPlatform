@@ -368,9 +368,8 @@
       "completed": "Completed",
       "resultHint": "Click to expand generated case list",
       "stageSearch": "Retrieving Requirements",
-      "stageTestpoints": "Generating Test Points",
       "stageTestcases": "Generating Test Cases",
-      "stageFormatting": "Formatting Test Cases",
+      "stageHistory": "History",
       "stageDefault": "Processing",
       "functionalResultTitle": "Manual Case Generation Result",
       "caseListTitle": "Manual Case List",
@@ -413,7 +412,8 @@
       "caseCount": "{count} cases",
       "moveUp": "Move up",
       "moveDown": "Move down",
-      "moveToRoot": "Move to root"
+      "moveToRoot": "Move to root",
+      "dimension": "Dimension"
     },
     "apiCases": {
       "title": "API Workspace",

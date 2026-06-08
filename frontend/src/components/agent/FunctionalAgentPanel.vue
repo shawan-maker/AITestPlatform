@@ -56,7 +56,7 @@
           >
             <template #after-messages>
               <AgentPayloadCard
-                v-if="sessionDetail?.output_payload && Object.keys(sessionDetail.output_payload).length > 2 && !hasAgentResponse"
+                v-if="sessionDetail?.output_payload && hasPayloadData && !hasAgentResponse"
                 gen-type="functional"
                 :payload="sessionDetail.output_payload"
                 :can-edit="canEdit"
@@ -104,6 +104,7 @@ import {
   listFunctionalSessions,
   saveFunctionalSession,
   streamFunctionalMessage,
+  summarizeFunctionalTitle,
 } from '@/api/aiGeneration'
 import { getCaseCatalogTree } from '@/api/functional'
 import { useProjectScope } from '@/composables/useProjectScope'
@@ -159,6 +160,16 @@ let tempMsgId = 0
 const hasAgentResponse = computed(() =>
   messages.value.some(m => m.role === 'agent')
 )
+
+// Check if sessionDetail has valid payload data
+const hasPayloadData = computed(() => {
+  const payload = sessionDetail.value?.output_payload
+  if (!payload) return false
+  // Check if payload has test_points or cases with data
+  const testPoints = payload.test_points || []
+  const cases = payload.cases || []
+  return testPoints.length > 0 || cases.length > 0
+})
 
 const historyLimit = computed(() => meta.value?.history_limit ?? 10)
 const quickTags = computed(() => meta.value?.functional_prompt_templates ?? [])
@@ -232,14 +243,14 @@ async function loadMessages() {
       // Classify legacy message type
       if (msg.message_type === 'custom' || msg.role === 'system') {
         const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour12: false }) : ''
-        _addLogToAgent(currentAgent, 'default', `[${time}] ${msg.content}`)
+        _addLogToAgent(currentAgent, 'history', `[${time}] ${msg.content}`)
       } else if (msg.message_type === 'tool_call' && msg.tool_name) {
-        _addLogToAgent(currentAgent, 'default', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
+        _addLogToAgent(currentAgent, 'history', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
       } else if (msg.role === 'assistant' && msg.content) {
         // Text content → append to finalText
         currentAgent.finalText += (currentAgent.finalText ? '\n' : '') + msg.content
       } else if (msg.content) {
-        _addLogToAgent(currentAgent, 'default', msg.content)
+        _addLogToAgent(currentAgent, 'history', msg.content)
       }
     }
   }
@@ -325,9 +336,15 @@ function stopStream() {
 /** Detect which stage a text belongs to based on keywords */
 function detectStageFromText(text) {
   const str = String(text)
+  // "[TRANSITIONAL]" marks transitional log between search_requirement and generate_testcases
+  if (str.includes('[TRANSITIONAL]')) return 'transitional'
+  // "✅ [阶段1完成]" marks search_requirement as done
+  if (str.includes('✅ [阶段1完成]') || str.includes('阶段1完成')) return 'search_requirement_done'
   if (str.includes('检索') || str.includes('搜索') || str.includes('\u{1F50D}') || str.includes('search')) return 'search_requirement'
-  if (str.includes('测试点') || str.includes('testpoint') || str.includes('TestPoint')) return 'generate_testpoints'
-  if (str.includes('用例') || str.includes('生成') || str.includes('generate')) return 'generate_testcases'
+  // "✅ 测试用例的卡片生成成功" is the final marker — mark generate_testcases as truly done
+  if (str.includes('✅ 测试用例的卡片生成成功') || str.includes('卡片生成成功')) return 'generate_testcases_done'
+  // All testpoint/testcase related logs belong to generate_testcases stage
+  if (str.includes('测试点') || str.includes('testpoint') || str.includes('TestPoint') || str.includes('用例') || str.includes('生成') || str.includes('generate')) return 'generate_testcases'
   // Default: return last active stage or 'default'
   return 'default'
 }
@@ -365,7 +382,7 @@ async function sendMessage(content) {
     messages.value = [...messages.value, agentResponse]
 
     // Helper to find or create a stage (auto-marks previous running stages as done)
-    const KNOWN_STAGE_ORDER = ['search_requirement', 'generate_testpoints', 'generate_testcases', 'formatting_testcases']
+    const KNOWN_STAGE_ORDER = ['search_requirement', 'generate_testcases']
 
     const getStage = (name) => {
       let stage = agentResponse.stages.find(s => s.name === name)
@@ -382,11 +399,34 @@ async function sendMessage(content) {
 
     // Helper to add log line to a stage (keep max 30 per stage)
     const _addLog = (stageName, line) => {
-      const stage = getStage(stageName)
       const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+      // "[TRANSITIONAL]" logs: 写入检索需求文档阶段的logs中显示，生成完成后清理
+      if (stageName === 'transitional') {
+        const stage = getStage('search_requirement')
+        stage.logs = [...stage.logs.slice(-29), `[${time}] ${line}`]
+        return
+      }
+      // "generate_testcases_done" means the testcases stage is truly complete
+      // Map it to the existing "generate_testcases" stage and mark as done
+      // "search_requirement_done" means the search stage is truly complete
+      let actualStageName = stageName
+      if (stageName === 'generate_testcases_done') {
+        actualStageName = 'generate_testcases'
+      }
+      if (stageName === 'search_requirement_done') {
+        actualStageName = 'search_requirement'
+      }
+      const stage = getStage(actualStageName)
       stage.logs = [...stage.logs.slice(-29), `[${time}] ${line}`]
-      // Also keep legacy log for backward compat
-      stageLogLines.value = [...stageLogLines.value.slice(-49), `[${time}] ${line}`]
+      // If this is the completion marker, mark the stage as done
+      if (stageName === 'generate_testcases_done' || stageName === 'search_requirement_done') {
+        stage.status = 'done'
+        // 问题2修复：在检索需求文档阶段完成后，添加等待状态提示
+        if (stageName === 'search_requirement_done') {
+          // 添加一个提示，让用户知道程序还在处理
+          stage.logs = [...stage.logs, `[${time}] 检索需求文档阶段完成，正在准备生成测试用例，请稍候...`]
+        }
+      }
     }
 
     // Reset legacy logs
@@ -414,9 +454,20 @@ async function sendMessage(content) {
           // Auto-detect which stage this belongs to
           const stageName = detectStageFromText(text)
           _addLog(stageName, text)
+          
+          // 问题2修复：在"检索需求文档"阶段完成后，添加等待状态提示
+          if (text.includes('✅ [阶段1完成]') || text.includes('阶段1完成')) {
+            console.log('[DEBUG] 检索需求文档阶段完成，等待生成测试用例...')
+            // 这里不需要额外操作，因为阶段标记会在payload_updated中完成
+            // 但我们可以在UI上显示一些提示，告诉用户程序还在处理
+          }
         },
         messages: (data) => {
           const text = String(data)
+          // 过滤掉 [TRANSITIONAL] 过渡日志文本，避免出现在最终回复中
+          if (text.includes('[TRANSITIONAL]')) {
+            return
+          }
           // 只追加到 agentResponse 的 finalText/streamingText（用于兼容和结果展示）
           agentResponse.streamingText += text
           agentResponse.finalText += text
@@ -436,6 +487,13 @@ async function sendMessage(content) {
           // 不再创建 default 阶段，静默刷新 session 即可
           await refreshSession()
           agentResponse.payload = sessionDetail.value?.output_payload || null
+          // 卡片已出现，现在标记 generate_testcases 阶段完成并打印成功日志
+          const stage = agentResponse.stages.find(s => s.name === 'generate_testcases')
+          if (stage && stage.status !== 'done') {
+            stage.status = 'done'
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+            stage.logs = [...(stage.logs || []), `[${time}] ✅ 测试用例的卡片生成成功`]
+          }
         },
         error: (data) => {
           const errorMsg = data?.message || t('common.requestFailed')
@@ -449,9 +507,17 @@ async function sendMessage(content) {
           }
         },
         done: async () => {
-          // 标记所有阶段为 done
-          agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
+          console.log('[DEBUG] SSE done event received at', new Date().toLocaleTimeString())
+          console.log('[DEBUG] activeSessionId:', activeSessionId.value)
+          // 标记所有阶段为 done（但保留 generate_testcases 留给 payload_updated 处理）
+          agentResponse.stages = agentResponse.stages.map(s =>
+            s.name === 'generate_testcases' ? s : { ...s, status: 'done' }
+          )
           agentResponse.isStreaming = false
+          // 清理过渡日志（从所有阶段的logs中移除[TRANSITIONAL]标记的行），生成测试用例完成后不再显示
+          agentResponse.stages.forEach(s => {
+            s.logs = (s.logs || []).filter(line => !line.includes('[TRANSITIONAL]'))
+          })
 
           // 只刷新 session 以获取 payload，不要重新加载 messages（会丢失阶段信息）
           await refreshSession()
@@ -461,6 +527,18 @@ async function sendMessage(content) {
 
           // 只刷新侧边栏列表
           await loadSessions()
+
+          // 生成会话标题（AI 总结）
+          try {
+            console.log('[DEBUG] Calling summarizeFunctionalTitle with sessionId:', activeSessionId.value)
+            const titleResult = await summarizeFunctionalTitle(activeSessionId.value)
+            console.log('[DEBUG] summarizeFunctionalTitle completed, result:', titleResult)
+            await loadSessions() // 刷新侧边栏显示新标题
+          } catch (err) {
+            console.error('[DEBUG] summarizeFunctionalTitle failed:', err)
+            console.error('[DEBUG] Error details:', err.response?.data || err.message)
+            // 标题生成失败不影响主流程
+          }
 
           // Clear streaming text reference
           streamingText.value = ''

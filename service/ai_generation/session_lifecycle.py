@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 from service.ai_generation.common import compute_prompt_hash, load_knowledge_requirement_text
@@ -294,6 +295,49 @@ class SessionLifecycleService:
         await AIGenerationMessage.filter(session_id=sid).delete()
         await AIGenerationSession.filter(id=sid).delete()
         return {"success": True}
+
+    @classmethod
+    async def summarize_and_update_title(cls, user: User, *, session_id: int) -> AIGenerationSessionOut:
+        """Generate AI title and update session."""
+        import os
+        log_file = "d:/PyProject/AITestPlatform/debug_title.log"
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n[DEBUG] summarize_and_update_title called, session_id: {session_id}\n")
+        
+        session = await AIGenerationSession.get_or_none(id=session_id)
+        if not session:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[DEBUG] Session not found: {session_id}\n")
+            raise AppException("会话不存在", 404)
+        
+        first_msg = await AIGenerationMessage.filter(
+            session_id=session_id, role="user"
+        ).order_by("sequence").first()
+        
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"[DEBUG] first_msg: {first_msg}\n")
+        
+        if first_msg and first_msg.content:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[DEBUG] first_msg.content: {first_msg.content[:100]}...\n")
+            
+            new_title = await cls.summarize_session_title(
+                session_id=session_id, user_first_msg=first_msg.content[:500]
+            )
+            
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[DEBUG] new_title: {new_title}\n")
+            
+            if new_title:
+                session.title = new_title[:200]
+                await session.save(update_fields=["title"])
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(f"[DEBUG] session.title updated to: {session.title}\n")
+        else:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"[DEBUG] No user message found, cannot generate title\n")
+        
+        return session_to_out(session)
 
     @classmethod
     async def summarize_session_title(cls, *, session_id: int, user_first_msg: str) -> str | None:

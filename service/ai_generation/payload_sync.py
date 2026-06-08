@@ -30,6 +30,13 @@ async def sync_functional_payload(session_id: int, workflow_result: dict[str, An
         return
     points = workflow_result.get("points") or workflow_result.get("test_points") or []
     cases = workflow_result.get("test_cases") or workflow_result.get("cases") or []
+
+    # 将测试点信息注入到对应的测试用例中（按索引一一对应）
+    if points and cases:
+        for i, case in enumerate(cases):
+            if i < len(points):
+                case["test_point"] = points[i]
+
     session.output_payload = {"test_points": points, "cases": cases}
     session.status = SessionStatus.success
     session.error_message = None

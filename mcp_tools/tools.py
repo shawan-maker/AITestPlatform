@@ -115,40 +115,46 @@ def search_requirement(query:str, config: RunnableConfig):
         return f"知识库检索失败（{type(e).__name__}），请基于用户输入的需求描述直接进行测试用例设计。"
 
 @tool("generate_testcases",description="基于需求文档生成测试用例的工具")
-def generate_testcases(project_name:str, module_id:str,requirement:str,config: RunnableConfig):
+def generate_testcases(requirement:str, config: RunnableConfig):
     """
         工具作用：生成测试用例节点
         参数：
-            project_name:项目名称
-            module_id:模块id
-            requirement:需求文档内容
+            requirement:需求文档内容（来自用户输入或search_requirement工具的输出）
     """
 
     writer = get_stream_writer()
-    writer("🧪 [阶段2/3] 开始生成测试点与测试用例...")
+    writer("🧪 开始生成测试点与测试用例...")
     try:
+        # 从 config.context 中获取项目信息
+        project_name = config.get("context", {}).get("project_name", "")
+        module_id = config.get("context", {}).get("module_id", "")
+        
         writer("  → 正在初始化用例生成工作流...")
         workflow = GenerateTestCases().create_workflow()
-        writer("  → 调用大模型分析需求，生成测试点和用例（耗时较长请耐心等待）...")
-        response = workflow.invoke(
+        writer("  → 调用大模型生成测试点和用例（耗时较长请耐心等待）...")
+
+        # 使用 invoke() 获取完整的最终状态
+        # stream() 的返回值解析复杂，直接使用 invoke() 获取最终状态更可靠
+        final_state = workflow.invoke(
             {"requirement": requirement},
-            subgraphs=True,
             config=config,
         )
-        test_cases = response.get("test_cases", [])
-        points = response.get("points") or response.get("test_points") or []
-        writer(f"  ✅ 测试点生成完毕: {len(points)} 个测试点")
+        
+        # 从最终状态中获取测试点和测试用例
+        test_cases = (final_state or {}).get("test_cases", [])
+        points = (final_state or {}).get("points") or (final_state or {}).get("test_points") or []
+
         writer(f"  ✅ 测试用例生成完毕: {len(test_cases)} 条用例")
-        writer("✅ [阶段3完成] 测试用例生成完毕")
 
         session_id = session_id_from_config(config)
         if session_id:
             writer("  → 正在保存生成结果到会话...")
-            _run_db_operation(sync_functional_payload(session_id, response))
+            _run_db_operation(sync_functional_payload(session_id, final_state))
             writer("  → 结果已保存")
+        
         return test_cases
     except Exception as e:
-        error_msg = f"❌ [阶段2/3失败] 用例生成异常({type(e).__name__}): {str(e)[:200]}"
+        error_msg = f"❌ 用例生成异常({type(e).__name__}): {str(e)[:200]}"
         print(error_msg)
         writer(error_msg)
         raise

@@ -32,10 +32,10 @@
               <el-tag v-else size="small" type="success" effect="light" round>{{ t('page.agent.completed') }}</el-tag>
             </div>
 
-            <!-- 阶段列表：每个阶段独立区块 -->
-            <div v-if="msg.stages?.length" class="agent-stages">
+            <!-- 阶段列表：每个阶段独立区块（过滤掉default阶段，history阶段会显示） -->
+            <div v-if="msg.stages?.filter(s => s.name !== 'default').length" class="agent-stages">
               <div
-                v-for="(stage, idx) in msg.stages"
+                v-for="(stage, idx) in msg.stages.filter(s => s.name !== 'default')"
                 :key="stage.name || idx"
                 class="agent-stage-block"
                 :class="{ 'is-done': stage.status === 'done' }"
@@ -183,7 +183,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch, onUpdated } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Loading,
@@ -225,9 +225,8 @@ function setStageDetailRef(el, idx) {
 
 const STAGE_LABEL_MAP = {
   search_requirement: () => t('page.agent.stageSearch'),
-  generate_testpoints: () => t('page.agent.stageTestpoints'),
   generate_testcases: () => t('page.agent.stageTestcases'),
-  formatting_testcases: () => t('page.agent.stageFormatting'),
+  history: () => t('page.agent.stageHistory'),
 }
 
 function getStageLabel(name) {
@@ -327,13 +326,25 @@ function hasPayloadContent(payload) {
   return !!(payload?.test_points?.length || payload?.cases?.length)
 }
 
+// 自动滚动阶段日志terminal到底部（当有新日志时）
+function scrollStageTerminalToBottom() {
+  const terminals = document.querySelectorAll('.agent-stage-block__terminal')
+  terminals.forEach(el => {
+    el.scrollTop = el.scrollHeight
+  })
+}
+
+// 监听消息变化，自动滚动聊天窗口和阶段日志到底部
 watch(
   () => [props.messages.length, props.streamingText, props.streaming, props.stageLogLines.length],
   async () => {
     await nextTick()
     const wrap = scrollRef.value?.wrapRef
     if (wrap) wrap.scrollTop = wrap.scrollHeight
+    // 阶段日志terminal自动滚动到底部
+    scrollStageTerminalToBottom()
   },
+  { deep: true },
 )
 </script>
 
@@ -349,7 +360,7 @@ watch(
 .agent-chat-panel__messages {
   flex: 1;
   min-height: 0;
-  padding: 16px 20px;
+  padding: 16px 25px;
 }
 
 /* Message row layout */
@@ -409,6 +420,7 @@ watch(
 .chat-msg__body {
   max-width: calc(100% - 48px);
   min-width: 0;
+  width: 100%; /* 固定宽度，避免流式响应时宽度变化 */
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -435,13 +447,15 @@ watch(
   font-size: 13.5px;
   line-height: 1.65;
   word-break: break-word;
+  width: 100%; /* 固定气泡宽度，避免内容少时宽度过小 */
 
   background: var(--el-fill-color-lighter);
   border: 1px solid var(--el-border-color-lighter);
   border-top-left-radius: 4px;
 
   &--user {
-    background: linear-gradient(135deg, $color-primary, darken($color-primary, 5%));
+    width: auto; /* 用户消息宽度自适应 */
+    background: linear-gradient(135deg, $color-primary, adjust-color($color-primary, $lightness: -5%));
     border-color: transparent;
     color: #fff;
     border-top-right-radius: 4px;

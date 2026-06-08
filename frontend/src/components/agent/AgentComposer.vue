@@ -355,18 +355,21 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .agent-composer {
-  /* SIT-F7: 75% of main content area, max 900px */
+  /* SIT-F7: 75% of main content area, max 900px (landing mode) */
   width: 75%;
   max-width: 900px;
   margin: 0 auto;
   flex-shrink: 0;
 
+
   &--compact {
     max-width: none;
-    width: 90%; /* SIT-F7: mobile */
-    padding: 0 12px 12px;
+    width: 100%; /* 与chat panel对齐 */
+    margin: 0 auto; /* 居中 */
+    padding: 0 20px 12px; /* 与chat panel的messages区域padding保持一致 */
+    box-sizing: border-box;
   }
-
+  
   @media (max-width: 767px) {
     width: 90%;
     max-width: none;

@@ -111,6 +111,16 @@ async def functional_rename_session(
     return success(data=data, message="会话名称已更新")
 
 
+@router.post("/sessions/{session_id}/summarize-title", summary="AI 生成会话标题")
+async def functional_summarize_title(
+    session_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    from service.ai_generation.session_lifecycle import SessionLifecycleService
+    data = await SessionLifecycleService.summarize_and_update_title(user, session_id=session_id)
+    return success(data=data, message="标题已更新")
+
+
 @router.delete("/sessions/{session_id}", summary="删除手工用例 Agent 会话")
 async def functional_delete_session(
     session_id: int,

@@ -317,7 +317,7 @@ function handleConfirm() {
 
 function formatSteps(steps) {
   if (!Array.isArray(steps)) return ''
-  return steps.map((s, i) => `${i + 1}. ${s}`).join('\n')
+  return steps.map((s, i) => `${i + 1}. ${Array.isArray(s) ? s.join(' ') : s}`).join('\n')
 }
 </script>
 

@@ -299,23 +299,33 @@ class FunctionalCaseGenerationService:
                 item = cases[idx]
                 if not isinstance(item, dict):
                     raise AppException(f"用例预览数据格式错误: index={idx}", 400)
+                # Map case to test point: each test point maps to its corresponding case
+                # (cases and points are ordered; point_map key = point index)
+                # 使用idx（用例在cases列表中的索引）去point_map中查找对应的测试点
                 tp = point_map.get(idx) if requirement_id else None
+                # 辅助函数：将字段值转换为字符串（处理列表情况）
+                def _to_str(val):
+                    if isinstance(val, list):
+                        # 如果列表元素是列表，递归处理
+                        return ' '.join(_to_str(item) for item in val)
+                    return str(val or "")
+                
                 case = await FunctionalCase.create(
                     project_id=session.project_id,
                     module_id=session.module_id,
                     catalog_id=data.catalog_id,
                     requirement_id=requirement_id,
                     test_point_id=tp.id if tp else None,
-                    case_no=str(item.get("case_id") or ""),
-                    case_name=str(item.get("case_name") or f"AI用例-{idx + 1}"),
+                    case_no=_to_str(item.get("case_id")),
+                    case_name=_to_str(item.get("case_name")) or f"AI用例-{idx + 1}",
                     priority=_parse_priority(item.get("priority")),
-                    dimension=str(item.get("dimension") or (tp.dimension if tp else "")),
+                    dimension=_to_str(item.get("dimension")) or (tp.dimension if tp else ""),
                     type=FunctionalCaseType.functional,
-                    preconditions=str(item.get("preconditions") or ""),
-                    test_steps=str(item.get("test_steps") or ""),
-                    test_data=str(item.get("test_data") or ""),
-                    expected_result=str(item.get("expected_result") or ""),
-                    actual_result=str(item.get("actual_result") or ""),
+                    preconditions=_to_str(item.get("preconditions")),
+                    test_steps=_to_str(item.get("test_steps")),
+                    test_data=_to_str(item.get("test_data")),
+                    expected_result=_to_str(item.get("expected_result")),
+                    actual_result=_to_str(item.get("actual_result")),
                     source=SourceType.ai,
                     exec_result=FunctionalExecResult.pending,
                     generation_session_id=session.id,

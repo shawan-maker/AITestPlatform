@@ -63,6 +63,10 @@ async def get_case(
     user: User = Depends(get_current_active_user),
 ):
     data = await CaseService.get_detail(user, case_id)
+    # 调试代码：检查返回的JSON响应格式
+    import json
+    print(f"[DEBUG] get_case response type: {type(data)}")
+    print(f"[DEBUG] get_case response: {json.dumps(data.model_dump() if hasattr(data, 'model_dump') else data, ensure_ascii=False, default=str)}")
     return success(data=data)
 
 

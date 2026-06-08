@@ -46,6 +46,10 @@ export function renameFunctionalSession(sessionId, title) {
   return request.patch(`/ai-generation/functional/sessions/${sessionId}`, { title })
 }
 
+export function summarizeFunctionalTitle(sessionId) {
+  return request.post(`/ai-generation/functional/sessions/${sessionId}/summarize-title`)
+}
+
 export function deleteFunctionalSession(sessionId) {
   return request.delete(`/ai-generation/functional/sessions/${sessionId}`)
 }

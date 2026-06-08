@@ -48,6 +48,7 @@ class State2(TypedDict):
     test_points: list[dict]
     coverage_report: str
     complete_round: int
+    max_test_points: int  # 最大测试点数量（从用户提示词中解析）
 
 class TestPointModel(BaseModel):
     """定义测试点类"""
@@ -143,11 +144,20 @@ class GeneratePoints(BaseModel):
                 "user_prompt_section": user_prompt_section,
             },
         )
-        writer(f"【执行节点完成】 3、对未覆盖的测试点补全,总数量为：{len(resp)}")
-        # 获取补充前的测试点（确保是列表类型）
+        
+        # 限制补充的测试点数量，使总数不超过max_test_points
+        max_test_points = state.get("max_test_points") or 15
         existing = state.get("test_points", [])
         if not isinstance(existing, list):
             existing = []
+        current_count = len(existing)
+        remaining_slots = max(0, max_test_points - current_count)
+        
+        # 只取需要补充的测试点数量
+        if len(resp) > remaining_slots:
+            resp = resp[:remaining_slots]
+        
+        writer(f"【执行节点完成】 3、对未覆盖的测试点补全,补充了{len(resp)}个，总数量为：{current_count + len(resp)}")
         # 拼接已有测试点和补充的测试点
         test_points = existing + resp
         complete_round = int(state.get("complete_round") or 0) + 1
@@ -157,15 +167,24 @@ class GeneratePoints(BaseModel):
     def output_test_points(self,state: State2):
         """输出所有的测试点"""
         writer = get_stream_writer()
-        writer("【开始执行节点】 4、输出所有测试点：")
-        return {"test_points": state["test_points"]}
+        test_points = state["test_points"]
+        # 不在子工作流中输出完成标志，改在父工作流中输出
+        return {"test_points": test_points}
 
     # 1.5 路由分发的节点
     def route_dispatch(self,state: State2):
         """路由分发的节点"""
         complete_round = int(state.get("complete_round") or 0)
+        test_points_count = len(state.get("test_points") or [])
+        max_test_points = state.get("max_test_points") or 15
+        
+        # 如果达到最大补充轮数，停止
         if complete_round >= MAX_COMPLETE_TEST_POINTS:
             return "output_test_points"
+        # 如果测试点数量已达到或超过最大值，停止
+        if test_points_count >= max_test_points:
+            return "output_test_points"
+        # 如果覆盖率报告显示已全部覆盖，停止
         if "测试点已经全部覆盖" in "\n".join(state["coverage_report"]):
             return "output_test_points"
         return "complete_test_points"
@@ -202,14 +221,27 @@ class GenerateTestCases:
         """创建测试点"""
         writer = get_stream_writer()
         writer("【开始执行节点】 3.1 创建测试点：")
+        
+        # 解析用户提示词中的数量要求（如"5条"、"10个"、"5个测试用例"等）
+        max_test_points = 15  # 默认值
+        user_prompt = state.get("user_prompt") or ""
+        import re
+        # 支持匹配：5条、5个、5个测试点、5条用例、5个测试用例、5条测试用例
+        match = re.search(r'(\d+)\s*(条|个)(测试用例|测试点|用例)?', user_prompt)
+        if match:
+            max_test_points = int(match.group(1))
+        
         # 1、调用子工作流
         res = self.sub_graph.invoke(
             {
                 "input_requirement": state["requirement"],
                 "user_prompt": state.get("user_prompt"),
                 "complete_round": 0,
+                "max_test_points": max_test_points,
             }
         )
+        # 在父工作流中输出完成标志，确保只输出一次且时机正确
+        writer(f"✅ 测试点生成完毕: {len(res['test_points'])} 个测试点")
         writer("【执行节点完成】 3.1 创建测试点")
         # 2、获取子工作流的结果并返回给父工作流
         return {"points": res["test_points"]}

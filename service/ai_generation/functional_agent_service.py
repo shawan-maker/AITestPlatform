@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 
-from service.ai_generation.agent_stream import AgentStreamService
+from service.ai_generation.agent_stream import AgentStreamService, _sse
 from service.ai_generation.common import load_knowledge_requirement_text
 from service.ai_generation.message_service import MessageService
 from service.ai_generation.permissions import ensure_agent_editor, ensure_agent_viewer
@@ -18,7 +18,7 @@ from service.ai_generation.session_schemas import (
     AIGenerationSessionOut,
     AgentMessageRequest,
 )
-from service.core.enums import GenType, SourceChannel
+from service.core.enums import GenType, SessionStatus, SourceChannel
 from service.core.exceptions import AppException
 from service.functional_test.case.generation_service import FunctionalCaseGenerationService
 from service.functional_test.case.schemas import (
@@ -69,6 +69,25 @@ class FunctionalAgentService:
         if session.gen_type != GenType.functional:
             raise AppException("非功能用例生成会话", 400)
         await ensure_agent_viewer(session.project_id, user)
+        
+        # 断点续传：检查session状态，避免重复执行
+        refreshed_session = await AIGenerationSession.get(id=session_id)
+        
+        # 如果session已经有output_payload，说明Agent已成功完成，直接返回结果
+        if refreshed_session.output_payload:
+            _log.info("[stream_message] session=%s 已有output_payload，直接返回结果", session_id)
+            yield _sse("payload_updated", {"session_id": session.id})
+            yield _sse("done", {})
+            return
+        
+        # 如果session正在运行（status=running），则返回错误提示
+        if refreshed_session.status == SessionStatus.running:
+            _log.warning("[stream_message] session=%s 正在执行中，拒绝重复执行", session_id)
+            yield _sse("error", {"message": "Agent正在执行中，请等待完成或查看已生成的结果"})
+            yield _sse("done", {})
+            return
+        
+        # 否则，正常执行Agent
         async for chunk in AgentStreamService.stream_functional_message(
             session, body.content.strip()
         ):
