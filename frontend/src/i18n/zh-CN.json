@@ -413,6 +413,7 @@
       "catalog": "目录",
       "selectProjectFirst": "请先选择项目，再选择目录",
       "selectProject": "请选择项目",
+      "selectCatalog": "请选择目录",
       "totalCount": "共 {count} 条"
     },
     "functional": {

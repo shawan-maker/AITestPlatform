@@ -442,6 +442,36 @@ onMounted(async () => {
   font-size: 13.5px; /* 与上方对话消息字体保持一致 */
 }
 
+/* Compact 模式下缩小图标和按钮 */
+.agent-composer--compact {
+  .agent-composer__link-btn {
+    font-size: 13.5px; /* 与输入框字体保持一致 */
+    padding: 4px 0;
+  }
+
+  .agent-composer__icon-btn {
+    width: 32px; /* 从 64px 减半 */
+    height: 32px; /* 从 64px 减半 */
+    font-size: 16px; /* 从 32px 减半 */
+    border-radius: 6px; /* 从 12px 减半 */
+  }
+
+  .agent-composer__send-btn {
+    width: 36px; /* 从 72px 减半 */
+    height: 36px; /* 从 72px 减半 */
+    font-size: 18px; /* 从 36px 减半 */
+  }
+
+  .agent-composer__footer {
+    margin-top: 8px; /* 从 16px 减半 */
+    padding-top: 8px; /* 从 16px 减半 */
+  }
+
+  .agent-composer__actions {
+    gap: 10px; /* 从 20px 减半 */
+  }
+}
+
 .agent-composer__footer {
   display: flex;
   align-items: center;

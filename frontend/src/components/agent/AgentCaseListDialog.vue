@@ -327,10 +327,32 @@ async function confirmSave() {
       }),
     })
     showSaveDialog.value = false
-    ElMessage.success(t('page.agent.saved'))
+    // 不在子组件中显示提示，由父组件统一显示
   } finally {
     saving.value = false
   }
+}
+
+// 将目录树扁平化为带路径的列表
+function flattenCatalogs(tree, parentPath = '') {
+  console.log('[DEBUG] flattenCatalogs 开始, parentPath:', parentPath, 'tree长度:', tree?.length)
+  const result = []
+  function walk(nodes, path) {
+    for (const node of nodes) {
+      const currentPath = path ? `${path}/${node.name}` : node.name
+      console.log('[DEBUG] walk 处理节点:', node.name, '当前路径:', currentPath)
+      result.push({
+        id: node.id,
+        name: currentPath
+      })
+      if (node.children?.length) {
+        walk(node.children, currentPath)
+      }
+    }
+  }
+  walk(tree, parentPath)
+  console.log('[DEBUG] flattenCatalogs 完成, 结果数量:', result.length, '结果示例:', result.slice(0, 3))
+  return result
 }
 
 // 项目切换时，重新加载该项目的目录列表
@@ -350,8 +372,10 @@ async function onProjectChange(projectId) {
     } else {
       res = await getCaseCatalogTree({ project_id: projectId })
     }
-    catalogs.value = res.data.data?.items ?? res.data.data ?? []
-    console.log('[DEBUG] onProjectChange: loaded catalogs =', catalogs.value)
+    const rawTree = res.data.data?.items ?? res.data.data ?? []
+    // 扁平化目录树，显示完整路径
+    catalogs.value = flattenCatalogs(rawTree)
+    console.log('[DEBUG] onProjectChange: loaded and flattened catalogs =', catalogs.value)
   } catch (e) {
     console.error('[DEBUG] onProjectChange: failed to load catalogs', e)
     catalogs.value = []

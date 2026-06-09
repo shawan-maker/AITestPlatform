@@ -1,3 +1,8 @@
+import sys
+print(f"[DEBUG] Python executable: {sys.executable}")
+print(f"[DEBUG] Python version: {sys.version}")
+print(f"[DEBUG] sys.path: {sys.path[:3]}...")
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request

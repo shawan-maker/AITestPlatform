@@ -538,15 +538,10 @@ async function sendMessage(content) {
             console.log('[SSE-EVENT] payload_updated: generate_testcases stage not found or already done')
           }
           
-          // 等待 DOM 更新并延迟，确保卡片渲染
+          // 等待 DOM 更新，确保卡片渲染
           console.log('[SSE-EVENT] payload_updated: waiting for nextTick...')
           await nextTick()
           console.log('[SSE-EVENT] payload_updated: nextTick completed')
-          
-          // 再等待 500ms 确保卡片已经渲染完成
-          console.log('[SSE-EVENT] payload_updated: waiting 500ms for card rendering...')
-          await new Promise(resolve => setTimeout(resolve, 500))
-          console.log('[SSE-EVENT] payload_updated: 500ms wait completed')
           
           // ⚠️ 不在这里设置 isStreaming = false，留给 done 事件统一处理
           console.log('[SSE-EVENT] payload_updated: ✅ payload_updated completed, waiting for done event...')
@@ -607,11 +602,6 @@ async function sendMessage(content) {
           console.log('[SSE-EVENT] done: waiting for nextTick...')
           await nextTick()
           console.log('[SSE-EVENT] done: nextTick completed')
-          
-          // 再等待 500ms 确保卡片已渲染完成
-          console.log('[SSE-EVENT] done: waiting 500ms for card rendering...')
-          await new Promise(resolve => setTimeout(resolve, 500))
-          console.log('[SSE-EVENT] done: 500ms wait completed')
           
           agentResponse.isStreaming = false
           console.log('[SSE-EVENT] done: ✅ isStreaming set to false')
