@@ -22,5 +22,11 @@ redis>=5.0.0
 # Logging
 loguru>=0.7.0
 
+# AI Agent & LLM
+langchain-core>=1.4.0
+langchain-openai>=1.2.0
+langgraph>=1.2.0
+langgraph-supervisor>=0.0.31
+
 # API test execution engine (PyPI: api_engine_xin)
 api_engine_xin>=0.0.18

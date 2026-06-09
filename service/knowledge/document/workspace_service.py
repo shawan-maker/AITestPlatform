@@ -7,11 +7,10 @@ from service.project.models import Project
 class WorkspaceService:
     @staticmethod
     def _rag_type_for_doc_type(doc_type: KnowledgeDocType) -> RagType:
-        if doc_type == KnowledgeDocType.requirement:
-            return RagType.requirement
         if doc_type == KnowledgeDocType.api_doc:
             return RagType.api
-        raise AppException("不支持的文档类型", 400)
+        # 其他类型（如 other）也使用 api RAG
+        return RagType.api
 
     @classmethod
     async def ensure_workspace(cls, project: Project, doc_type: KnowledgeDocType) -> KnowledgeWorkspace:

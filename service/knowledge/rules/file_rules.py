@@ -7,7 +7,6 @@ import yaml
 from service.core.enums import IndexStatus, KnowledgeDocType, ParseMode
 from service.core.exceptions import AppException
 
-REQUIREMENT_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".doc"}
 API_AI_EXTENSIONS = {".txt", ".md", ".pdf", ".docx", ".doc"}
 API_SPEC_EXTENSIONS = {".json", ".yaml", ".yml"}
 
@@ -48,16 +47,19 @@ class FileRules:
         parse_mode: ParseMode,
     ) -> None:
         ext = Path(file_name).suffix.lower()
+        
+        # 需求文档：仅支持 AI 解析
         if doc_type == KnowledgeDocType.requirement:
-            if parse_mode != ParseMode.ai:
-                raise AppException("功能需求文档仅支持 AI 解析", 400)
-            if ext not in REQUIREMENT_EXTENSIONS:
-                raise AppException(
-                    f"功能需求文档不支持该文件类型: {ext or '(无扩展名)'}", 400
-                )
-            return
-
-        if doc_type == KnowledgeDocType.api_doc:
+            if parse_mode == ParseMode.ai:
+                if ext not in API_AI_EXTENSIONS:
+                    raise AppException(
+                        f"需求文档不支持该文件类型: {ext or '(无扩展名)'}", 400
+                    )
+                return
+            raise AppException("需求文档仅支持 AI 智能解析", 400)
+        
+        # 接口文档/其他：支持多种解析方式
+        if doc_type == KnowledgeDocType.api_doc or doc_type == KnowledgeDocType.other:
             if parse_mode == ParseMode.ai:
                 if ext not in API_AI_EXTENSIONS | API_SPEC_EXTENSIONS:
                     raise AppException(
@@ -81,6 +83,9 @@ class FileRules:
 
     @staticmethod
     def initial_index_status(doc_type: KnowledgeDocType, parse_mode: ParseMode) -> IndexStatus:
+        # 需求文档和接口文档(Swagger/OpenAPI解析)都需要异步索引
+        if doc_type == KnowledgeDocType.requirement:
+            return IndexStatus.pending
         if doc_type == KnowledgeDocType.api_doc and parse_mode in (
             ParseMode.swagger,
             ParseMode.openapi,

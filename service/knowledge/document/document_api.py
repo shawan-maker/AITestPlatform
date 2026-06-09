@@ -6,7 +6,6 @@ from service.core.deps import get_current_active_user, require_project_editor
 from service.core.enums import IndexStatus, KnowledgeDocType, ParseMode
 from service.core.exceptions import AppException
 from service.core.response import success
-from service.functional_test.requirement.candidate_service import CandidateService
 from service.knowledge.document.document_service import DocumentService
 from service.knowledge.document.permissions import ensure_document_editor
 from service.knowledge.document.schemas import KnowledgeDocumentListQuery
@@ -81,18 +80,6 @@ async def get_document(
     user: User = Depends(get_current_active_user),
 ):
     data = await DocumentService.get_detail(user, document_id)
-    return success(data=data)
-
-
-@router.get("/documents/{document_id}/requirement-candidate", summary="当前版本需求候选")
-async def get_requirement_candidate(
-    document_id: int,
-    version_id: int | None = Query(None, ge=1),
-    user: User = Depends(get_current_active_user),
-):
-    data = await CandidateService.get_for_document_version(
-        user, document_id, version_id=version_id
-    )
     return success(data=data)
 
 

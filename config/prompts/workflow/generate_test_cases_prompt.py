@@ -1,15 +1,13 @@
 from langchain_core.prompts import PromptTemplate
 
+# 统一的 prompt template，使用 max_test_points_section 动态控制数量限制
 prompt = PromptTemplate.from_template(
     template='''
     你是一位资深测试工程师，请基于下面功能整理的出来的测试点，结合覆盖功能 + 探测缺陷的思维生成标准的测试用例，
     如果提供已经编写的测试用例，则在提供的测试用例基础上补充未覆盖测试点的用例
     如果未提供已经编写的测试用例，则根据测试点生成测试用例
 
-    ### 数量控制（必须严格遵守）
-    **每个测试点仅生成1条测试用例**，总用例数必须等于测试点数。
-    如果用户在"用户附加要求"中指定了测试用例数量（如"5条"、"10个"、"只要X条"等），
-    你**必须**严格控制生成的测试用例总数不超过该数量，但仍要确保每个测试点至少覆盖1条用例。
+    {max_test_points_section}
 
     输出的用例，包含测试用例的八要素，：
         用例编号(case_id)
@@ -38,8 +36,21 @@ prompt = PromptTemplate.from_template(
             }},
             ...
         ]
+    {max_test_points_requirement}
     输入测试点：
     {points}
     {user_prompt_section}
     '''
 )
+
+def get_max_test_points_section(max_test_points: int | None) -> str:
+    """根据是否有数量限制，返回对应的数量限制说明（用于替换 template 中的 {max_test_points_section}）"""
+    if max_test_points is not None:
+        return "### 数量控制（必须严格遵守）\n**每个测试点仅生成1条测试用例**，总用例数必须等于测试点数，且**必须 ≤ {} 条**。".format(max_test_points)
+    return ""
+
+def get_max_test_points_requirement(max_test_points: int | None) -> str:
+    """根据是否有数量限制，返回对应的数量要求说明（用于替换 template 中的 {max_test_points_requirement}）"""
+    if max_test_points is not None:
+        return "最多生成 {} 条用例。".format(max_test_points)
+    return ""

@@ -220,6 +220,9 @@ async function loadMessages() {
   const merged = []
   let currentAgent = null
   for (const msg of raw) {
+    // [FIX-问题4] 跳过 system 角色消息（知识库文档上下文等），避免在新对话中显示为假历史
+    if (msg.role === 'system') continue
+
     if (msg.role === 'user') {
       // Flush any pending agent block before adding user msg
       if (currentAgent) {
@@ -311,15 +314,23 @@ async function createSessionFromComposer(payload) {
       knowledge_document_id: payload.knowledgeDocumentId,
       user_prompt: payload.userPrompt,
     }
+    console.log('[DEBUG-SESSION] 创建新会话, body:', JSON.stringify(body).substring(0, 200))
     const res = await createFunctionalSession(body)
     const session = res?.data?.data
+    console.log('[DEBUG-SESSION] 新会话创建成功, sessionId:', session?.id)
     if (!session?.id) {
       throw new Error(t('common.requestFailed'))
     }
     await loadSessions()
     activeSessionId.value = session.id
+    console.log('[DEBUG-SESSION] activeSessionId 已设置为:', activeSessionId.value)
     setComposerMode(false)
+
+    // 加载消息前确认 messages 已清空
+    console.log('[DEBUG-SESSION] loadMessages 前, 当前 messages 数量:', messages.value.length)
     await Promise.all([refreshSession(), loadMessages()])
+    console.log('[DEBUG-SESSION] loadMessages 后, messages 数量:', messages.value.length,
+      ', message ids:', messages.value.map(m => m.id || m.role).join(', '))
     return session
   } finally {
     creating.value = false

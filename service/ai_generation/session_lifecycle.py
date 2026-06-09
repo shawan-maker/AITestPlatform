@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 _log = logging.getLogger(__name__)
 
-from service.ai_generation.common import compute_prompt_hash, load_knowledge_requirement_text
+from service.ai_generation.common import compute_prompt_hash, load_knowledge_document_text
 from service.ai_generation.message_service import MessageService
 from service.ai_generation.models import AIGenerationMessage, AIGenerationSession
 from service.ai_generation.session_schemas import AIGenerationSessionListItem, AIGenerationSessionOut
@@ -87,26 +87,19 @@ class SessionLifecycleService:
         *,
         project_id: int,
         module_id: int | None,
-        requirement_text: str | None,
         knowledge_document_id: int | None,
         user_prompt: str | None,
         title: str | None,
     ) -> AIGenerationSessionOut:
         await cls._validate_module(project_id, module_id)
         resolved_text = ""
-        input_ref_type = None
-        input_ref_id = None
         knowledge_id = None
 
         if knowledge_document_id is not None:
-            if requirement_text and requirement_text.strip():
-                raise AppException("requirement_text 与 knowledge_document_id 不能同时提供", 400)
-            resolved_text = await load_knowledge_requirement_text(
+            resolved_text = await load_knowledge_document_text(
                 knowledge_document_id, project_id
             )
             knowledge_id = knowledge_document_id
-        elif requirement_text and requirement_text.strip():
-            resolved_text = requirement_text.strip()
         else:
             # SIT-F7: Allow empty input (free-form conversation)
             resolved_text = ""
@@ -120,8 +113,6 @@ class SessionLifecycleService:
             project_id=project_id,
             module_id=module_id,
             gen_type=GenType.functional,
-            input_ref_type=input_ref_type,
-            input_ref_id=input_ref_id,
             knowledge_document_id=knowledge_id,
             prompt_hash=compute_prompt_hash(resolved_text, user_prompt),
             status=SessionStatus.pending,
@@ -134,11 +125,11 @@ class SessionLifecycleService:
             await MessageService.append(
                 session.id,
                 role=MessageRole.system,
-                content=f"以下为知识库需求文档全文，供生成用例参考：\n\n{resolved_text}",
+                content=f"以下为知识库文档全文，供生成用例参考：\n\n{resolved_text}",
                 message_type=MessageType.text,
             )
         session.output_payload = session.output_payload or {}
-        session.output_payload["_requirement_context"] = resolved_text
+        session.output_payload["_document_context"] = resolved_text
         await session.save(update_fields=["output_payload"])
         return session_to_out(session)
 

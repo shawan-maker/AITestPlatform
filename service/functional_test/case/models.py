@@ -33,15 +33,11 @@ class FunctionalCaseCatalog(models.Model):
 
 class FunctionalTestPoint(models.Model):
     id = fields.IntField(pk=True)
-    requirement = fields.ForeignKeyField(
-        "models.RequirementDoc",
-        related_name="test_points",
-        on_delete=fields.CASCADE,
-    )
     type = fields.CharField(max_length=50)
     dimension = fields.CharField(max_length=100)
     test_point = fields.TextField()
     source = fields.CharEnumField(SourceType, default=SourceType.ai)
+    requirement_id = fields.IntField(null=True)  # MySQL兼容：数据库残留列，允许NULL
     generation_session = fields.ForeignKeyField(
         "models.AIGenerationSession",
         related_name="functional_test_points",
@@ -67,12 +63,6 @@ class FunctionalCase(models.Model):
     )
     catalog = fields.ForeignKeyField(
         "models.FunctionalCaseCatalog",
-        related_name="functional_cases",
-        null=True,
-        on_delete=fields.SET_NULL,
-    )
-    requirement = fields.ForeignKeyField(
-        "models.RequirementDoc",
         related_name="functional_cases",
         null=True,
         on_delete=fields.SET_NULL,

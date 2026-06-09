@@ -70,7 +70,6 @@ class CaseCreateRequest(BaseModel):
     catalog_id: int = Field(..., ge=1)
     case_name: str = Field(..., min_length=1, max_length=255)
     module_id: int | None = Field(default=None, ge=1)
-    requirement_id: int | None = Field(default=None, ge=1)
     priority: int = Field(default=3, ge=1, le=4)
     dimension: str | None = Field(default=None, max_length=100)
     type: FunctionalCaseType = FunctionalCaseType.functional
@@ -84,7 +83,6 @@ class CaseUpdateRequest(BaseModel):
     catalog_id: int | None = Field(default=None, ge=1)
     case_name: str | None = Field(default=None, min_length=1, max_length=255)
     module_id: int | None = Field(default=None, ge=1)
-    requirement_id: int | None = Field(default=None, ge=1)
     priority: int | None = Field(default=None, ge=1, le=4)
     dimension: str | None = Field(default=None, max_length=100)
     type: FunctionalCaseType | None = None
@@ -122,16 +120,15 @@ class CaseBrief(BaseModel):
     source: SourceType
     sort_order: int
     jira_issue_key: str | None
-    module_name: str | None = None
+    module_name: str | None
     created_by_username: str | None
-    updated_by_username: str | None = None
-    created_at: datetime = None
+    updated_by_username: str | None
+    created_at: datetime
     updated_at: datetime
 
 
 class CaseDetail(CaseBrief):
     module_id: int | None
-    requirement_id: int | None
     preconditions: str | None
     test_steps: str | None
     test_data: str | None
@@ -183,19 +180,17 @@ PaginatedCases = Paginated[CaseBrief]
 
 class GenerationSessionCreateRequest(BaseModel):
     project_id: int = Field(..., ge=1)
-    requirement_id: int | None = Field(default=None, ge=1)
-    requirement_text: str | None = None
     knowledge_document_id: int | None = Field(default=None, ge=1)
     user_prompt: str | None = None
     module_id: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, max_length=200)
 
 
 class GenerationSaveRequest(BaseModel):
     catalog_id: int = Field(..., ge=1)
     case_indexes: list[int] = Field(..., min_length=1)
-    requirement_id: int | None = Field(default=None, ge=1)
 
 
 class GenerationSaveResult(BaseModel):
-    created_case_ids: list[int]
-    created_test_point_ids: list[int]
+    created_case_ids: list[int] = Field(default_factory=list)
+    created_test_point_ids: list[int] = Field(default_factory=list)

@@ -7,7 +7,7 @@ from service.api_test.interface.models import ApiInterfaceCatalog
 from service.api_test.models import ApiBaseCase, ApiInterface, ApiTestCase
 from service.core.enums import ProjectMemberRole, project_member_role_label
 from service.core.exceptions import AppException
-from service.functional_test.models import FunctionalCase, RequirementDoc
+from service.functional_test.models import FunctionalCase
 from service.knowledge.models import KnowledgeDocument, KnowledgeWorkspace
 from service.project.models import Project, ProjectMember
 from service.project.schemas import (
@@ -45,7 +45,6 @@ SOFT_BLOCKER_MODELS: list[tuple[type, str]] = [
     (ApiBaseCase, "api_base_cases"),
     (ApiTestCase, "api_test_cases"),
     (FunctionalCase, "functional_cases"),
-    (RequirementDoc, "requirement_docs"),
 ]
 
 DELETE_BLOCKER_MODELS = HARD_BLOCKER_MODELS + SOFT_BLOCKER_MODELS

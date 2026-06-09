@@ -26,13 +26,16 @@ export function listVersions(documentId, params = {}) {
 }
 
 export function downloadDocument(documentId) {
-  return request.get(`/knowledge/documents/${documentId}/download`, { responseType: 'blob' })
+  return request.get(`/knowledge/documents/${documentId}/download`, {
+    responseType: 'blob',
+  })
 }
 
 export function downloadVersion(documentId, versionId) {
-  return request.get(`/knowledge/documents/${documentId}/versions/${versionId}/download`, {
-    responseType: 'blob',
-  })
+  return request.get(
+    `/knowledge/documents/${documentId}/versions/${versionId}/download`,
+    { responseType: 'blob' },
+  )
 }
 
 export function reindexDocument(documentId) {
@@ -43,12 +46,10 @@ export function deleteDocument(documentId) {
   return request.delete(`/knowledge/documents/${documentId}`)
 }
 
-export function getRequirementCandidate(documentId) {
-  return request.get(`/knowledge/documents/${documentId}/requirement-candidate`)
-}
-
 export function getVersionTextPreview(documentId, versionId) {
-  return request.get(`/knowledge/documents/${documentId}/versions/${versionId}/text-preview`)
+  return request.get(
+    `/knowledge/documents/${documentId}/versions/${versionId}/text-preview`,
+  )
 }
 
 export function getParsedInterfaces(documentId, versionId, config = {}) {

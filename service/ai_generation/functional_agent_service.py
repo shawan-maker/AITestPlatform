@@ -4,7 +4,7 @@ import logging
 from service.ai_generation.agent_stream import AgentStreamService, _sse
 
 _log = logging.getLogger(__name__)
-from service.ai_generation.common import load_knowledge_requirement_text
+from service.ai_generation.common import load_knowledge_document_text
 from service.ai_generation.message_service import MessageService
 from service.ai_generation.models import AIGenerationSession
 from service.ai_generation.permissions import ensure_agent_editor, ensure_agent_viewer
@@ -45,7 +45,6 @@ class FunctionalAgentService:
             user,
             project_id=body.project_id,
             module_id=body.module_id,
-            requirement_text=body.requirement_text,
             knowledge_document_id=body.knowledge_document_id,
             user_prompt=body.user_prompt,
             title=body.title,
@@ -111,26 +110,14 @@ class FunctionalAgentService:
         user: User,
         body: FunctionalGenerateRequest,
     ) -> AIGenerationSessionOut:
-        """Deprecated: Phase 1 一次性 generate；保留兼容旧客户端。"""
+        """Deprecated: Phase1 一次性 generate；保留兼容旧客户端。"""
         await ensure_agent_viewer(body.project_id, user)
-        if body.knowledge_document_id is not None:
-            text = await load_knowledge_requirement_text(
-                body.knowledge_document_id, body.project_id
-            )
-            req = GenerationSessionCreateRequest(
-                project_id=body.project_id,
-                requirement_text=text,
-                knowledge_document_id=body.knowledge_document_id,
-                user_prompt=body.user_prompt,
-                module_id=body.module_id,
-            )
-        else:
-            req = GenerationSessionCreateRequest(
-                project_id=body.project_id,
-                requirement_text=body.requirement_text,
-                user_prompt=body.user_prompt,
-                module_id=body.module_id,
-            )
+        req = GenerationSessionCreateRequest(
+            project_id=body.project_id,
+            knowledge_document_id=body.knowledge_document_id,
+            user_prompt=body.user_prompt,
+            module_id=body.module_id,
+        )
         out = await FunctionalCaseGenerationService.create_session(user, req)
         from service.ai_generation.models import AIGenerationSession
 

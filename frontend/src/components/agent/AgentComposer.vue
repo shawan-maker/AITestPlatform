@@ -1,120 +1,118 @@
 <template>
   <div class="agent-composer" :class="{ 'agent-composer--compact': compact }">
-    <div class="agent-composer__box">
-      <div v-if="!hidePromptRow" class="agent-composer__prompt-row">
-        <template v-if="agentType === 'functional'">
-          <span>{{ t('page.agent.composeHelpWrite') }}</span>
-          <el-select
-            v-model="localProjectId"
-            class="agent-composer__inline-select agent-composer__inline-select--project"
-            filterable
-            popper-class="agent-composer-select-dropdown"
-            :placeholder="t('common.selectProject')"
-            :loading="projectStore.loading"
-            @change="onProjectChange"
-          >
-            <el-option
-              v-for="item in projectStore.projects"
-              :key="item.id"
-              :label="item.name"
-              :value="item.id"
-            />
-          </el-select>
-          <span>{{ t('page.agent.composeFunctionalMiddle') }}</span>
-          <el-select
-            v-model="selectedRequirementKey"
-            class="agent-composer__inline-select agent-composer__inline-select--requirement"
-            filterable
-            clearable
-            popper-class="agent-composer-select-dropdown"
-            :placeholder="t('page.agent.selectRequirement')"
-            :loading="loadingOptions"
-          >
-            <el-option
-              v-for="item in requirementOptions"
-              :key="item.key"
-              :label="item.label"
-              :value="item.key"
-            />
-          </el-select>
-        </template>
-        <template v-else>
-          <span>{{ t('page.agent.composeHelpWrite') }}</span>
-          <el-select
-            v-model="localProjectId"
-            class="agent-composer__inline-select agent-composer__inline-select--project"
-            filterable
-            popper-class="agent-composer-select-dropdown"
-            :placeholder="t('common.selectProject')"
-            :loading="projectStore.loading"
-            @change="onProjectChange"
-          >
-            <el-option
-              v-for="item in projectStore.projects"
-              :key="item.id"
-              :label="item.name"
-              :value="item.id"
-            />
-          </el-select>
-          <span>{{ t('page.agent.composeApiMiddle') }}</span>
-          <el-select
-            v-model="selectedInterfaceId"
-            class="agent-composer__inline-select agent-composer__inline-select--interface"
-            filterable
-            clearable
-            popper-class="agent-composer-select-dropdown"
-            :placeholder="t('page.agent.selectInterface')"
-            :loading="loadingOptions"
-          >
-            <el-option
-              v-for="item in interfaceOptions"
-              :key="item.id"
-              :label="item.label"
-              :value="item.id"
-            />
-          </el-select>
-        </template>
-      </div>
-
-      <textarea
-        ref="textareaRef"
-        v-model="draft"
-        class="agent-composer__textarea"
-        :placeholder="placeholderText"
-        :disabled="disabled || streaming"
-        @keydown="onKeydown"
-      />
-
-      <div class="agent-composer__footer">
-        <button
-          type="button"
-          class="agent-composer__link-btn"
-          :disabled="disabled || streaming"
-          @click="onOptimize"
+    <div v-if="!hidePromptRow" class="agent-composer__prompt-row">
+      <template v-if="agentType === 'functional'">
+        <span>{{ t('page.agent.composeHelpWrite') }}</span>
+        <el-select
+          v-model="localProjectId"
+          class="agent-composer__inline-select agent-composer__inline-select--project"
+          filterable
+          popper-class="agent-composer-select-dropdown"
+          :placeholder="t('common.selectProject')"
+          :loading="projectStore.loading"
+          @change="onProjectChange"
         >
-          {{ t('page.agent.aiOptimize') }}
-        </button>
-        <div class="agent-composer__actions">
-          <el-tooltip :content="t('page.agent.uploadKnowledge')" placement="top">
-            <button
-              type="button"
-              class="agent-composer__icon-btn"
-              :disabled="disabled || streaming"
-              @click="onUpload"
-            >
-              <el-icon><Folder /></el-icon>
-            </button>
-          </el-tooltip>
+          <el-option
+            v-for="item in projectStore.projects"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+        <span>{{ t('page.agent.composeFunctionalMiddle') }}</span>
+        <el-select
+          v-model="selectedDocumentKey"
+          class="agent-composer__inline-select agent-composer__inline-select--document"
+          filterable
+          clearable
+          popper-class="agent-composer-select-dropdown"
+          :placeholder="t('page.agent.selectDocument')"
+          :loading="loadingOptions"
+        >
+          <el-option
+            v-for="item in documentOptions"
+            :key="item.key"
+            :label="item.label"
+            :value="item.key"
+          />
+        </el-select>
+      </template>
+      <template v-else>
+        <span>{{ t('page.agent.composeHelpWrite') }}</span>
+        <el-select
+          v-model="localProjectId"
+          class="agent-composer__inline-select agent-composer__inline-select--project"
+          filterable
+          popper-class="agent-composer-select-dropdown"
+          :placeholder="t('common.selectProject')"
+          :loading="projectStore.loading"
+          @change="onProjectChange"
+        >
+          <el-option
+            v-for="item in projectStore.projects"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+        <span>{{ t('page.agent.composeApiMiddle') }}</span>
+        <el-select
+          v-model="selectedInterfaceId"
+          class="agent-composer__inline-select agent-composer__inline-select--interface"
+          filterable
+          clearable
+          popper-class="agent-composer-select-dropdown"
+          :placeholder="t('page.agent.selectInterface')"
+          :loading="loadingOptions"
+        >
+          <el-option
+            v-for="item in interfaceOptions"
+            :key="item.id"
+            :label="item.label"
+            :value="item.id"
+          />
+        </el-select>
+      </template>
+    </div>
+
+    <textarea
+      ref="textareaRef"
+      v-model="draft"
+      class="agent-composer__textarea"
+      :placeholder="placeholderText"
+      :disabled="disabled || streaming"
+      @keydown="onKeydown"
+    />
+
+    <div class="agent-composer__footer">
+      <button
+        type="button"
+        class="agent-composer__link-btn"
+        :disabled="disabled || streaming"
+        @click="onOptimize"
+      >
+        {{ t('page.agent.aiOptimize') }}
+      </button>
+      <div class="agent-composer__actions">
+        <el-tooltip :content="t('page.agent.uploadKnowledge')" placement="top">
           <button
             type="button"
-            class="agent-composer__send-btn"
-            :disabled="disabled || streaming || !canSend"
-            @click="submit"
+            class="agent-composer__icon-btn"
+            :disabled="disabled || streaming"
+            @click="onUpload"
           >
-            <el-icon v-if="streaming" class="is-loading"><Loading /></el-icon>
-            <el-icon v-else><Promotion /></el-icon>
+            <el-icon><Folder /></el-icon>
           </button>
-        </div>
+        </el-tooltip>
+        <button
+          type="button"
+          class="agent-composer__send-btn"
+          :disabled="disabled || streaming || !canSend"
+          @click="submit"
+        >
+          <el-icon v-if="streaming" class="is-loading"><Loading /></el-icon>
+          <el-icon v-else><Promotion /></el-icon>
+        </button>
       </div>
     </div>
   </div>
@@ -127,7 +125,6 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Folder, Loading, Promotion } from '@element-plus/icons-vue'
 import { listInterfaces } from '@/api/apiTest'
-import { getRequirement, listRequirements } from '@/api/functional'
 import { listDocuments } from '@/api/knowledge'
 import { useProjectStore } from '@/stores/project'
 import { usePermissionStore } from '@/stores/permission'
@@ -150,9 +147,9 @@ const permissionStore = usePermissionStore()
 
 const draft = ref('')
 const localProjectId = ref(projectStore.currentProjectId)
-const selectedRequirementKey = ref('')
+const selectedDocumentKey = ref('')
 const selectedInterfaceId = ref(null)
-const requirementOptions = ref([])
+const documentOptions = ref([])
 const interfaceOptions = ref([])
 const loadingOptions = ref(false)
 const textareaRef = ref(null)
@@ -162,44 +159,43 @@ const placeholderText = computed(() => {
     return t('page.agent.chatPlaceholder')
   }
   if (props.agentType === 'functional') {
-    return t('page.agent.composerPlaceholderFunctional')
+    return t('page.agent.composePlaceholderFunctional')
   }
-  return t('page.agent.composerPlaceholderApi')
+  return t('page.agent.composePlaceholderApi')
 })
 
-const selectedRequirement = computed(() =>
-  requirementOptions.value.find((item) => item.key === selectedRequirementKey.value) ?? null,
+const selectedDocument = computed(() =>
+  documentOptions.value.find((item) => item.key === selectedDocumentKey.value) ?? null,
 )
 
 const canSend = computed(() => {
   if (props.hidePromptRow) return Boolean(draft.value.trim())
   if (!localProjectId.value) return false
-  /* SIT-F7: Allow sending without selecting requirement/interface (empty conversation) */
+  /* SIT-F7: Allow sending without selecting document/interface (empty conversation) */
   if (draft.value.trim()) return true
   if (props.agentType === 'functional') {
-    return Boolean(selectedRequirementKey.value)
+    return Boolean(selectedDocumentKey.value)
   }
   return Boolean(selectedInterfaceId.value)
 })
 
-async function loadRequirementOptions(projectId) {
+async function loadDocumentOptions(projectId) {
   if (!projectId) {
-    requirementOptions.value = []
+    documentOptions.value = []
     return
   }
   loadingOptions.value = true
   try {
-    const reqRes = await listRequirements({ project_id: projectId, page: 1, page_size: 100 })
-    const requirements = (reqRes.data?.data?.items ?? []).map((item) => ({
-      key: `req-${item.id}`,
+    const res = await listDocuments({ project_id: projectId, doc_type: 'requirement', page: 1, page_size: 100 })
+    const documents = (res.data.data?.items ?? []).map((item) => ({
+      key: `doc-${item.id}`,
       label: item.title,
-      type: 'requirement',
-      requirementId: item.id,
-      knowledgeDocumentId: null,
+      type: 'document',
+      documentId: item.id,
     }))
-    requirementOptions.value = requirements
+    documentOptions.value = documents
   } catch (error) {
-    requirementOptions.value = []
+    documentOptions.value = []
   } finally {
     loadingOptions.value = false
   }
@@ -227,10 +223,10 @@ async function loadInterfaceOptions(projectId) {
 async function onProjectChange(projectId) {
   projectStore.setCurrent(projectId)
   await permissionStore.loadRoleForProject(projectId)
-  selectedRequirementKey.value = ''
+  selectedDocumentKey.value = ''
   selectedInterfaceId.value = null
   if (props.agentType === 'functional') {
-    await loadRequirementOptions(projectId)
+    await loadDocumentOptions(projectId)
   } else {
     await loadInterfaceOptions(projectId)
   }
@@ -281,22 +277,12 @@ async function submit() {
   }
 
   if (props.agentType === 'functional') {
-    const selected = selectedRequirement.value
-    if (selected?.type === 'knowledge') {
-      payload.knowledgeDocumentId = selected.knowledgeDocumentId
+    const selected = selectedDocument.value
+    if (selected?.type === 'document') {
+      payload.knowledgeDocumentId = selected.documentId
       payload.userPrompt = content || undefined
-    } else if (selected?.type === 'requirement') {
-      try {
-        const res = await getRequirement(selected.requirementId)
-        const detail = res.data.data
-        payload.requirementText = detail?.description?.trim() || detail?.title || content
-        payload.userPrompt = content || undefined
-      } catch {
-        ElMessage.error(t('common.requestFailed'))
-        return
-      }
     } else {
-      payload.requirementText = content
+      payload.userPrompt = content || undefined
     }
   } else if (selectedInterfaceId.value) {
     payload.interfaceId = selectedInterfaceId.value
@@ -323,7 +309,7 @@ watch(
   async ([type, projectId]) => {
     if (!projectId) return
     if (type === 'functional') {
-      await loadRequirementOptions(projectId)
+      await loadDocumentOptions(projectId)
     } else {
       await loadInterfaceOptions(projectId)
     }
@@ -345,10 +331,16 @@ onMounted(async () => {
 .agent-composer {
   /* SIT-F7: 75% of main content area, max 1800px (landing mode) */
   width: 75%;
-  max-width: 1800px; /* 加倍：从 900px 改为 1800px */
+  max-width: 1800px;
   margin: 0 auto;
   flex-shrink: 0;
 
+  /* 外部边框：完整边框，加粗+主题色 */
+  border: 2px solid rgba($color-primary, 0.35);
+  border-radius: 10px;
+  padding: 20px 20px; /* 内边距让内容与边框有间距 */
+  background: var(--el-bg-color);
+  box-shadow: 0 2px 12px rgba($color-primary, 0.06);
 
   &--compact {
     max-width: none;
@@ -357,7 +349,7 @@ onMounted(async () => {
     padding: 0 40px 24px; /* 加倍：从 20px 12px 改为 40px 24px */
     box-sizing: border-box;
   }
-  
+
   @media (max-width: 767px) {
     width: 90%;
     max-width: none;
@@ -378,9 +370,11 @@ onMounted(async () => {
   align-items: center;
   gap: 12px 16px; /* 加倍：从 6px 8px 改为 12px 16px */
   margin-bottom: 24px; /* 加倍：从 12px 改为 24px */
+  padding-bottom: 24px; /* 与 textarea 之间的分隔线间距 */
   font-size: 24px; /* 比tab字号(28px)小两号 */
   color: var(--el-text-color-primary);
   line-height: 48px; /* 调整行高以适应24px字体 */
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5); /* 选择器行与输入框之间的分隔线 */
 }
 
 .agent-composer__inline-select {
@@ -392,7 +386,7 @@ onMounted(async () => {
     padding: 0 16px; /* 加倍：从 0 8px 改为 0 16px */
   }
 
-  /* 下拉框内文字字号比其它字体小一号(22px)，包括下拉查看和选中展示 */
+  /* 下拉框内文字字号比其它字体小一号 */
   :deep(.el-input__wrapper) {
     font-size: 22px !important;
   }
@@ -407,7 +401,7 @@ onMounted(async () => {
     width: 240px; /* 缩小宽度，让提示词在同一行显示 */
   }
 
-  &--requirement,
+  &--document,
   &--interface {
     width: 280px; /* 缩小宽度，让提示词在同一行显示 */
   }
@@ -415,13 +409,13 @@ onMounted(async () => {
 
 .agent-composer__textarea {
   width: 100%;
-  min-height: 240px; /* 加倍：从 120px 改为 240px */
-  max-height: 480px; /* 加倍：从 240px 改为 480px */
+  min-height: 120px; /* 高度减半：从 240px 改为 120px */
+  max-height: 240px; /* 高度减半：从 480px 改为 240px */
   border: none;
   outline: none;
   resize: vertical;
-  font-size: 24px; /* 比tab字号(28px)小两号，统一字号 */
-  line-height: 1.6; /* 调整行高以适应24px字体 */
+  font-size: 20px; /* 比消息内容(约14-19px)大一号 */
+  line-height: 1.6; /* 调整行高以适应字体 */
   color: var(--el-text-color-primary);
   background: transparent;
   font-family: inherit;
@@ -434,12 +428,6 @@ onMounted(async () => {
     cursor: not-allowed;
     opacity: 0.65;
   }
-}
-
-.agent-composer--compact .agent-composer__textarea {
-  min-height: 144px; /* 加倍：从 72px 改为 144px */
-  max-height: 320px; /* 加倍：从 160px 改为 320px */
-  font-size: 13.5px; /* 与上方对话消息字体保持一致 */
 }
 
 /* Compact 模式下缩小图标和按钮 */

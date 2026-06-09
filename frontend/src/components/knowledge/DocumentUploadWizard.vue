@@ -7,21 +7,22 @@
       <el-form-item :label="t('page.knowledge.titleCol')" required>
         <el-input v-model="form.title" maxlength="200" :placeholder="t('page.knowledge.titlePlaceholder')" />
       </el-form-item>
-      <el-form-item :label="t('page.knowledge.module')">
-        <ModuleSelect v-model="form.module_id" />
-      </el-form-item>
       <el-form-item :label="t('page.knowledge.docType')" required>
-        <el-select v-model="form.doc_type" style="width: 100%">
+        <el-select v-model="form.doc_type" :placeholder="t('page.knowledge.docTypePlaceholder')">
           <el-option :label="t('page.knowledge.docTypeRequirement')" value="requirement" />
           <el-option :label="t('page.knowledge.docTypeApi')" value="api_doc" />
+          <el-option :label="t('page.knowledge.docTypeOther')" value="other" />
         </el-select>
       </el-form-item>
       <el-form-item v-if="form.doc_type === 'api_doc'" :label="t('page.knowledge.parseMode')" required>
-        <el-select v-model="form.parse_mode" style="width: 100%">
-          <el-option label="AI" value="ai" />
-          <el-option label="Swagger 2.0" value="swagger" />
-          <el-option label="OpenAPI 3.x" value="openapi" />
+        <el-select v-model="form.parse_mode" :placeholder="t('page.knowledge.parseModePlaceholder')">
+          <el-option :label="t('page.knowledge.parseModeAi')" value="ai" />
+          <el-option :label="t('page.knowledge.parseModeSwagger')" value="swagger" />
+          <el-option :label="t('page.knowledge.parseModeOpenapi')" value="openapi" />
         </el-select>
+      </el-form-item>
+      <el-form-item :label="t('page.knowledge.module')">
+        <ModuleSelect v-model="form.module_id" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -59,26 +60,21 @@ const visible = computed({
 
 const defaultForm = () => ({
   title: '',
-  module_id: null,
   doc_type: 'requirement',
   parse_mode: 'ai',
+  module_id: null,
 })
 
 const form = reactive(defaultForm())
 
-watch(
-  () => form.doc_type,
-  (docType) => {
-    if (docType === 'requirement') form.parse_mode = 'ai'
-  },
-)
-
-function inferParseModeFromFile(selected) {
-  if (!selected?.name) return 'ai'
-  const ext = selected.name.toLowerCase()
-  if (/\.(json|ya?ml)$/.test(ext)) return 'ai'
-  return form.parse_mode || 'ai'
-}
+// doc_type 变化时，重置 parse_mode 逻辑
+watch(() => form.doc_type, (newType) => {
+  if (newType === 'api_doc') {
+    form.parse_mode = 'ai' // 默认 ai，用户可切换
+  } else {
+    form.parse_mode = 'ai' // requirement / other 固定 ai
+  }
+})
 
 function titleFromFile(selected) {
   const base = documentTitleFromFileName(selected?.name)
@@ -89,9 +85,6 @@ function onFileChange(e) {
   file.value = e.target.files?.[0] ?? null
   if (file.value) {
     form.title = titleFromFile(file.value)
-  }
-  if (file.value && form.doc_type === 'api_doc') {
-    form.parse_mode = inferParseModeFromFile(file.value)
   }
 }
 
@@ -111,11 +104,16 @@ function submit() {
     ElMessage.warning(t('page.knowledge.titleRequired'))
     return
   }
+  if (!form.doc_type) {
+    ElMessage.warning(t('page.knowledge.docTypePlaceholder'))
+    return
+  }
   const fd = new FormData()
   fd.append('file', file.value)
   fd.append('title', title)
   fd.append('doc_type', form.doc_type)
-  fd.append('parse_mode', form.doc_type === 'requirement' ? 'ai' : form.parse_mode)
+  // parse_mode: requirement/other 固定 ai；api_doc 用用户选择的值
+  fd.append('parse_mode', form.doc_type === 'api_doc' ? form.parse_mode : 'ai')
   if (form.module_id != null) fd.append('module_id', String(form.module_id))
   emit('submit', fd)
 }

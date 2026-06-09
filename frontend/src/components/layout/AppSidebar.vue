@@ -115,7 +115,6 @@ function menuItemClass(item) {
 
 function onLocale(cmd) {
   localeStore.setLocale(cmd)
-  locale.value = cmd
 }
 
 async function onUserCommand(cmd) {

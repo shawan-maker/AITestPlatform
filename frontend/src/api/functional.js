@@ -1,50 +1,5 @@
 import request from '@/utils/request'
 
-// Requirements
-export function listRequirements(params = {}) {
-  return request.get('/functional/requirements', { params })
-}
-
-export function getRequirement(id) {
-  return request.get(`/functional/requirements/${id}`)
-}
-
-export function createRequirement(data) {
-  return request.post('/functional/requirements', data)
-}
-
-export function updateRequirement(id, data) {
-  return request.patch(`/functional/requirements/${id}`, data)
-}
-
-export function deleteRequirement(id) {
-  return request.delete(`/functional/requirements/${id}`)
-}
-
-export function listCandidates(params = {}) {
-  return request.get('/functional/requirements/candidates', { params })
-}
-
-export function getCandidatesCount(params = {}) {
-  return request.get('/functional/requirements/candidates/count', { params })
-}
-
-export function getCandidate(id) {
-  return request.get(`/functional/requirements/candidates/${id}`)
-}
-
-export function confirmCandidate(id, data) {
-  return request.post(`/functional/requirements/candidates/${id}/confirm`, data)
-}
-
-export function deleteCandidate(id) {
-  return request.delete(`/functional/requirements/candidates/${id}`)
-}
-
-export function updateCandidate(id, data) {
-  return request.patch(`/functional/requirements/candidates/${id}`, data)
-}
-
 // Case catalogs
 export function getCaseCatalogTree(params = {}) {
   return request.get('/functional/case-catalogs/tree', { params })

@@ -9,7 +9,6 @@ export const menuConfig = [
     titleKey: 'menu.cases',
     icon: 'Document',
     children: [
-      { path: '/cases/requirements', titleKey: 'menu.casesRequirements' },
       { path: '/cases/functional', titleKey: 'menu.casesFunctional' },
       { path: '/cases/api', titleKey: 'menu.casesApi' },
     ],

@@ -22,6 +22,7 @@
       <el-select v-model="filters.doc_type" :placeholder="t('page.knowledge.docType')" clearable>
         <el-option :label="t('page.knowledge.docTypeRequirement')" value="requirement" />
         <el-option :label="t('page.knowledge.docTypeApi')" value="api_doc" />
+        <el-option :label="t('page.knowledge.docTypeOther')" value="other" />
       </el-select>
       <el-select v-model="filters.index_status" :placeholder="t('page.knowledge.indexStatus')" clearable>
         <el-option
@@ -83,19 +84,12 @@
         variant="flex"
         :label="t('page.admin.projects.name')"
       />
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="400">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="300">
         <template #default="{ row }">
           <el-button link type="primary" @click="goDetail(row)">{{ t('common.view') }}</el-button>
           <el-button link @click="downloadRow(row)">{{ t('common.download') }}</el-button>
           <el-button v-if="canEdit" link @click="openReupload(row)">{{ t('page.knowledge.reupload') }}</el-button>
           <el-button link @click="openHistory(row)">{{ t('page.knowledge.versionHistory') }}</el-button>
-          <el-button
-            v-if="canEdit && canSaveRequirement(row)"
-            link
-            @click="openSaveRequirement(row)"
-          >
-            {{ t('page.knowledge.saveRequirement') }}
-          </el-button>
           <el-button
             v-if="canEdit && canSaveInterfaces(row)"
             link
@@ -122,16 +116,6 @@
       :document="historyDoc"
       @download-version="downloadHistoryVersion"
     />
-    <CandidateConfirmDialog
-      v-model="showCandidate"
-      :candidate="activeCandidate"
-      :document-id="candidateDocId"
-      :version-id="candidateVersionId"
-      :document-title="candidateDocumentTitle"
-      :version-label="candidateVersionLabel"
-      :loading="confirming"
-      @confirm="onConfirmCandidate"
-    />
     <KnowledgeImportWizard
       v-if="importDocId"
       v-model="showImport"
@@ -154,19 +138,17 @@ import {
   downloadDocument,
   downloadVersion,
   getDocument,
-  getRequirementCandidate,
   listDocuments,
   uploadDocument,
   uploadVersion,
 } from '@/api/knowledge'
-import { confirmCandidate } from '@/api/functional'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import { useDownload } from '@/composables/useDownload'
 import { INDEX_STATUS } from '@/utils/constants'
 import { formatDateTime } from '@/utils/format'
-import { canSaveInterfaces, canSaveRequirement, isDocumentProcessing } from '@/utils/knowledge'
+import { canSaveInterfaces, isDocumentProcessing } from '@/utils/knowledge'
 import { usePolling } from '@/composables/usePolling'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
@@ -178,7 +160,6 @@ import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import DocumentUploadWizard from '@/components/knowledge/DocumentUploadWizard.vue'
 import DocumentReuploadDialog from '@/components/knowledge/DocumentReuploadDialog.vue'
 import KnowledgeVersionHistoryDrawer from '@/components/knowledge/KnowledgeVersionHistoryDrawer.vue'
-import CandidateConfirmDialog from '@/components/knowledge/CandidateConfirmDialog.vue'
 import KnowledgeImportWizard from '@/components/knowledge/KnowledgeImportWizard.vue'
 import { useKnowledgeStore } from '@/stores/knowledge'
 
@@ -203,18 +184,11 @@ const reuploadDocId = ref(null)
 const showHistory = ref(false)
 const historyDocId = ref(null)
 const historyDoc = ref(null)
-const showCandidate = ref(false)
-const activeCandidate = ref(null)
-const candidateDocId = ref(null)
-const candidateVersionId = ref(null)
-const confirming = ref(false)
 const showImport = ref(false)
 const importDocId = ref(null)
 const importVersionId = ref(null)
 const importDocumentTitle = ref('')
 const importVersionLabel = ref('')
-const candidateDocumentTitle = ref('')
-const candidateVersionLabel = ref('')
 
 const hasFilters = computed(
   () => !!(filters.title || filters.project_name || filters.doc_type || filters.index_status),
@@ -302,21 +276,6 @@ async function downloadHistoryVersion(version) {
   downloadFromResponse(res, `${historyDoc.value?.title || 'doc'}_${version.version_label}`)
 }
 
-async function openSaveRequirement(row) {
-  const res = await getRequirementCandidate(row.id)
-  const cand = res.data.data
-  if (!cand) {
-    ElMessage.warning(t('page.knowledge.noCandidate'))
-    return
-  }
-  activeCandidate.value = cand
-  candidateDocId.value = row.id
-  candidateVersionId.value = cand.source_document_version_id ?? row.current_version_id
-  candidateDocumentTitle.value = row.title ?? ''
-  candidateVersionLabel.value = row.version_label ?? cand.source_version_label ?? ''
-  showCandidate.value = true
-}
-
 async function openSaveInterface(row) {
   importDocId.value = row.id
   importVersionId.value = row.current_version_id ?? null
@@ -334,21 +293,6 @@ async function openSaveInterface(row) {
     return
   }
   showImport.value = true
-}
-
-async function onConfirmCandidate(payload) {
-  if (!activeCandidate.value) return
-  confirming.value = true
-  try {
-    await confirmCandidate(activeCandidate.value.id, payload)
-    ElMessage.success(t('page.requirements.confirmedMsg'))
-    showCandidate.value = false
-    activeCandidate.value = null
-    knowledgeStore.requestRefresh()
-    await load()
-  } finally {
-    confirming.value = false
-  }
 }
 
 async function remove(row) {

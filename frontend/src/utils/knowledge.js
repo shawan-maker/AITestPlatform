@@ -40,9 +40,6 @@ export function isDocumentProcessing(doc) {
     }
     return false
   }
-  if (doc.doc_type === 'requirement') {
-    return ['pending', 'indexing'].includes(doc.index_status)
-  }
   return false
 }
 
@@ -57,22 +54,7 @@ function readTriState(doc, snakeKey) {
 }
 
 /**
- * 保存需求：已索引且当前版本尚未写入 RequirementDoc 时显示。
- * 优先 can_save_requirement；已保存标志 requirement_saved 优先隐藏。
- */
-export function canSaveRequirement(doc) {
-  if (!doc || doc.doc_type !== 'requirement') return false
-  if (isDocumentProcessing(doc)) return false
-  if (readTriState(doc, 'requirement_saved') === true) return false
-
-  const backend = readTriState(doc, 'can_save_requirement')
-  if (backend === true) return true
-  if (backend === false) return false
-
-  return doc.index_status === 'indexed'
-}
-
-/**
+ * 保存接口：已解析且当前版本尚未导入时显示。
  * 保存接口：已解析且当前版本尚未导入时显示。
  */
 export function canSaveInterfaces(doc) {

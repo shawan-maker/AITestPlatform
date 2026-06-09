@@ -9,14 +9,13 @@ from service.ai_generation.common import (
     compute_prompt_hash,
     functional_gen_use_mock,
     is_llm_configured,
-    load_knowledge_requirement_text,
+    load_knowledge_document_text,
 )
 from service.ai_generation.models import AIGenerationSession
 from service.core.enums import (
     FunctionalCaseType,
     FunctionalExecResult,
     GenType,
-    InputRefType,
     SessionStatus,
     SourceType,
 )
@@ -33,7 +32,6 @@ from service.functional_test.case.schemas import (
     GenerationSaveResult,
     GenerationSessionCreateRequest,
 )
-from service.functional_test.requirement.models import RequirementDoc
 from service.project.models import ProjectModule
 from service.user.models import User
 
@@ -66,50 +64,25 @@ class FunctionalCaseGenerationService:
         return session
 
     @classmethod
-    async def _resolve_requirement_text(
-        cls,
-        requirement_id: int | None,
-        requirement_text: str | None,
-    ) -> str:
-        if requirement_text and requirement_text.strip():
-            return requirement_text.strip()
-        if requirement_id is None:
-            raise AppException("requirement_id 或 requirement_text 至少提供一个", 400)
-        doc = await RequirementDoc.get_or_none(id=requirement_id)
-        if doc is None:
-            raise AppException("需求不存在", 404)
-        if doc.description and doc.description.strip():
-            return doc.description.strip()
-        return doc.title
-
-    @classmethod
     async def _validate_create_input(cls, data: GenerationSessionCreateRequest) -> None:
-        has_req_id = data.requirement_id is not None
-        has_req_text = bool(data.requirement_text and data.requirement_text.strip())
         has_knowledge = data.knowledge_document_id is not None
-        if not (has_req_id or has_req_text or has_knowledge):
+        if not has_knowledge:
             raise AppException(
-                "requirement_id、requirement_text 或 knowledge_document_id 至少提供一个",
+                "knowledge_document_id 至少提供一个",
                 400,
             )
-        if has_req_text and has_knowledge:
-            raise AppException("requirement_text 与 knowledge_document_id 不能同时提供", 400)
-        if has_req_id and has_knowledge:
-            raise AppException("requirement_id 与 knowledge_document_id 不能同时提供", 400)
 
     @classmethod
-    async def _resolve_session_requirement_text(
+    async def _resolve_session_document_text(
         cls,
         data: GenerationSessionCreateRequest,
-    ) -> tuple[str, int | None, InputRefType | None, int | None]:
+    ) -> tuple[str, int | None]:
         if data.knowledge_document_id is not None:
-            text = await load_knowledge_requirement_text(
+            text = await load_knowledge_document_text(
                 data.knowledge_document_id, data.project_id
             )
-            return text, data.knowledge_document_id, None, None
-        text = await cls._resolve_requirement_text(data.requirement_id, data.requirement_text)
-        input_ref_type = InputRefType.requirement if data.requirement_id else None
-        return text, None, input_ref_type, data.requirement_id
+            return text, data.knowledge_document_id
+        return "", None
 
     @classmethod
     async def _to_out(cls, session: AIGenerationSession) -> AIGenerationSessionOut:
@@ -130,23 +103,21 @@ class FunctionalCaseGenerationService:
             if not exists:
                 raise AppException("项目模块不存在", 404)
 
-        requirement_text, knowledge_document_id, input_ref_type, input_ref_id = (
-            await cls._resolve_session_requirement_text(data)
+        document_text, knowledge_document_id = (
+            await cls._resolve_session_document_text(data)
         )
         session = await AIGenerationSession.create(
             project_id=data.project_id,
             module_id=data.module_id,
             gen_type=GenType.functional,
-            input_ref_type=input_ref_type,
-            input_ref_id=input_ref_id,
             knowledge_document_id=knowledge_document_id,
-            prompt_hash=compute_prompt_hash(requirement_text, data.user_prompt),
+            prompt_hash=compute_prompt_hash(document_text, data.user_prompt),
             status=SessionStatus.pending,
             user_prompt=data.user_prompt,
             created_by_id=user.id,
         )
         asyncio.create_task(
-            cls._run_workflow(session.id, requirement_text, data.user_prompt)
+            cls._run_workflow(session.id, document_text, data.user_prompt)
         )
         return await cls._to_out(session)
 
@@ -154,7 +125,7 @@ class FunctionalCaseGenerationService:
     async def _run_workflow(
         cls,
         session_id: int,
-        requirement_text: str,
+        document_text: str,
         user_prompt: str | None,
     ) -> None:
         session = await AIGenerationSession.get_or_none(id=session_id)
@@ -164,7 +135,7 @@ class FunctionalCaseGenerationService:
         await session.save(update_fields=["status"])
         try:
             if functional_gen_use_mock():
-                payload = cls._mock_payload(requirement_text)
+                payload = cls._mock_payload(document_text)
             elif not is_llm_configured():
                 session.status = SessionStatus.failed
                 session.error_message = LLM_NOT_CONFIGURED_MSG
@@ -175,7 +146,7 @@ class FunctionalCaseGenerationService:
                 return
             else:
                 payload = await asyncio.to_thread(
-                    cls._invoke_workflow, requirement_text, user_prompt
+                    cls._invoke_workflow, document_text, user_prompt
                 )
             session.status = SessionStatus.success
             session.output_payload = payload
@@ -193,13 +164,13 @@ class FunctionalCaseGenerationService:
             )
 
     @staticmethod
-    def _mock_payload(requirement_text: str) -> dict:
+    def _mock_payload(document_text: str) -> dict:
         return {
             "test_points": [
                 {
                     "type": "functional",
                     "dimension": "主流程",
-                    "test_point": f"验证需求: {requirement_text[:80]}",
+                    "test_point": f"验证文档: {document_text[:80]}",
                 }
             ],
             "cases": [
@@ -219,13 +190,13 @@ class FunctionalCaseGenerationService:
         }
 
     @staticmethod
-    def _invoke_workflow(requirement_text: str, user_prompt: str | None) -> dict:
+    def _invoke_workflow(document_text: str, user_prompt: str | None) -> dict:
         from workflow.case_generator_workflow import GenerateTestCases
 
         graph = GenerateTestCases().create_workflow()
         config = {"configurable": {"thread_id": "functional-gen"}}
         result = graph.invoke(
-            {"requirement": requirement_text, "user_prompt": user_prompt},
+            {"document": document_text, "user_prompt": user_prompt},
             config=config,
         )
         points = result.get("points") or []
@@ -243,7 +214,7 @@ class FunctionalCaseGenerationService:
         return await cls._to_out(session)
 
     @classmethod
-    async def update_preview(
+    async def update_review(
         cls,
         user: User,
         session_id: int,
@@ -262,78 +233,98 @@ class FunctionalCaseGenerationService:
         session_id: int,
         data: GenerationSaveRequest,
     ) -> GenerationSaveResult:
+        import traceback
+
         session = await cls._get_session_or_404(session_id)
         await ensure_case_editor(session.project_id, user)
         if session.status != SessionStatus.success or not session.output_payload:
             raise AppException("生成会话未完成或无预览数据", 400)
 
+        # [DEBUG-问题6] 详细日志：保存前的关键信息
+        print(f"[DEBUG-SAVE] session_id={session_id}, project_id={session.project_id}, catalog_id={data.catalog_id}")
+        print(f"[DEBUG-SAVE] case_indexes={data.case_indexes}")
+        
         await CatalogService._get_catalog_or_404(data.catalog_id, session.project_id)
         cases = session.output_payload.get("cases") or []
         points = session.output_payload.get("test_points") or []
-        requirement_id = data.requirement_id or session.input_ref_id
+
+        print(f"[DEBUG-SAVE] payload中 cases 数量={len(cases)}, points 数量={len(points)}")
+        print(f"[DEBUG-SAVE] case_indexes 最大值={max(data.case_indexes) if data.case_indexes else 'N/A'}, cases长度={len(cases)}")
 
         created_case_ids: list[int] = []
         created_test_point_ids: list[int] = []
 
-        async with in_transaction():
-            point_map: dict[int, FunctionalTestPoint] = {}
-            if requirement_id and points:
-                for idx, pt in enumerate(points):
-                    if not isinstance(pt, dict):
-                        continue
-                    tp = await FunctionalTestPoint.create(
-                        requirement_id=requirement_id,
-                        type=str(pt.get("type") or "functional"),
-                        dimension=str(pt.get("dimension") or ""),
-                        test_point=str(pt.get("test_point") or ""),
-                        source=SourceType.ai,
-                        generation_session_id=session.id,
-                    )
-                    point_map[idx] = tp
-                    created_test_point_ids.append(tp.id)
+        try:
+            async with in_transaction():
+                point_map: dict[int, FunctionalTestPoint] = {}
+                if points:
+                    for idx, pt in enumerate(points):
+                        if not isinstance(pt, dict):
+                            continue
+                        print(f"[DEBUG-SAVE] 创建测试点[{idx}]: type={pt.get('type')}, dimension={pt.get('dimension')}, test_point={str(pt.get('test_point', ''))[:50]}")
+                        tp = await FunctionalTestPoint.create(
+                            type=str(pt.get("type") or "functional"),
+                            dimension=str(pt.get("dimension") or ""),
+                            test_point=str(pt.get("test_point") or ""),
+                            source=SourceType.ai,
+                            generation_session_id=session.id,
+                        )
+                        point_map[idx] = tp
+                        created_test_point_ids.append(tp.id)
+                        print(f"[DEBUG-SAVE] 测试点创建成功, id={tp.id}")
 
-            sort_base = await CaseService._next_sort_order(data.catalog_id)
-            for order, idx in enumerate(data.case_indexes):
-                if idx < 0 or idx >= len(cases):
-                    raise AppException(f"无效的 case_index: {idx}", 400)
-                item = cases[idx]
-                if not isinstance(item, dict):
-                    raise AppException(f"用例预览数据格式错误: index={idx}", 400)
-                # Map case to test point: each test point maps to its corresponding case
-                # (cases and points are ordered; point_map key = point index)
-                # 使用idx（用例在cases列表中的索引）去point_map中查找对应的测试点
-                tp = point_map.get(idx) if requirement_id else None
-                # 辅助函数：将字段值转换为字符串（处理列表情况）
-                def _to_str(val):
-                    if isinstance(val, list):
-                        # 如果列表元素是列表，递归处理
-                        return ' '.join(_to_str(item) for item in val)
-                    return str(val or "")
-                
-                case = await FunctionalCase.create(
-                    project_id=session.project_id,
-                    module_id=session.module_id,
-                    catalog_id=data.catalog_id,
-                    requirement_id=requirement_id,
-                    test_point_id=tp.id if tp else None,
-                    case_no=_to_str(item.get("case_id")),
-                    case_name=_to_str(item.get("case_name")) or f"AI用例-{idx + 1}",
-                    priority=_parse_priority(item.get("priority")),
-                    dimension=_to_str(item.get("dimension")) or (tp.dimension if tp else ""),
-                    type=FunctionalCaseType.functional,
-                    preconditions=_to_str(item.get("preconditions")),
-                    test_steps=_to_str(item.get("test_steps")),
-                    test_data=_to_str(item.get("test_data")),
-                    expected_result=_to_str(item.get("expected_result")),
-                    actual_result=_to_str(item.get("actual_result")),
-                    source=SourceType.ai,
-                    exec_result=FunctionalExecResult.pending,
-                    generation_session_id=session.id,
-                    sort_order=sort_base + order,
-                    created_by_id=user.id,
-                    updated_by_id=user.id,
-                )
-                created_case_ids.append(case.id)
+                sort_base = await CaseService._next_sort_order(data.catalog_id)
+                for order, idx in enumerate(data.case_indexes):
+                    if idx < 0 or idx >= len(cases):
+                        raise AppException(f"无效的 case_index: {idx}", 400)
+                    item = cases[idx]
+                    if not isinstance(item, dict):
+                        raise AppException(f"用例预览数据格式错误: index={idx}", 400)
+                    
+                    print(f"[DEBUG-SAVE] 创建用例[order={order}, idx={idx}]: case_name={str(item.get('case_name', ''))[:50]}")
+                    
+                    # Map case to test point: use the same index (1:1 mapping)
+                    tp = point_map.get(idx)
+                    
+                    def _to_str(val):
+                        if isinstance(val, list):
+                            return ' '.join(_to_str(item) for item in val)
+                        return str(val or "")
+                    
+                    try:
+                        case = await FunctionalCase.create(
+                            project_id=session.project_id,
+                            module_id=session.module_id,
+                            catalog_id=data.catalog_id,
+                            test_point_id=tp.id if tp else None,
+                            case_no=_to_str(item.get("case_id")),
+                            case_name=_to_str(item.get("case_name")) or f"AI用例-{idx + 1}",
+                            priority=_parse_priority(item.get("priority")),
+                            dimension=_to_str(item.get("dimension")) or (tp.dimension if tp else ""),
+                            type=FunctionalCaseType.functional,
+                            preconditions=_to_str(item.get("preconditions")),
+                            test_steps=_to_str(item.get("test_steps")),
+                            test_data=_to_str(item.get("test_data")),
+                            expected_result=_to_str(item.get("expected_result")),
+                            actual_result=_to_str(item.get("actual_result")),
+                            source=SourceType.ai,
+                            exec_result=FunctionalExecResult.pending,
+                            generation_session_id=session.id,
+                            sort_order=sort_base + order,
+                            created_by_id=user.id,
+                            updated_by_id=user.id,
+                        )
+                        created_case_ids.append(case.id)
+                        print(f"[DEBUG-SAVE] 用例创建成功, id={case.id}")
+                    except Exception as case_err:
+                        print(f"[DEBUG-SAVE] 用例创建失败[idx={idx}]: {case_err}")
+                        print(f"[DEBUG-SAVE] 错误详情: {traceback.format_exc()}")
+                        raise AppException(f"创建用例失败(idx={idx}): {str(case_err)}", 500)
+        except Exception as txn_err:
+            print(f"[DEBUG-SAVE] 事务异常: {txn_err}")
+            print(f"[DEBUG-SAVE] 异常类型: {type(txn_err).__name__}")
+            print(f"[DEBUG-SAVE] 完整堆栈:\n{traceback.format_exc()}")
+            raise
 
         return GenerationSaveResult(
             created_case_ids=created_case_ids,

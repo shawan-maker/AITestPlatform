@@ -1,7 +1,7 @@
 from service.api_test.models import ApiInterface
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
-from service.functional_test.models import RequirementDoc
+from service.functional_test.case.models import FunctionalCase
 from service.knowledge.models import KnowledgeDocument
 from service.project.models import ProjectModule
 from service.project.permissions import ensure_project_editor, ensure_project_viewer
@@ -38,8 +38,8 @@ class ModuleService:
     @classmethod
     async def _ensure_deletable(cls, module_id: int) -> None:
         blockers: list[str] = []
-        if await RequirementDoc.filter(module_id=module_id).exists():
-            blockers.append("需求文档")
+        if await FunctionalCase.filter(module_id=module_id).exists():
+            blockers.append("功能用例")
         if await ApiInterface.filter(module_id=module_id, is_current=True).exists():
             blockers.append("接口定义")
         if await KnowledgeDocument.filter(module_id=module_id).exists():

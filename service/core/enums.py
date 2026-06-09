@@ -19,7 +19,6 @@ class DebugVarSource(str, Enum):
 
 
 class RagType(str, Enum):
-    requirement = "requirement"
     api = "api"
 
 
@@ -62,19 +61,6 @@ class ActualParseRoute(str, Enum):
 class RagBackend(str, Enum):
     rag_client = "rag_client"
     rag_manager = "rag_manager"
-
-
-class RequirementStatus(str, Enum):
-    draft = "draft"
-    reviewing = "reviewing"
-    approved = "approved"
-    rejected = "rejected"
-    changed = "changed"
-
-
-class RequirementSourceType(str, Enum):
-    knowledge = "knowledge"
-    manual = "manual"
 
 
 class FunctionalExecResult(str, Enum):

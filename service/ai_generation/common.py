@@ -5,9 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 
-from service.core.enums import IndexStatus, KnowledgeDocType
 from service.core.exceptions import AppException
-from service.functional_test.requirement.models import RequirementCandidate
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
 from service.knowledge.document.storage import KnowledgeStorage
 
@@ -58,13 +56,11 @@ def compute_prompt_hash(source_text: str, user_prompt: str | None) -> str:
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
 
-async def load_knowledge_requirement_text(document_id: int, project_id: int) -> str:
-    """Load indexed requirement document text for AI generation."""
+async def load_knowledge_document_text(document_id: int, project_id: int) -> str:
+    """Load indexed knowledge document text for AI generation."""
     doc = await KnowledgeDocument.get_or_none(id=document_id, project_id=project_id)
     if doc is None:
         raise AppException("知识库文档不存在", 404)
-    if doc.doc_type != KnowledgeDocType.requirement:
-        raise AppException("知识库文档类型不是需求文档", 400)
     if not doc.current_version_id:
         raise AppException("知识库文档无有效版本", 400)
 
@@ -74,8 +70,6 @@ async def load_knowledge_requirement_text(document_id: int, project_id: int) -> 
     )
     if version is None:
         raise AppException("知识库文档版本不存在", 404)
-    if version.index_status != IndexStatus.indexed:
-        raise AppException("知识库文档尚未完成索引", 400)
 
     if not version.file_expired and version.file_path:
         path = KnowledgeStorage.absolute_path(version.file_path)
@@ -86,13 +80,5 @@ async def load_knowledge_requirement_text(document_id: int, project_id: int) -> 
                 raise AppException(f"读取知识库文档失败: {exc}", 500) from exc
             if text:
                 return text
-
-    candidate = await RequirementCandidate.get_or_none(
-        source_document_id=document_id,
-        source_document_version_id=version.id,
-        index_status=IndexStatus.indexed,
-    )
-    if candidate and candidate.description and candidate.description.strip():
-        return candidate.description.strip()
 
     raise AppException("知识库文档内容为空", 400)

@@ -47,8 +47,6 @@ class KnowledgeDocumentBrief(BaseModel):
     current_version_id: int | None = None
     index_status: IndexStatus | None
     parse_status: ParseStatus | None = None
-    requirement_saved: bool = False
-    can_save_requirement: bool = False
     interfaces_saved: bool = False
     can_save_interfaces: bool = False
     updated_at: datetime

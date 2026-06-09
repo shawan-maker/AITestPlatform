@@ -114,7 +114,6 @@ class CaseService:
         return CaseDetail(
             **brief.model_dump(),
             module_id=case.module_id,
-            requirement_id=case.requirement_id,
             preconditions=case.preconditions,
             test_steps=case.test_steps,
             test_data=case.test_data,
@@ -169,7 +168,6 @@ class CaseService:
             project_id=data.project_id,
             catalog_id=data.catalog_id,
             module_id=data.module_id,
-            requirement_id=data.requirement_id,
             case_name=case_name,
             priority=data.priority,
             dimension=data.dimension,
@@ -196,8 +194,6 @@ class CaseService:
         if data.module_id is not None:
             await cls._validate_module(case.project_id, data.module_id)
             case.module_id = data.module_id
-        if data.requirement_id is not None:
-            case.requirement_id = data.requirement_id
         if data.case_name is not None:
             name = data.case_name.strip()
             if not name:
@@ -255,7 +251,6 @@ class CaseService:
             project_id=case.project_id,
             catalog_id=case.catalog_id,
             module_id=case.module_id,
-            requirement_id=case.requirement_id,
             test_point_id=case.test_point_id,
             case_no=case.case_no,
             case_name=new_name,

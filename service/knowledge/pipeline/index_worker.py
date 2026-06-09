@@ -15,7 +15,6 @@ from service.core.enums import (
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
 from service.knowledge.document.storage import KnowledgeStorage
 from service.knowledge.document.parse_enrich import merge_raw_with_display
-from service.knowledge.downstream.requirement_sync import sync_requirement_candidate
 from service.knowledge.pipeline.rag_gateway import RagGateway
 from service.knowledge.rules.file_rules import detect_api_spec_kind
 from service.knowledge.rules.parse_router import resolve_parse_route
@@ -182,8 +181,6 @@ class IndexWorker:
 
             await cls._activate_version(version, document)
 
-            if document.doc_type == KnowledgeDocType.requirement:
-                await sync_requirement_candidate(document, version)
         except Exception as exc:
             logger.exception("RAG 处理失败 document=%s version=%s route=%s", document.id, version.id, route)
             err_msg = str(exc) or repr(exc) or "RAG 处理未知错误"

@@ -48,7 +48,7 @@ class State2(TypedDict):
     test_points: list[dict]
     coverage_report: str
     complete_round: int
-    max_test_points: int  # 最大测试点数量（从用户提示词中解析）
+    max_test_points: int | None  # 最大测试点数量（从用户提示词中解析，None 表示不限制）
 
 class TestPointModel(BaseModel):
     """定义测试点类"""
@@ -83,18 +83,24 @@ class GeneratePoints(BaseModel):
         # 1、获取输入的需求文档
         input_requirement = state["input_requirement"]
         user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
+        max_test_points = state.get("max_test_points")  # 可能为 None，表示不限制
         # 2、编写提示词
         prompt = generate_test_points_prompt.prompt
         # 配置测试点解释器
         parser = JsonOutputParser(pydantic_schema=List[TestPointModel])
-        # 3、调用大模型，生成测试点
+        # 3、调用大模型，生成测试点（传入 max_test_points_section 控制数量）
         resp = safe_structure_parser(
             prompt,
             llm,
             parser,
-            {"document": input_requirement, "user_prompt_section": user_prompt_section},
+            {
+                "document": input_requirement,
+                "user_prompt_section": user_prompt_section,
+                "max_test_points_section": generate_test_points_prompt.get_max_test_points_section(max_test_points),
+                "max_test_points_requirement": generate_test_points_prompt.get_max_test_points_requirement(max_test_points),
+            },
         )
-        # 4、获取大模型调用的结果并返回
+        # 4、获取大模型调用的结果并返回（不再做截断，由 prompt 控制数量）
         writer(f"【执行节点完成】 1、基于需求生成测试点：{len(resp)}")
         return {"test_points": resp}
 
@@ -128,11 +134,12 @@ class GeneratePoints(BaseModel):
         writer = get_stream_writer()
         writer("【开始执行节点】 3、对未覆盖的测试点补全：")
         user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
+        max_test_points = state.get("max_test_points")  # 可能为 None，表示不限制
         # 1、编写提示词
         prompt = complete_test_points_prompt.prompt
         # 配置测试点解释器
         parser = JsonOutputParser(pydantic_schema=List[TestPointModel])
-        # 2、调用大模型，补全测试点
+        # 2、调用大模型，补全测试点（传入 max_test_points_section 控制数量）
         resp = safe_structure_parser(
             prompt,
             llm,
@@ -142,20 +149,22 @@ class GeneratePoints(BaseModel):
                 "test_points": state["test_points"],
                 "coverage_report": state["coverage_report"],
                 "user_prompt_section": user_prompt_section,
+                "max_test_points_section": complete_test_points_prompt.get_max_test_points_section(max_test_points),
             },
         )
         
-        # 限制补充的测试点数量，使总数不超过max_test_points
-        max_test_points = state.get("max_test_points") or 15
+        # 如果 max_test_points 有值，则限制补充的测试点数量，使总数不超过max_test_points
         existing = state.get("test_points", [])
         if not isinstance(existing, list):
             existing = []
         current_count = len(existing)
-        remaining_slots = max(0, max_test_points - current_count)
         
-        # 只取需要补充的测试点数量
-        if len(resp) > remaining_slots:
-            resp = resp[:remaining_slots]
+        # 只在 max_test_points 有值时限制数量
+        if max_test_points is not None:
+            remaining_slots = max(0, max_test_points - current_count)
+            # 只取需要补充的测试点数量
+            if len(resp) > remaining_slots:
+                resp = resp[:remaining_slots]
         
         writer(f"【执行节点完成】 3、对未覆盖的测试点补全,补充了{len(resp)}个，总数量为：{current_count + len(resp)}")
         # 拼接已有测试点和补充的测试点
@@ -176,16 +185,17 @@ class GeneratePoints(BaseModel):
         """路由分发的节点"""
         complete_round = int(state.get("complete_round") or 0)
         test_points_count = len(state.get("test_points") or [])
-        max_test_points = state.get("max_test_points") or 15
+        max_test_points = state.get("max_test_points")
         
         # 如果达到最大补充轮数，停止
         if complete_round >= MAX_COMPLETE_TEST_POINTS:
             return "output_test_points"
-        # 如果测试点数量已达到或超过最大值，停止
-        if test_points_count >= max_test_points:
-            return "output_test_points"
         # 如果覆盖率报告显示已全部覆盖，停止
         if "测试点已经全部覆盖" in "\n".join(state["coverage_report"]):
+            return "output_test_points"
+        # [FIX-问题5] 如果用户指定了数量限制且已有测试点，跳过补全避免总数超限
+        if max_test_points is not None and test_points_count > 0:
+            writer(f"[数量控制] 用户指定{max_test_points}个, 已有{test_points_count}个测试点, 跳过补全")
             return "output_test_points"
         return "complete_test_points"
 
@@ -223,7 +233,7 @@ class GenerateTestCases:
         writer("【开始执行节点】 3.1 创建测试点：")
         
         # 解析用户提示词中的数量要求（如"5条"、"10个"、"5个测试用例"等）
-        max_test_points = 15  # 默认值
+        max_test_points = None  # 默认不限制
         user_prompt = state.get("user_prompt") or ""
         import re
         # 支持匹配：5条、5个、5个测试点、5条用例、5个测试用例、5条测试用例
@@ -237,7 +247,7 @@ class GenerateTestCases:
                 "input_requirement": state["requirement"],
                 "user_prompt": state.get("user_prompt"),
                 "complete_round": 0,
-                "max_test_points": max_test_points,
+                "max_test_points": max_test_points,  # 可能为 None
             }
         )
         # 在父工作流中输出完成标志，确保只输出一次且时机正确
@@ -252,15 +262,35 @@ class GenerateTestCases:
         writer = get_stream_writer()
         writer("【开始执行节点】 3.2 基于测试点生成测试用例：")
         user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
+        
+        # 解析用户要求的最大测试用例数量
+        max_test_points = None  # 默认不限制
+        user_prompt = state.get("user_prompt") or ""
+        import re
+        match = re.search(r'(\d+)\s*(条|个)(测试用例|测试点|用例)?', user_prompt)
+        if match:
+            max_test_points = int(match.group(1))
+        
+        # 不再截断测试点数量，由 prompt 控制
+        points = state["points"]
+        
+        # 使用动态 prompt
         prompt = generate_test_cases_prompt.prompt
+        
         parser = JsonOutputParser(pydantic_schema=List[TestCaseModel])
         resp = safe_structure_parser(
             prompt,
             llm,
             parser,
-            {"points": state["points"], "user_prompt_section": user_prompt_section},
+            {
+                "points": points,
+                "user_prompt_section": user_prompt_section,
+                "max_test_points_section": generate_test_cases_prompt.get_max_test_points_section(max_test_points),
+                "max_test_points_requirement": generate_test_cases_prompt.get_max_test_points_requirement(max_test_points),
+            },
         )
-        writer("【执行节点完成】 3.2 基于测试点生成测试用例")
+        # 不再截断用例数量，由 prompt 控制
+        writer(f"【执行节点完成】 3.2 基于测试点生成测试用例，共{len(resp)}条")
         return {"test_cases": resp}
 
     def create_workflow(self):

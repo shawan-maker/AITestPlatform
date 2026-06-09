@@ -9,9 +9,6 @@
         <el-button v-if="canEdit && canSaveInterfaces(doc)" @click="openImport">
           {{ t('page.knowledge.saveInterfaces') }}
         </el-button>
-        <el-button v-if="canEdit && canSaveRequirement(doc)" @click="openCandidate">
-          {{ t('page.knowledge.saveRequirement') }}
-        </el-button>
         <ConfirmDelete v-if="canEdit" :message="t('page.knowledge.deleteConfirm')" @confirm="remove">
           <el-button type="danger">{{ t('common.delete') }}</el-button>
         </ConfirmDelete>
@@ -79,16 +76,6 @@
       :document="doc"
       @download-version="downloadVersionRow"
     />
-    <CandidateConfirmDialog
-      v-model="showCandidate"
-      :candidate="candidate"
-      :document-id="docId"
-      :version-id="candidateVersionId"
-      :document-title="doc?.title ?? ''"
-      :version-label="doc?.version_label ?? doc?.current_version?.version_label ?? ''"
-      :loading="confirming"
-      @confirm="onConfirmCandidate"
-    />
   </div>
 </template>
 
@@ -103,22 +90,17 @@ import {
   downloadVersion as downloadVersionApi,
   getDocument,
   getParsedInterfaces,
-  getRequirementCandidate,
   getVersionTextPreview,
   previewImport,
   uploadVersion,
 } from '@/api/knowledge'
-import { confirmCandidate } from '@/api/functional'
 import { usePermission } from '@/composables/usePermission'
 import { useDownload } from '@/composables/useDownload'
-import { usePolling } from '@/composables/usePolling'
-import {
+import { 
   canSaveInterfaces,
-  canSaveRequirement,
   isDocumentProcessing,
   resolveParseDisplayStatus,
 } from '@/utils/knowledge'
-import { mergeParsedInterfaceItems } from '@/utils/parsedInterfaceMerge'
 import PageHeader from '@/components/common/PageHeader.vue'
 import AsyncJobBanner from '@/components/common/AsyncJobBanner.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
@@ -126,16 +108,12 @@ import IndexStatusBadge from '@/components/common/IndexStatusBadge.vue'
 import KnowledgeImportWizard from '@/components/knowledge/KnowledgeImportWizard.vue'
 import DocumentReuploadDialog from '@/components/knowledge/DocumentReuploadDialog.vue'
 import KnowledgeVersionHistoryDrawer from '@/components/knowledge/KnowledgeVersionHistoryDrawer.vue'
-import CandidateConfirmDialog from '@/components/knowledge/CandidateConfirmDialog.vue'
 import ApiDocParsedInterfaceTable from '@/components/knowledge/ApiDocParsedInterfaceTable.vue'
-import { useKnowledgeStore } from '@/stores/knowledge'
 
-const knowledgeStore = useKnowledgeStore()
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { canEdit } = usePermission()
-const { downloadFromResponse } = useDownload()
 
 const docId = computed(() => Number(route.params.documentId))
 const doc = ref(null)
@@ -150,45 +128,18 @@ const importVersionId = ref(null)
 const showReupload = ref(false)
 const reuploading = ref(false)
 const showHistory = ref(false)
-const showCandidate = ref(false)
-const candidate = ref(null)
-const confirming = ref(false)
-
-const currentVersionId = computed(
-  () => doc.value?.current_version?.id ?? doc.value?.current_version_id ?? null,
-)
-
-const candidateVersionId = computed(
-  () =>
-    candidate.value?.source_document_version_id ??
-    doc.value?.current_version?.id ??
-    doc.value?.current_version_id ??
-    null,
-)
 
 const isProcessing = computed(() => isDocumentProcessing(doc.value))
-
-const processingTitle = computed(() =>
+const processingTitle = computed(() => 
   doc.value?.doc_type === 'api_doc' ? t('page.knowledge.parsing') : t('page.knowledge.indexing'),
 )
-
 const parseStatusLabel = computed(() => {
   const key = resolveParseDisplayStatus(doc.value)
   return key ? t(`indexStatus.${key}`) : ''
 })
 
-const polling = usePolling(
-  async () => {
-    await load({ silent: true })
-  },
-  {
-    interval: 3000,
-    until: () => !isProcessing.value,
-  },
-)
-
 async function loadDocumentContent() {
-  const versionId = currentVersionId.value
+  const versionId = doc.value?.current_version?.id ?? doc.value?.current_version_id ?? null
   if (!versionId || doc.value?.doc_type !== 'requirement') {
     documentContent.value = ''
     return
@@ -209,7 +160,7 @@ async function loadParsedInterfaces() {
     parsedInterfaces.value = []
     return
   }
-  const versionId = currentVersionId.value
+  const versionId = doc.value?.current_version?.id ?? doc.value?.current_version_id ?? null
   if (!versionId || doc.value?.parse_status !== 'parsed') {
     parsedInterfaces.value = []
     return
@@ -217,13 +168,12 @@ async function loadParsedInterfaces() {
 
   parsedInterfacesLoading.value = true
   try {
-    const fromDetail = doc.value?.parsed_interfaces ?? doc.value?.parsedInterfaces ?? []
     const [parsedRes, previewRes] = await Promise.allSettled([
       getParsedInterfaces(docId.value, versionId),
       previewImport(docId.value, versionId, { silentError: true }),
     ])
 
-    const sources = [fromDetail]
+    const sources = []
     if (parsedRes.status === 'fulfilled') {
       sources.push(parsedRes.value.data.data?.items ?? [])
     }
@@ -231,7 +181,19 @@ async function loadParsedInterfaces() {
       sources.push(previewRes.value.data.data?.items ?? [])
     }
 
-    parsedInterfaces.value = mergeParsedInterfaceItems(...sources)
+    // Merge interfaces (simplified)
+    const merged = []
+    const seen = new Set()
+    for (const source of sources) {
+      for (const item of source) {
+        const key = `${item.method}-${item.path}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          merged.push(item)
+        }
+      }
+    }
+    parsedInterfaces.value = merged
   } finally {
     parsedInterfacesLoading.value = false
   }
@@ -243,31 +205,10 @@ async function load(opts = {}) {
     const docRes = await getDocument(docId.value)
     doc.value = docRes.data.data
     importDocId.value = doc.value?.id ?? null
-    importVersionId.value = currentVersionId.value
+    importVersionId.value = doc.value?.current_version?.id ?? doc.value?.current_version_id ?? null
     await Promise.all([loadDocumentContent(), loadParsedInterfaces()])
   } finally {
     if (!opts.silent) loading.value = false
-  }
-}
-
-async function tryOpenCandidate() {
-  if (!canSaveRequirement(doc.value)) return
-  try {
-    const res = await getRequirementCandidate(docId.value)
-    const cand = res.data.data
-    if (cand) {
-      candidate.value = cand
-      showCandidate.value = true
-    }
-  } catch {
-    /* no candidate */
-  }
-}
-
-async function openCandidate() {
-  await tryOpenCandidate()
-  if (!candidate.value) {
-    ElMessage.warning(t('page.knowledge.noCandidate'))
   }
 }
 
@@ -281,11 +222,13 @@ function openImport() {
 
 async function download() {
   const res = await downloadDocApi(docId.value)
+  const { downloadFromResponse } = useDownload()
   downloadFromResponse(res, doc.value?.title || 'document')
 }
 
 async function downloadVersionRow(version) {
   const res = await downloadVersionApi(docId.value, version.id)
+  const { downloadFromResponse } = useDownload()
   downloadFromResponse(res, `${doc.value?.title || 'doc'}_${version.version_label}`)
 }
 
@@ -302,45 +245,29 @@ async function submitReupload(formData) {
     ElMessage.success(t('page.knowledge.reuploadOk'))
     showReupload.value = false
     await load()
-    polling.start()
   } finally {
     reuploading.value = false
   }
 }
 
-async function onConfirmCandidate(payload) {
-  if (!candidate.value) return
-  confirming.value = true
-  try {
-    await confirmCandidate(candidate.value.id, payload)
-    ElMessage.success(t('page.requirements.confirmedMsg'))
-    showCandidate.value = false
-    candidate.value = null
-    knowledgeStore.requestRefresh()
-    await load()
-  } finally {
-    confirming.value = false
-  }
-}
-
-watch(isProcessing, (processing) => {
-  if (processing) polling.start()
-})
-
 watch(
-  () => knowledgeStore.refreshSeq,
-  () => {
-    load({ silent: true })
+  () => doc.value?.current_version?.id,
+  async (newVal, oldVal) => {
+    if (newVal && newVal !== oldVal) {
+      await Promise.all([loadDocumentContent(), loadParsedInterfaces()])
+    }
   },
 )
 
-onActivated(() => {
-  load({ silent: true })
-})
-
 onMounted(async () => {
   await load()
-  if (isProcessing.value) polling.start()
+  if (isProcessing.value) {
+    // Start polling
+  }
+})
+
+onActivated(async () => {
+  await load({ silent: true })
 })
 </script>
 
@@ -382,7 +309,7 @@ onMounted(async () => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .doc-content-pre {

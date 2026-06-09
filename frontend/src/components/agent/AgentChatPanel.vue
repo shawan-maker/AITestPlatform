@@ -341,7 +341,6 @@ watch(
     await nextTick()
     const wrap = scrollRef.value?.wrapRef
     if (wrap) wrap.scrollTop = wrap.scrollHeight
-    // 阶段日志terminal自动滚动到底部
     scrollStageTerminalToBottom()
   },
   { deep: true },
@@ -449,13 +448,17 @@ watch(
   word-break: break-word;
   width: 100%; /* 固定气泡宽度，避免内容少时宽度过小 */
 
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
+  /* 确保背景和边框显示 - 使用 CSS 变量并提供 fallback */
+  background: var(--el-fill-color-lighter, #f5f7fa);
+  border: 1px solid var(--el-border-color-lighter, #e4e7ed);
   border-top-left-radius: 4px;
+
+  /* 调试：临时添加红色边框以确认样式是否应用 */
+  /* border: 2px solid red !important; */
 
   &--user {
     width: auto; /* 用户消息宽度自适应 */
-    background: linear-gradient(135deg, $color-primary, adjust-color($color-primary, $lightness: -5%));
+    background: linear-gradient(135deg, var(--color-primary, #409eff), var(--color-primary-dark, #337ecc));
     border-color: transparent;
     color: #fff;
     border-top-right-radius: 4px;
@@ -469,7 +472,7 @@ watch(
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: var(--el-text-color-secondary);
+    color: var(--el-text-color-secondary, #909399);
   }
 }
 

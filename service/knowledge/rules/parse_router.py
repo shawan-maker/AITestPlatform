@@ -14,11 +14,6 @@ def resolve_parse_route(
     content: bytes,
 ) -> ActualParseRoute:
     ext = Path(file_name).suffix.lower()
-    if doc_type == KnowledgeDocType.requirement:
-        if ext in MULTIMODAL_EXTENSIONS:
-            return ActualParseRoute.ai_multimodal
-        return ActualParseRoute.ai_text
-
     if parse_mode == ParseMode.swagger:
         return ActualParseRoute.swagger
     if parse_mode == ParseMode.openapi:

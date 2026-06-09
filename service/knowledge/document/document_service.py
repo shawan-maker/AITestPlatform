@@ -16,7 +16,6 @@ from service.knowledge.document.schemas import (
 from service.knowledge.document.storage import KnowledgeStorage
 from service.knowledge.document.parsed_interface_service import resolve_parsed_interfaces
 from service.knowledge.document.save_state import compute_version_save_state
-from service.knowledge.downstream.requirement_sync import _text_preview, default_candidate_title
 from service.knowledge.document.version_service import VersionService, version_label_from_seq
 from service.knowledge.pipeline.index_worker import IndexWorker
 from service.knowledge.document.workspace_service import WorkspaceService
@@ -231,7 +230,8 @@ class DocumentService:
         if not path.is_file():
             raise AppException("文件已丢失", 404)
         text = path.read_text(encoding="utf-8", errors="ignore")
-        preview = _text_preview(version)
+        # 简单的预览逻辑：截取前1000个字符
+        preview = text[:1000] if len(text) > 1000 else None
         stripped = text.strip()
         truncated = preview is not None and len(stripped) > len(preview or "")
         return {
@@ -239,7 +239,7 @@ class DocumentService:
             "truncated": truncated,
             "version_label": version.version_label,
             "document_title": document.title,
-            "suggested_title": default_candidate_title(document, version),
+            "suggested_title": document.title,  # 使用文档标题作为建议标题
         }
 
     @classmethod
@@ -279,8 +279,6 @@ class DocumentService:
         version_label = None
         index_status = None
         parse_status = None
-        requirement_saved = False
-        can_save_requirement = False
         interfaces_saved = False
         can_save_interfaces = False
         updated_by_username = None
@@ -291,8 +289,6 @@ class DocumentService:
                 index_status = version.index_status
                 parse_status = version.parse_status
                 save_state = await compute_version_save_state(document, version)
-                requirement_saved = save_state.requirement_saved
-                can_save_requirement = save_state.can_save_requirement
                 interfaces_saved = save_state.interfaces_saved
                 can_save_interfaces = save_state.can_save_interfaces
                 if version.created_by_id:
@@ -312,8 +308,6 @@ class DocumentService:
             current_version_id=document.current_version_id,
             index_status=index_status,
             parse_status=parse_status,
-            requirement_saved=requirement_saved,
-            can_save_requirement=can_save_requirement,
             interfaces_saved=interfaces_saved,
             can_save_interfaces=can_save_interfaces,
             updated_at=document.updated_at,
