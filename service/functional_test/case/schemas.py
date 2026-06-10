@@ -6,9 +6,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from service.core.enums import (
+    CaseCategory,
     FunctionalCaseStatus,
-    FunctionalCaseType,
-    FunctionalExecResult,
     SessionStatus,
     SourceType,
 )
@@ -55,12 +54,12 @@ class CatalogTreeNode(CatalogOut):
 
 class CaseListQuery(BaseModel):
     project_id: int = Field(..., ge=1)
-    catalog_id: int | None = Field(default=None, ge=1)
+    catalog_id: int | None = Field(default=None)
     case_name: str | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
-    type: FunctionalCaseType | None = None
-    exec_result: FunctionalExecResult | None = None
-    jira_issue_key: str | None = Field(default=None, max_length=50)
+    case_category: CaseCategory | None = None
+    sort_field: str | None = None
+    sort_order: str | None = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 
@@ -72,7 +71,7 @@ class CaseCreateRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
     priority: int = Field(default=3, ge=1, le=4)
     dimension: str | None = Field(default=None, max_length=100)
-    type: FunctionalCaseType = FunctionalCaseType.functional
+    case_category: CaseCategory = CaseCategory.functional
     preconditions: str | None = None
     test_steps: str | None = None
     test_data: str | None = None
@@ -85,15 +84,12 @@ class CaseUpdateRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
     priority: int | None = Field(default=None, ge=1, le=4)
     dimension: str | None = Field(default=None, max_length=100)
-    type: FunctionalCaseType | None = None
+    case_category: CaseCategory | None = None
     status: FunctionalCaseStatus | None = None
-    exec_result: FunctionalExecResult | None = None
     preconditions: str | None = None
     test_steps: str | None = None
     test_data: str | None = None
     expected_result: str | None = None
-    actual_result: str | None = None
-    jira_issue_key: str | None = Field(default=None, max_length=50)
     test_point_summary: str | None = None
 
 
@@ -114,12 +110,10 @@ class CaseBrief(BaseModel):
     case_no: str | None
     priority: int
     dimension: str | None
-    type: FunctionalCaseType
+    case_category: CaseCategory
     status: FunctionalCaseStatus
-    exec_result: FunctionalExecResult
     source: SourceType
     sort_order: int
-    jira_issue_key: str | None
     module_name: str | None
     created_by_username: str | None
     updated_by_username: str | None
@@ -133,32 +127,39 @@ class CaseDetail(CaseBrief):
     test_steps: str | None
     test_data: str | None
     expected_result: str | None
-    actual_result: str | None
     test_point: str | None
 
 
 class CaseReorderRequest(BaseModel):
-    catalog_id: int = Field(..., ge=1)
+    catalog_id: int | None = Field(default=None, ge=1)
     ordered_ids: list[int] = Field(..., min_length=1)
 
 
 class CaseBatchUpdateRequest(BaseModel):
     case_ids: list[int] = Field(..., min_length=1)
-    type: FunctionalCaseType | None = None
+    case_category: CaseCategory | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
     status: FunctionalCaseStatus | None = None
-    exec_result: FunctionalExecResult | None = None
     catalog_id: int | None = Field(default=None, ge=1)
     module_id: int | None = Field(default=None, ge=1)
     preconditions: str | None = None
     test_steps: str | None = None
     test_data: str | None = None
     expected_result: str | None = None
-    jira_issue_key: str | None = Field(default=None, max_length=50)
 
 
 class CaseBatchDeleteRequest(BaseModel):
     case_ids: list[int] = Field(..., min_length=1)
+
+
+class CaseBatchMoveRequest(BaseModel):
+    case_ids: list[int] = Field(..., min_length=1)
+    target_catalog_id: int = Field(..., ge=1)
+
+
+class CaseBatchCopyRequest(BaseModel):
+    case_ids: list[int] = Field(..., min_length=1)
+    target_catalog_id: int = Field(..., ge=1)
 
 
 class BatchOperationFailure(BaseModel):
@@ -169,10 +170,6 @@ class BatchOperationFailure(BaseModel):
 class CaseBatchResult(BaseModel):
     success_count: int
     failures: list[BatchOperationFailure] = Field(default_factory=list)
-
-
-class CaseDeleteBlocked(BaseModel):
-    suite_names: list[str]
 
 
 PaginatedCases = Paginated[CaseBrief]

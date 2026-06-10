@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="t('page.functional.create')"
+    :title="t('common.edit')"
     :width="dialogWidth"
     :top="dialogTop"
     :class="dialogClass"
@@ -71,7 +71,7 @@
     </el-form>
     <template #footer>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="loading" @click="submit">{{ t('common.create') }}</el-button>
+      <el-button type="primary" :loading="loading" @click="submit">{{ t('common.save') }}</el-button>
     </template>
   </el-dialog>
 </template>
@@ -79,6 +79,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { getCase, updateCase } from '@/api/functional'
 import ModuleSelect from '@/components/tree/ModuleSelect.vue'
 import CatalogSelectInline from './CatalogSelectInline.vue'
 import { useContentDialog } from '@/composables/useContentDialog'
@@ -86,7 +87,7 @@ import { useContentDialog } from '@/composables/useContentDialog'
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
   catalogs: { type: Array, default: () => [] },
-  defaultCatalogId: { type: Number, default: null },
+  caseId: { type: Number, default: null },
   loading: { type: Boolean, default: false },
 })
 
@@ -118,8 +119,28 @@ const form = reactive({
   test_steps: '',
   test_data: '',
   expected_result: '',
-  jira_issue_key: '',
 })
+
+async function loadCaseDetail() {
+  if (!props.caseId) return
+  try {
+    const res = await getCase(props.caseId)
+    const data = res.data.data
+    Object.assign(form, {
+      case_name: data.case_name || '',
+      case_category: data.case_category || 'functional',
+      priority: data.priority || 3,
+      module_id: data.module_id || null,
+      catalog_id: data.catalog_id || null,
+      preconditions: data.preconditions || '',
+      test_steps: data.test_steps || '',
+      test_data: data.test_data || '',
+      expected_result: data.expected_result || '',
+    })
+  } catch (e) {
+    console.error('加载用例详情失败', e)
+  }
+}
 
 async function submit() {
   try {
@@ -127,17 +148,12 @@ async function submit() {
   } catch {
     return
   }
-  emit('submit', { ...form })
+  emit('submit', { id: props.caseId, ...form })
 }
 
 watch(visible, (v) => {
-  if (v) {
-    Object.assign(form, {
-      case_name: '', case_category: 'functional', priority: 3,
-      module_id: null, catalog_id: props.defaultCatalogId ?? null,
-      preconditions: '', test_steps: '', test_data: '',
-      expected_result: '', jira_issue_key: '',
-    })
+  if (v && props.caseId) {
+    loadCaseDetail()
   }
 })
 </script>

@@ -1,0 +1,42 @@
+
+
+=== 2026-06-10 09:26:41.111018 ===
+错误: (1054, "Unknown column 'case_category' in 'field list'")
+堆栈:
+Traceback (most recent call last):
+  File "D:\PyProject\AITestPlatform\venv\Lib\site-packages\tortoise\backends\mysql\client.py", line 50, in translate_exceptions_
+    return await func(self, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PyProject\AITestPlatform\venv\Lib\site-packages\tortoise\backends\mysql\client.py", line 209, in execute_query
+    await cursor.execute(query, values)
+  File "asyncmy/cursors.pyx", line 179, in execute
+  File "asyncmy/cursors.pyx", line 364, in _query
+  File "asyncmy/connection.pyx", line 500, in query
+  File "asyncmy/connection.pyx", line 688, in _read_query_result
+  File "asyncmy/connection.pyx", line 1075, in read
+  File "asyncmy/connection.pyx", line 650, in read_packet
+  File "asyncmy/protocol.pyx", line 190, in asyncmy.protocol.MysqlPacket.raise_for_error
+  File "asyncmy/protocol.pyx", line 194, in asyncmy.protocol.MysqlPacket.raise_for_error
+  File "asyncmy/errors.pyx", line 128, in asyncmy.errors.raise_mysql_exception
+  File "asyncmy/errors.pyx", line 137, in asyncmy.errors.raise_mysql_exception
+asyncmy.errors.OperationalError: (1054, "Unknown column 'case_category' in 'field list'")
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\PyProject\AITestPlatform\service\functional_test\case\case_service.py", line 156, in list_cases
+    total, rows = await paginate(qs, query.page, query.page_size)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PyProject\AITestPlatform\service\core\pagination.py", line 28, in paginate
+    items = await qs.offset(offset).limit(page_size)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PyProject\AITestPlatform\venv\Lib\site-packages\tortoise\queryset.py", line 1234, in _execute
+    instance_list = await self._db.executor_class(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PyProject\AITestPlatform\venv\Lib\site-packages\tortoise\backends\base\executor.py", line 108, in execute_select
+    _, raw_results = await self.db.execute_query(sql, values)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\PyProject\AITestPlatform\venv\Lib\site-packages\tortoise\backends\mysql\client.py", line 58, in translate_exceptions_
+    raise OperationalError(exc)
+tortoise.exceptions.OperationalError: (1054, "Unknown column 'case_category' in 'field list'")
+

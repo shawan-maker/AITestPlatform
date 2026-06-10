@@ -13,15 +13,13 @@ _EXPORT_COLUMNS = [
     "catalog_name",
     "priority",
     "dimension",
-    "type",
+    "case_category",
     "status",
-    "exec_result",
     "source",
     "preconditions",
     "test_steps",
     "test_data",
     "expected_result",
-    "jira_issue_key",
 ]
 
 
@@ -54,15 +52,13 @@ class ExportService:
                     "catalog_name": case.catalog.name if case.catalog else "",
                     "priority": case.priority,
                     "dimension": case.dimension or "",
-                    "type": case.type.value,
+                    "case_category": case.case_category.value if case.case_category else "",
                     "status": case.status.value,
-                    "exec_result": case.exec_result.value,
                     "source": case.source.value,
                     "preconditions": case.preconditions or "",
                     "test_steps": case.test_steps or "",
                     "test_data": case.test_data or "",
                     "expected_result": case.expected_result or "",
-                    "jira_issue_key": case.jira_issue_key or "",
                 }
             )
 

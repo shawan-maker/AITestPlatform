@@ -58,6 +58,14 @@ export function batchDeleteCases(data) {
   return request.post('/functional/cases/batch-delete', data)
 }
 
+export function batchMoveCases(data) {
+  return request.post('/functional/cases/batch-move', data)
+}
+
+export function batchCopyCases(data) {
+  return request.post('/functional/cases/batch-copy', data)
+}
+
 export function exportCases(params = {}) {
   return request.get('/functional/cases/export', { params, responseType: 'blob' })
 }

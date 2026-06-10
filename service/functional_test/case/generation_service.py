@@ -13,8 +13,7 @@ from service.ai_generation.common import (
 )
 from service.ai_generation.models import AIGenerationSession
 from service.core.enums import (
-    FunctionalCaseType,
-    FunctionalExecResult,
+    CaseCategory,
     GenType,
     SessionStatus,
     SourceType,
@@ -301,14 +300,12 @@ class FunctionalCaseGenerationService:
                             case_name=_to_str(item.get("case_name")) or f"AI用例-{idx + 1}",
                             priority=_parse_priority(item.get("priority")),
                             dimension=_to_str(item.get("dimension")) or (tp.dimension if tp else ""),
-                            type=FunctionalCaseType.functional,
+                            case_category=CaseCategory.functional,
                             preconditions=_to_str(item.get("preconditions")),
                             test_steps=_to_str(item.get("test_steps")),
                             test_data=_to_str(item.get("test_data")),
                             expected_result=_to_str(item.get("expected_result")),
-                            actual_result=_to_str(item.get("actual_result")),
                             source=SourceType.ai,
-                            exec_result=FunctionalExecResult.pending,
                             generation_session_id=session.id,
                             sort_order=sort_base + order,
                             created_by_id=user.id,

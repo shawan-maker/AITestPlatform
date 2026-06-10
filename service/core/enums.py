@@ -76,9 +76,14 @@ class SourceType(str, Enum):
     ai = "ai"
 
 
-class FunctionalCaseType(str, Enum):
+class CaseCategory(str, Enum):
+    """用例分类（SIT-09）"""
     functional = "functional"
-    ui = "ui"
+    performance = "performance"
+    security = "security"
+    compatibility = "compatibility"
+    usability = "usability"
+    other = "other"
 
 
 class FunctionalCaseStatus(str, Enum):

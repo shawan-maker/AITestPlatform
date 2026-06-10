@@ -1,27 +1,6 @@
 <template>
   <div class="functional-workspace app-card">
-    <PageHeader :title="t('page.functional.title')">
-      <template #actions>
-        <!-- 创建按钮拆分为下拉菜单 -->
-        <el-dropdown v-if="canEdit && projectId" @command="onCreateCommand" :disabled="!selectedCatalogId">
-          <el-button type="primary">
-            {{ t('page.functional.create') }}
-            <el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="ai">{{ t('page.functional.createByAI') }}</el-dropdown-item>
-              <el-dropdown-item command="manual">{{ t('page.functional.createManual') }}</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-        <el-tooltip v-if="canEdit && !selectedCatalogId && projectId" :content="t('page.functional.selectCatalogFirst')" placement="top">
-          <el-icon style="margin-left: 4px"><info-filled /></el-icon>
-        </el-tooltip>
-        <el-button v-if="canEdit && selectedIds.length" @click="showBatchEdit = true">{{ t('page.functional.batchEdit') }}</el-button>
-        <el-button v-if="projectId" @click="exportCases">{{ t('common.export') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.functional.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
 
     <SplitView v-else :initial-width="300" :min-width="240" :max-width="420" :drawer-title="t('page.functional.allCases')">
@@ -40,38 +19,74 @@
         />
       </template>
       <template #right>
-        <!-- 筛选栏 O2 -->
-        <FilterBar v-if="selectedCatalogId !== null || selectedCatalogId === undefined" class="case-filter-bar" @search="loadCases" @reset="resetCaseFilters">
-          <el-input v-model="caseFilters.case_name" :placeholder="t('page.functional.caseNamePlaceholder', { default: '用例名称' })" clearable style="width: 180px" />
-          <el-select v-model="caseFilters.priority" :placeholder="t('page.functional.priority')" clearable style="width: 100px">
-            <el-option label="P0" :value="1" />
-            <el-option label="P1" :value="2" />
-            <el-option label="P2" :value="3" />
-            <el-option label="P3" :value="4" />
-          </el-select>
-          <el-select v-model="caseFilters.type" :placeholder="t('page.functional.type')" clearable style="width: 110px">
-            <el-option label="功能测试" value="functional" />
-            <el-option label="UI 测试" value="ui" />
-          </el-select>
-          <el-select v-model="caseFilters.exec_result" :placeholder="t('page.functional.execResult')" clearable style="width: 110px">
-            <el-option :label="t('status.exec.pending')" value="pending" />
-            <el-option :label="t('status.exec.passed')" value="passed" />
-            <el-option :label="t('status.exec.failed')" value="failed" />
-            <el-option :label="t('status.exec.blocked')" value="blocked" />
-            <el-option :label="t('status.exec.skipped')" value="skipped" />
-          </el-select>
-        </FilterBar>
+        <!-- 筛选栏 - 始终显示 -->
+        <div class="case-filter-bar">
+          <FilterBar @search="loadCases" @reset="resetCaseFilters">
+            <!-- 创建按钮（放在搜索框左边） -->
+            <template #primary>
+              <el-dropdown v-if="canEdit && projectId" @command="onCreateCommand">
+                <el-button type="primary">
+                  {{ t('page.functional.create') }}
+                  <el-icon class="el-icon--right"><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="ai">{{ t('page.functional.createByAI') }}</el-dropdown-item>
+                    <el-dropdown-item command="manual">{{ t('page.functional.createManual') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+              <!-- 批量操作下拉菜单（放在新建用例按钮右边） -->
+              <el-dropdown v-if="canEdit && selectedIds.length" @command="onBatchCommand" trigger="click">
+                <el-button>
+                  {{ t('page.functional.batchOperation') }} ({{ selectedIds.length }})
+                  <el-icon class="el-icon--right"><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">{{ t('page.functional.batchEdit') }}</el-dropdown-item>
+                    <el-dropdown-item command="move">{{ t('page.functional.batchMove') }}</el-dropdown-item>
+                    <el-dropdown-item command="copy">{{ t('page.functional.batchCopy') }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>{{ t('page.functional.batchDelete') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </template>
+            <el-input v-model="caseFilters.case_name" :placeholder="t('page.functional.caseNamePlaceholder', { default: '用例名称' })" clearable style="width: 180px" />
+            <el-select v-model="caseFilters.priority" :placeholder="t('page.functional.priority')" clearable style="width: 100px">
+              <el-option label="P0" :value="1" />
+              <el-option label="P1" :value="2" />
+              <el-option label="P2" :value="3" />
+              <el-option label="P3" :value="4" />
+            </el-select>
+            <el-select v-model="caseFilters.case_category" :placeholder="t('page.functional.caseCategory')" clearable style="width: 130px">
+              <el-option :label="t('page.functional.catFunctional')" value="functional" />
+              <el-option :label="t('page.functional.catPerformance')" value="performance" />
+              <el-option :label="t('page.functional.catSecurity')" value="security" />
+              <el-option :label="t('page.functional.catCompatibility')" value="compatibility" />
+              <el-option :label="t('page.functional.catUsability')" value="usability" />
+              <el-option :label="t('page.functional.catOther')" value="other" />
+            </el-select>
+          </FilterBar>
+        </div>
 
         <PaginatedTable
           ref="tableRef"
           :data="cases"
           :loading="loading"
+          :total="totalCases"
+          v-model:page="currentPage"
+          v-model:page-size="pageSize"
           row-key="id"
           @row-click="openDetailDrawer"
           @selection-change="onSelectionChange"
+          @page-change="onPageChange"
+          @size-change="onSizeChange"
         >
           <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="48" />
-          <AppTableColumn type="index" variant="fixed" :width="50" :index="(i) => i + 1" />
+          <AppTableColumn type="index" variant="fixed" :width="50" :index="(i) => (currentPage - 1) * pageSize + i + 1" />
+          <!-- 用例编号列 -->
+          <AppTableColumn prop="case_no" variant="content" :label="t('page.functional.caseNo')" width="120" />
           <AppTableColumn prop="case_name" variant="content" :label="t('page.functional.caseName')" min-width="160">
             <template #default="{ row, $index }">
               <span
@@ -84,30 +99,34 @@
               {{ row.case_name }}
             </template>
           </AppTableColumn>
-          <AppTableColumn prop="priority" variant="flex" :label="t('page.functional.priority')" width="70">
+          <AppTableColumn prop="priority" variant="flex" :label="t('page.functional.priority')" width="90" sortable @sort-change="onSortChange">
             <template #default="{ row }">
               <PriorityTag :value="row.priority" />
             </template>
           </AppTableColumn>
-          <AppTableColumn prop="type" variant="flex" :label="t('page.functional.type')" width="90">
+          <AppTableColumn prop="case_category" variant="flex" :label="t('page.functional.caseCategory')" width="100">
             <template #default="{ row }">
-              {{ row.type === 'ui' ? 'UI' : t('page.functional.typeFunctional') }}
+              {{ t(`page.functional.cat${row.case_category.charAt(0).toUpperCase() + row.case_category.slice(1)}`) }}
             </template>
           </AppTableColumn>
           <AppTableColumn prop="module_name" variant="flex" :label="t('page.knowledge.module')" :min-width="100">
             <template #default="{ row }">{{ row.module_name || '-' }}</template>
           </AppTableColumn>
-          <AppTableColumn prop="exec_result" variant="flex" :label="t('page.functional.execResult')" width="95">
-            <template #default="{ row }">
-              <ExecResultTag :value="row.exec_result" />
-            </template>
-          </AppTableColumn>
-          <AppTableColumn prop="jira_issue_key" variant="flex" :label="t('page.functional.jiraKey')" :min-width="100">
-            <template #default="{ row }">{{ row.jira_issue_key || '-' }}</template>
+          <AppTableColumn prop="created_at" variant="flex" :label="t('page.functional.createdAt')" :min-width="155">
+            <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
           </AppTableColumn>
           <AppTableColumn prop="created_by_username" variant="flex" :label="t('page.functional.createdBy')" :min-width="85" />
-          <AppTableColumn prop="updated_at" variant="flex" :label="t('page.functional.updatedAt')" :min-width="155">
+          <AppTableColumn prop="updated_by_username" variant="flex" :label="t('page.functional.updatedBy')" :min-width="85" />
+          <AppTableColumn prop="updated_at" variant="flex" :label="t('page.functional.updatedAt')" :min-width="155" sortable @sort-change="onSortChange">
             <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
+          </AppTableColumn>
+          <!-- 操作列 - 字体与知识库一致，不使用 size="small" -->
+          <AppTableColumn v-if="canEdit" :label="t('common.actions')" variant="fixed" width="200" align="center">
+            <template #default="{ row }">
+              <el-button link type="primary" @click.stop="editCase(row)">{{ t('common.edit') }}</el-button>
+              <el-button link type="primary" @click.stop="handleCopyCase(row)">{{ t('page.functional.copy') }}</el-button>
+              <el-button link type="danger" @click.stop="handleDeleteCase(row)">{{ t('common.delete') }}</el-button>
+            </template>
           </AppTableColumn>
         </PaginatedTable>
       </template>
@@ -130,11 +149,32 @@
       :loading="creating"
       @submit="createCaseItem"
     />
+    <FunctionalCaseEditDialog
+      v-model="showEdit"
+      :case-id="editCaseId"
+      :catalogs="catalogTree"
+      :loading="editing"
+      @submit="editCaseItem"
+    />
     <FunctionalBatchEditDialog
       v-model="showBatchEdit"
       :case-ids="selectedIds"
       :loading="batchUpdating"
       @submit="batchUpdate"
+    />
+    <FunctionalBatchMoveDialog
+      v-model="showBatchMove"
+      :catalogs="catalogTree"
+      :case-ids="selectedIds"
+      :loading="batchMoving"
+      @confirm="batchMove"
+    />
+    <FunctionalBatchCopyDialog
+      v-model="showBatchCopy"
+      :catalogs="catalogTree"
+      :case-ids="selectedIds"
+      :loading="batchCopying"
+      @confirm="batchCopy"
     />
     <CatalogMoveDialog
       v-model="showMoveDialog"
@@ -153,24 +193,27 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowDown, InfoFilled } from '@element-plus/icons-vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
   batchUpdateCases,
+  batchMoveCases,
+  batchCopyCases,
+  batchDeleteCases,
   createCase,
   createCaseCatalog,
+  copyCase,
   deleteCase,
   deleteCaseCatalog,
-  exportCases as exportCasesApi,
   getCase,
   getCaseCatalogTree,
   listCases,
   moveCaseCatalog,
   reorderCases,
+  updateCase,
   updateCaseCatalog,
 } from '@/api/functional'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
-import { useDownload } from '@/composables/useDownload'
 import { formatDateTime } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -178,11 +221,12 @@ import SplitView from '@/components/common/SplitView.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
-import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import PriorityTag from '@/components/tags/PriorityTag.vue'
-import ExecResultTag from '@/components/tags/ExecResultTag.vue'
 import FunctionalCaseCreateDialog from '@/components/functional/FunctionalCaseCreateDialog.vue'
+import FunctionalCaseEditDialog from '@/components/functional/FunctionalCaseEditDialog.vue'
 import FunctionalBatchEditDialog from '@/components/functional/FunctionalBatchEditDialog.vue'
+import FunctionalBatchMoveDialog from '@/components/functional/FunctionalBatchMoveDialog.vue'
+import FunctionalBatchCopyDialog from '@/components/functional/FunctionalBatchCopyDialog.vue'
 import FunctionalCaseDetailDrawer from '@/components/functional/FunctionalCaseDetailDrawer.vue'
 import FunctionalCatalogSidebar from '@/components/tree/FunctionalCatalogSidebar.vue'
 import CatalogMoveDialog from '@/components/tree/CatalogMoveDialog.vue'
@@ -192,7 +236,6 @@ const route = useRoute()
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
-const { downloadFromResponse } = useDownload()
 
 function formatTime(val) {
   return val ? formatDateTime(val) : '-'
@@ -206,15 +249,29 @@ const loading = ref(false)
 const selectedCaseId = ref(null)
 const detailDrawerVisible = ref(false)
 const showCreate = ref(false)
+const showEdit = ref(false)
+const editCaseId = ref(null)
 const showBatchEdit = ref(false)
+const showBatchMove = ref(false)
+const showBatchCopy = ref(false)
 const selectedIds = ref([])
 const creating = ref(false)
+const editing = ref(false)
 const batchUpdating = ref(false)
+const batchMoving = ref(false)
+const batchCopying = ref(false)
 const dragFromIndex = ref(null)
-const caseFilters = reactive({ case_name: '', priority: null, type: null, exec_result: null })
+const caseFilters = reactive({ case_name: '', priority: null, case_category: null })
+
+// 排序状态
+const sortField = ref('')  // 'priority' | 'updated_at' | ''
+const sortOrder = ref('')  // 'ascending' | 'descending' | ''
 
 // 筛选分页
 const tableRef = ref(null)
+const totalCases = ref(0)
+const currentPage = ref(1)
+const pageSize = ref(20)
 
 const showMoveDialog = ref(false)
 const moveCatalogId = ref(null)
@@ -250,23 +307,43 @@ async function loadCases() {
   if (!baseParams) return
   loading.value = true
   try {
-    const filterParams = { ...baseParams }
+    const filterParams = {
+      ...baseParams,
+      page: currentPage.value,
+      page_size: pageSize.value,
+    }
     if (caseFilters.case_name) filterParams.case_name = caseFilters.case_name.trim()
     if (caseFilters.priority != null) filterParams.priority = caseFilters.priority
-    if (caseFilters.type) filterParams.type = caseFilters.type
-    if (caseFilters.exec_result) filterParams.exec_result = caseFilters.exec_result
+    if (caseFilters.case_category) filterParams.case_category = caseFilters.case_category
+    // 添加排序参数
+    if (sortField.value) {
+      filterParams.sort_field = sortField.value
+      filterParams.sort_order = sortOrder.value === 'descending' ? 'desc' : 'asc'
+    }
     const res = await listCases(filterParams)
-    cases.value = res.data.data?.items ?? []
+    const data = res.data.data
+    cases.value = data?.items ?? []
+    totalCases.value = data?.total ?? 0
   } finally {
     loading.value = false
   }
+
+function onPageChange(p) {
+  currentPage.value = p
+  loadCases()
+}
+
+function onSizeChange(s) {
+  pageSize.value = s
+  currentPage.value = 1
+  loadCases()
+}
 }
 
 function resetCaseFilters() {
   caseFilters.case_name = ''
   caseFilters.priority = null
-  caseFilters.type = null
-  caseFilters.exec_result = null
+  caseFilters.case_category = null
   loadCases()
 }
 
@@ -303,6 +380,17 @@ function onSelectionChange(rows) {
   selectedIds.value = rows.map((r) => r.id)
 }
 
+function onSortChange({ column, prop, order }) {
+  if (!order) {
+    sortField.value = ''
+    sortOrder.value = ''
+  } else {
+    sortField.value = prop
+    sortOrder.value = order
+  }
+  loadCases()
+}
+
 // 创建按钮下拉命令处理
 function onCreateCommand(cmd) {
   if (cmd === 'ai') {
@@ -313,10 +401,31 @@ function onCreateCommand(cmd) {
   }
 }
 
+// 批量操作下拉命令处理
+function onBatchCommand(cmd) {
+  if (selectedIds.value.length === 0) {
+    ElMessage.warning(t('page.functional.selectCasesFirst'))
+    return
+  }
+  if (cmd === 'edit') {
+    showBatchEdit.value = true
+  } else if (cmd === 'move') {
+    showBatchMove.value = true
+  } else if (cmd === 'copy') {
+    showBatchCopy.value = true
+  } else if (cmd === 'delete') {
+    batchDelete()
+  }
+}
+
 // Drawer 回调
 function onEditFromDrawer() {
-  // 编辑后刷新列表
-  loadCases()
+  // 关闭详情抽屉，打开编辑对话框
+  detailDrawerVisible.value = false
+  if (selectedCaseId.value) {
+    editCaseId.value = selectedCaseId.value
+    showEdit.value = true
+  }
 }
 function onCopiedFromDrawer() {
   loadCases()
@@ -341,6 +450,18 @@ async function createCaseItem(form) {
   }
 }
 
+async function editCaseItem(form) {
+  editing.value = true
+  try {
+    await updateCase(editCaseId.value, form)
+    ElMessage.success(t('common.saved'))
+    showEdit.value = false
+    loadCases()
+  } finally {
+    editing.value = false
+  }
+}
+
 async function batchUpdate(payload) {
   batchUpdating.value = true
   try {
@@ -357,6 +478,93 @@ async function batchUpdate(payload) {
   }
 }
 
+async function batchMove(targetCatalogId) {
+  batchMoving.value = true
+  try {
+    const payload = { case_ids: selectedIds.value, target_catalog_id: targetCatalogId }
+    const res = await batchMoveCases(payload)
+    if (res.data.data.warning?.suite_names?.length) {
+      ElMessage.warning(t('page.functional.deleteSuiteWarning', { suites: res.data.data.warning.suite_names.join(', ') }))
+    } else {
+      ElMessage.success(t('common.moved'))
+    }
+    showBatchMove.value = false
+    loadCases()
+  } finally {
+    batchMoving.value = false
+  }
+}
+
+async function batchCopy(targetCatalogId) {
+  batchCopying.value = true
+  try {
+    const payload = { case_ids: selectedIds.value, target_catalog_id: targetCatalogId }
+    const res = await batchCopyCases(payload)
+    if (res.data.data.warning?.suite_names?.length) {
+      ElMessage.warning(t('page.functional.deleteSuiteWarning', { suites: res.data.data.warning.suite_names.join(', ') }))
+    } else {
+      ElMessage.success(t('common.copied'))
+    }
+    showBatchCopy.value = false
+    loadCases()
+  } finally {
+    batchCopying.value = false
+  }
+}
+
+async function batchDelete() {
+  try {
+    await ElMessageBox.confirm(
+      t('page.functional.confirmDelete', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    const res = await batchDeleteCases({ case_ids: selectedIds.value })
+    if (res.data.data?.warning?.suite_names?.length) {
+      ElMessage.warning(t('page.functional.deleteSuiteWarning', { suites: res.data.data.warning.suite_names.join(', ') }))
+    } else {
+      ElMessage.success(t('page.functional.deleteSuccess'))
+    }
+    loadCases()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
+}
+
+function editCase(row) {
+  editCaseId.value = row.id
+  showEdit.value = true
+}
+
+async function handleCopyCase(row) {
+  try {
+    await copyCase(row.id)
+    ElMessage.success(t('page.functional.copied'))
+    loadCases()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  }
+}
+
+async function handleDeleteCase(row) {
+  try {
+    await ElMessageBox.confirm(
+      t('page.functional.confirmDelete', { count: 1 }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    await deleteCase(row.id)
+    ElMessage.success(t('common.deleted'))
+    loadCases()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
+}
+
 function onDragStart(index) {
   dragFromIndex.value = index
 }
@@ -364,6 +572,11 @@ function onDragStart(index) {
 async function onDrop(toIndex) {
   const from = dragFromIndex.value
   if (from == null || from === toIndex) return
+  // 全部用例视图不允许拖拽排序
+  if (!selectedCatalogId.value) {
+    dragFromIndex.value = null
+    return
+  }
   const reordered = [...cases.value]
   const [item] = reordered.splice(from, 1)
   reordered.splice(toIndex, 0, item)
@@ -373,12 +586,6 @@ async function onDrop(toIndex) {
     ordered_ids: reordered.map((c) => c.id),
   })
   dragFromIndex.value = null
-}
-
-async function exportCases() {
-  const params = withProjectParams({ catalog_id: selectedCatalogId.value || undefined })
-  const res = await exportCasesApi(params)
-  downloadFromResponse(res, 'cases.csv')
 }
 
 async function createCat(parentId = null) {
@@ -472,8 +679,6 @@ function onCatalogCommand(cmd, catalog) {
   if (cmd === 'child') createCat(catalog.id)
   else if (cmd === 'rename') renameCat(catalog)
   else if (cmd === 'move') openMoveDialog(catalog)
-  else if (cmd === 'up') moveCatSibling(catalog, 'up')
-  else if (cmd === 'down') moveCatSibling(catalog, 'down')
   else if (cmd === 'root') moveCat(catalog.id, 0)
   else if (cmd === 'delete') deleteCat(catalog)
 }
@@ -484,6 +689,10 @@ watch(projectId, () => {
 })
 
 watch(selectedCatalogId, loadCases)
+
+// 分页变化时自动刷新数据（兜底：确保 v-model 事件未触发时也能刷新）
+watch(currentPage, () => { loadCases() })
+watch(pageSize, () => { currentPage.value = 1; loadCases() })
 
 onMounted(async () => {
   await loadTree()

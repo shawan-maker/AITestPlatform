@@ -15,37 +15,31 @@
     <template v-else-if="caseDetail">
       <!-- 头部操作 -->
       <div class="drawer-header-actions">
-        <el-button v-if="canEdit" type="primary" plain size="small" @click="$emit('edit', caseDetail.id)">
+        <el-button v-if="canEdit" type="primary" plain @click="$emit('edit', caseDetail.id)">
           {{ t('common.edit') }}
         </el-button>
         <ConfirmDelete v-if="canEdit" @confirm="handleDelete">
-          <el-button type="danger" plain size="small">{{ t('common.delete') }}</el-button>
+          <el-button type="danger" plain>{{ t('common.delete') }}</el-button>
         </ConfirmDelete>
-        <el-button plain size="small" @click="handleCopy">{{ t('page.functional.copy') }}</el-button>
+        <el-button plain @click="handleCopy">{{ t('page.functional.copy') }}</el-button>
       </div>
 
       <!-- 基本信息 -->
       <section class="detail-section">
         <h4 class="sec-title">{{ t('page.functional.basicInfo') }}</h4>
-        <el-descriptions :column="2" border size="small">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item :label="t('page.functional.caseNo')">{{ caseDetail.case_no || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.functional.caseName')">{{ caseDetail.case_name }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.functional.priority')">
             <PriorityTag :value="caseDetail.priority" />
           </el-descriptions-item>
-          <el-descriptions-item :label="t('page.functional.type')">
-            {{ caseDetail.type === 'ui' ? 'UI' : t('page.functional.typeFunctional') }}
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('page.functional.status')">
-            <StatusTag :type="statusTagType(caseDetail.status)">{{ statusText(caseDetail.status) }}</StatusTag>
+          <el-descriptions-item :label="t('page.functional.caseCategory')">
+            {{ t(`page.functional.cat${caseDetail.case_category.charAt(0).toUpperCase() + caseDetail.case_category.slice(1)}`) }}
           </el-descriptions-item>
           <el-descriptions-item v-if="caseDetail.dimension" :label="t('page.functional.dimension')">{{ caseDetail.dimension }}</el-descriptions-item>
-          <el-descriptions-item :label="t('page.functional.execResult')">
-            <ExecResultTag :value="caseDetail.exec_result" />
-          </el-descriptions-item>
-          <el-descriptions-item :label="t('page.functional.jiraKey')">{{ caseDetail.jira_issue_key || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.knowledge.module')">{{ caseDetail.module_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.functional.source')">
-            {{ caseDetail.source === 'ai' ? t('page.functional.sourceAI') : t('page.functional.sourceManual') }}
+            {{ caseDetail.source === 'ai' ? t('page.functional.sourceAI') : caseDetail.source === 'manual' ? t('page.functional.sourceManual') : (caseDetail.source || '-') }}
           </el-descriptions-item>
         </el-descriptions>
       </section>
@@ -103,13 +97,11 @@ import { usePermission } from '@/composables/usePermission'
 import EmptyState from '@/components/common/EmptyState.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import PriorityTag from '@/components/tags/PriorityTag.vue'
-import ExecResultTag from '@/components/tags/ExecResultTag.vue'
-import StatusTag from '@/components/common/StatusTag.vue'
 import { formatDateTime } from '@/utils/format'
 
 const props = defineProps({
   visible: Boolean,
-  caseId: { type: Number, required: true },
+  caseId: { type: Number, default: null },
   catalogs: { type: Array, default: () => [] },
 })
 
@@ -124,32 +116,12 @@ function formatTime(val) {
   return val ? formatDateTime(val) : '-'
 }
 
-function statusTagType(status) {
-  const map = { design: 'info', ready: 'success', smoke: 'warning', regression: '', obsolete: 'danger' }
-  return map[status] || 'info'
-}
-
-function statusText(status) {
-  const map = { design: '设计中', ready: '就绪', smoke: '冒烟', regression: '回归', obsolete: '废弃' }
-  return map[status] || status
-}
-
 async function loadDetail() {
   if (!props.caseId) return
   loading.value = true
   try {
     const res = await getCase(props.caseId)
     caseDetail.value = res.data.data
-    // 调试代码：检查test_point字段类型
-    console.log('[DEBUG] caseDetail:', caseDetail.value)
-    console.log('[DEBUG] test_point type:', typeof caseDetail.value?.test_point)
-    console.log('[DEBUG] test_point value:', caseDetail.value?.test_point)
-    console.log('[DEBUG] test_point JSON:', JSON.stringify(caseDetail.value?.test_point))
-    // 如果test_point是对象，显示其属性和值
-    if (caseDetail.value?.test_point && typeof caseDetail.value?.test_point === 'object') {
-      console.log('[DEBUG] test_point is object, keys:', Object.keys(caseDetail.value.test_point))
-      console.log('[DEBUG] test_point.test_point:', caseDetail.value.test_point.test_point)
-    }
   } catch (e) {
     caseDetail.value = null
   } finally {
@@ -224,7 +196,7 @@ watch(() => props.caseId, (id) => {
 
   label {
     display: block;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--el-text-color-secondary);
     margin-bottom: 4px;
@@ -237,7 +209,7 @@ watch(() => props.caseId, (id) => {
     background: var(--el-fill-color-lighter, #f5f7fa);
     border-radius: 4px;
     line-height: 1.6;
-    font-size: 13.5px;
+    font-size: 14px;
     color: var(--el-text-color-primary);
     max-height: none;
     margin: 0;
@@ -255,12 +227,13 @@ watch(() => props.caseId, (id) => {
 
   .tp-dim {
     color: var(--el-text-color-secondary);
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .tp-text {
     margin: 8px 0 0;
     line-height: 1.6;
+    font-size: 14px;
   }
 }
 
@@ -271,7 +244,7 @@ watch(() => props.caseId, (id) => {
   padding-top: 12px;
   border-top: 1px solid var(--el-border-color-extra-light);
   color: var(--el-text-color-secondary, #909399);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .drawer-loading {

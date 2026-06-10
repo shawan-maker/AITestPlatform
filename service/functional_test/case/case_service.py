@@ -1,6 +1,6 @@
 import re
 
-from service.core.enums import FunctionalExecResult, SourceType
+from service.core.enums import CaseCategory, SourceType
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
 from service.functional_test.case.catalog_service import CatalogService
@@ -9,6 +9,8 @@ from service.functional_test.permissions import ensure_case_editor, ensure_case_
 from service.functional_test.case.schemas import (
     BatchOperationFailure,
     CaseBatchDeleteRequest,
+    CaseBatchMoveRequest,
+    CaseBatchCopyRequest,
     CaseBatchResult,
     CaseBatchUpdateRequest,
     CaseBrief,
@@ -83,12 +85,10 @@ class CaseService:
             case_no=case.case_no,
             priority=case.priority,
             dimension=case.dimension,
-            type=case.type,
+            case_category=case.case_category,
             status=case.status,
-            exec_result=case.exec_result,
             source=case.source,
             sort_order=case.sort_order,
-            jira_issue_key=case.jira_issue_key,
             module_name=case.module.name if case.module else None,
             created_by_username=case.created_by.username if case.created_by else None,
             updated_by_username=case.updated_by.username if case.updated_by else None,
@@ -101,15 +101,7 @@ class CaseService:
         await case.fetch_related("test_point")
         brief = await cls._to_brief(case)
         
-        # 调试代码：检查test_point字段类型
-        if case.test_point:
-            print(f"[DEBUG] case.test_point type: {type(case.test_point)}")
-            print(f"[DEBUG] case.test_point.test_point type: {type(case.test_point.test_point)}")
-            print(f"[DEBUG] case.test_point.test_point value: {case.test_point.test_point}")
-        
         test_point_value = case.test_point.test_point if case.test_point else None
-        print(f"[DEBUG] test_point_value type: {type(test_point_value)}")
-        print(f"[DEBUG] test_point_value value: {test_point_value}")
         
         return CaseDetail(
             **brief.model_dump(),
@@ -118,35 +110,44 @@ class CaseService:
             test_steps=case.test_steps,
             test_data=case.test_data,
             expected_result=case.expected_result,
-            actual_result=case.actual_result,
             test_point=test_point_value,
         )
 
     @classmethod
     async def list_cases(cls, user: User, query: CaseListQuery) -> PaginatedCases:
-        await ensure_case_viewer(query.project_id, user)
-        qs = FunctionalCase.filter(project_id=query.project_id)
-        catalog_ids = await CatalogService.collect_catalog_ids_with_descendants(
-            query.project_id, query.catalog_id
-        )
-        if catalog_ids is not None:
-            qs = qs.filter(catalog_id__in=catalog_ids)
-        if query.case_name:
-            qs = qs.filter(case_name__icontains=query.case_name.strip())
-        if query.priority is not None:
-            qs = qs.filter(priority=query.priority)
-        if query.type is not None:
-            qs = qs.filter(type=query.type)
-        if query.exec_result is not None:
-            qs = qs.filter(exec_result=query.exec_result)
-        if query.jira_issue_key:
-            qs = qs.filter(jira_issue_key__icontains=query.jira_issue_key.strip())
-        qs = qs.order_by("sort_order", "id")
-        total, rows = await paginate(qs, query.page, query.page_size)
-        items = [await cls._to_brief(row) for row in rows]
-        return PaginatedCases(
-            total=total, page=query.page, page_size=query.page_size, items=items
-        )
+        try:
+            await ensure_case_viewer(query.project_id, user)
+            qs = FunctionalCase.filter(project_id=query.project_id)
+            catalog_ids = await CatalogService.collect_catalog_ids_with_descendants(
+                query.project_id, query.catalog_id
+            )
+            if catalog_ids is not None:
+                qs = qs.filter(catalog_id__in=catalog_ids)
+            if query.case_name:
+                qs = qs.filter(case_name__icontains=query.case_name.strip())
+            if query.priority is not None:
+                qs = qs.filter(priority=query.priority)
+            if query.case_category is not None:
+                qs = qs.filter(case_category=query.case_category)
+            # 处理排序
+            if query.sort_field and query.sort_order:
+                # 映射前端字段名到模型字段名
+                field_map = {
+                    "priority": "priority",
+                    "updated_at": "updated_at",
+                }
+                db_field = field_map.get(query.sort_field, "sort_order")
+                order_prefix = "-" if query.sort_order == "desc" else ""
+                qs = qs.order_by(f"{order_prefix}{db_field}", "id")
+            else:
+                qs = qs.order_by("sort_order", "id")
+            total, rows = await paginate(qs, query.page, query.page_size)
+            items = [await cls._to_brief(row) for row in rows]
+            return PaginatedCases(
+                total=total, page=query.page, page_size=query.page_size, items=items
+            )
+        except Exception as e:
+            raise  # 重新抛出异常，让 FastAPI 处理
 
     @classmethod
     async def get_detail(cls, user: User, case_id: int) -> CaseDetail:
@@ -164,20 +165,46 @@ class CaseService:
             raise AppException("用例名称不能为空", 400)
         await cls._ensure_name_unique_in_catalog(case_name, data.catalog_id)
         sort_order = await cls._next_sort_order(data.catalog_id)
+        
+        # 生成 case_no：项目标识 + 自增序号
+        from service.project.models import Project
+        project = await Project.get_or_none(id=data.project_id)
+        if project:
+            # 查询当前项目最大的 case_no 序号
+            cases_with_no = await FunctionalCase.filter(
+                project_id=data.project_id,
+                case_no__not_isnull=True
+            ).order_by("-case_no").first()
+            
+            if cases_with_no and cases_with_no.case_no:
+                # 提取序号部分
+                try:
+                    seq = int(cases_with_no.case_no.split("-")[-1]) + 1
+                except (ValueError, IndexError):
+                    seq = 1
+            else:
+                seq = 1
+            
+            # 项目标识取项目名称前4位大写
+            prefix = (project.name or "PROJ")[:4].upper()
+            case_no = f"{prefix}-{seq:04d}"
+        else:
+            case_no = None
+
         case = await FunctionalCase.create(
             project_id=data.project_id,
             catalog_id=data.catalog_id,
             module_id=data.module_id,
+            case_no=case_no,
             case_name=case_name,
             priority=data.priority,
             dimension=data.dimension,
-            type=data.type,
+            case_category=data.case_category,
             preconditions=data.preconditions,
             test_steps=data.test_steps,
             test_data=data.test_data,
             expected_result=data.expected_result,
             source=SourceType.manual,
-            exec_result=FunctionalExecResult.pending,
             sort_order=sort_order,
             created_by_id=user.id,
             updated_by_id=user.id,
@@ -205,15 +232,12 @@ class CaseService:
         for field in (
             "priority",
             "dimension",
-            "type",
+            "case_category",
             "status",
-            "exec_result",
             "preconditions",
             "test_steps",
             "test_data",
             "expected_result",
-            "actual_result",
-            "jira_issue_key",
         ):
             value = getattr(data, field)
             if value is not None:
@@ -247,18 +271,40 @@ class CaseService:
         if case.catalog_id:
             await cls._ensure_name_unique_in_catalog(new_name, case.catalog_id)
         sort_order = await cls._next_sort_order(case.catalog_id) if case.catalog_id else case.sort_order + 1
+        
+        # 生成新的 case_no
+        from service.project.models import Project
+        project = await Project.get_or_none(id=case.project_id)
+        if project:
+            cases_with_no = await FunctionalCase.filter(
+                project_id=case.project_id,
+                case_no__not_isnull=True
+            ).order_by("-case_no").first()
+            
+            if cases_with_no and cases_with_no.case_no:
+                try:
+                    seq = int(cases_with_no.case_no.split("-")[-1]) + 1
+                except (ValueError, IndexError):
+                    seq = 1
+            else:
+                seq = 1
+            
+            prefix = (project.name or "PROJ")[:4].upper()
+            case_no = f"{prefix}-{seq:04d}"
+        else:
+            case_no = null
+
         copied = await FunctionalCase.create(
             project_id=case.project_id,
             catalog_id=case.catalog_id,
             module_id=case.module_id,
             test_point_id=case.test_point_id,
-            case_no=case.case_no,
+            case_no=case_no,
             case_name=new_name,
             priority=case.priority,
             dimension=case.dimension,
-            type=case.type,
+            case_category=case.case_category,
             status=case.status,
-            exec_result=FunctionalExecResult.pending,
             content_format=case.content_format,
             preconditions=case.preconditions,
             test_steps=case.test_steps,
@@ -285,6 +331,9 @@ class CaseService:
 
     @classmethod
     async def reorder(cls, user: User, data: CaseReorderRequest) -> None:
+        # 如果没有指定目录，则跳过排序
+        if data.catalog_id is None:
+            return
         first = await FunctionalCase.get_or_none(id=data.ordered_ids[0])
         if first is None:
             raise AppException("用例不存在", 404)
@@ -307,17 +356,15 @@ class CaseService:
         if all(
             v is None
             for v in (
-                data.type,
+                data.case_category,
                 data.priority,
                 data.status,
-                data.exec_result,
                 data.catalog_id,
                 data.module_id,
                 data.preconditions,
                 data.test_steps,
                 data.test_data,
                 data.expected_result,
-                data.jira_issue_key,
             )
         ):
             raise AppException("批量更新字段不能全为空", 400)
@@ -331,14 +378,12 @@ class CaseService:
                 continue
             try:
                 await ensure_case_editor(case.project_id, user)
-                if data.type is not None:
-                    case.type = data.type
+                if data.case_category is not None:
+                    case.case_category = data.case_category
                 if data.priority is not None:
                     case.priority = data.priority
                 if data.status is not None:
                     case.status = data.status
-                if data.exec_result is not None:
-                    case.exec_result = data.exec_result
                 if data.catalog_id is not None:
                     await cls._validate_catalog(case.project_id, data.catalog_id)
                     case.catalog_id = data.catalog_id
@@ -353,8 +398,6 @@ class CaseService:
                     case.test_data = data.test_data
                 if data.expected_result is not None:
                     case.expected_result = data.expected_result
-                if data.jira_issue_key is not None:
-                    case.jira_issue_key = data.jira_issue_key
                 case.updated_by_id = user.id
                 await case.save()
                 success_count += 1
@@ -386,3 +429,108 @@ class CaseService:
             # 去重套件名称附加到结果中
             result.warning = {"suite_names": list(dict.fromkeys(all_suite_names))}
         return result
+
+    @classmethod
+    async def batch_move(cls, user: User, data: CaseBatchMoveRequest) -> CaseBatchResult:
+        """批量移动用例到目标目录"""
+        await CatalogService._get_catalog_or_404(data.target_catalog_id, user.project_id if hasattr(user, 'project_id') else None)
+        
+        failures: list[BatchOperationFailure] = []
+        success_count = 0
+        
+        for case_id in data.case_ids:
+            case = await FunctionalCase.get_or_none(id=case_id)
+            if case is None:
+                failures.append(BatchOperationFailure(case_id=case_id, reason="用例不存在"))
+                continue
+            try:
+                await ensure_case_editor(case.project_id, user)
+                # 检查目标目录是否有效
+                target_catalog = await CatalogService._get_catalog_or_404(data.target_catalog_id, case.project_id)
+                # 检查名称唯一性
+                if case.catalog_id != data.target_catalog_id:
+                    await cls._ensure_name_unique_in_catalog(case.case_name, data.target_catalog_id)
+                # 更新目录
+                case.catalog_id = data.target_catalog_id
+                case.updated_by_id = user.id
+                await case.save()
+                success_count += 1
+            except AppException as exc:
+                failures.append(BatchOperationFailure(case_id=case_id, reason=exc.message))
+            except Exception as e:
+                failures.append(BatchOperationFailure(case_id=case_id, reason=str(e)))
+        
+        return CaseBatchResult(success_count=success_count, failures=failures)
+
+    @classmethod
+    async def batch_copy(cls, user: User, data: CaseBatchCopyRequest) -> CaseBatchResult:
+        """批量复制用例到目标目录"""
+        await CatalogService._get_catalog_or_404(data.target_catalog_id, user.project_id if hasattr(user, 'project_id') else None)
+        
+        failures: list[BatchOperationFailure] = []
+        success_count = 0
+        
+        for case_id in data.case_ids:
+            case = await FunctionalCase.get_or_none(id=case_id)
+            if case is None:
+                failures.append(BatchOperationFailure(case_id=case_id, reason="用例不存在"))
+                continue
+            try:
+                await ensure_case_editor(case.project_id, user)
+                # 生成新名称
+                new_name = cls._copy_name(case.case_name)
+                if data.target_catalog_id:
+                    await cls._ensure_name_unique_in_catalog(new_name, data.target_catalog_id)
+                
+                # 获取项目信息生成 case_no
+                from service.project.models import Project
+                project = await Project.get_or_none(id=case.project_id)
+                if project:
+                    cases_with_no = await FunctionalCase.filter(
+                        project_id=case.project_id,
+                        case_no__not_isnull=True
+                    ).order_by("-case_no").first()
+                    
+                    if cases_with_no and cases_with_no.case_no:
+                        try:
+                            seq = int(cases_with_no.case_no.split("-")[-1]) + 1
+                        except (ValueError, IndexError):
+                            seq = 1
+                    else:
+                        seq = 1
+                    
+                    prefix = (project.name or "PROJ")[:4].upper()
+                    case_no = f"{prefix}-{seq:04d}"
+                else:
+                    case_no = None
+                
+                # 复制用例
+                sort_order = await cls._next_sort_order(data.target_catalog_id)
+                copied = await FunctionalCase.create(
+                    project_id=case.project_id,
+                    catalog_id=data.target_catalog_id,
+                    module_id=case.module_id,
+                    test_point_id=case.test_point_id,
+                    case_no=case_no,
+                    case_name=new_name,
+                    priority=case.priority,
+                    dimension=case.dimension,
+                    case_category=case.case_category,
+                    status=case.status,
+                    content_format=case.content_format,
+                    preconditions=case.preconditions,
+                    test_steps=case.test_steps,
+                    test_data=case.test_data,
+                    expected_result=case.expected_result,
+                    source=case.source,
+                    sort_order=sort_order,
+                    created_by_id=user.id,
+                    updated_by_id=user.id,
+                )
+                success_count += 1
+            except AppException as exc:
+                failures.append(BatchOperationFailure(case_id=case_id, reason=exc.message))
+            except Exception as e:
+                failures.append(BatchOperationFailure(case_id=case_id, reason=str(e)))
+        
+        return CaseBatchResult(success_count=success_count, failures=failures)

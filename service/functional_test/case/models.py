@@ -1,10 +1,9 @@
 from tortoise import fields, models
 
 from service.core.enums import (
+    CaseCategory,
     ContentFormat,
     FunctionalCaseStatus,
-    FunctionalCaseType,
-    FunctionalExecResult,
     SourceType,
 )
 
@@ -77,20 +76,15 @@ class FunctionalCase(models.Model):
     case_name = fields.CharField(max_length=255)
     priority = fields.SmallIntField(default=3)
     dimension = fields.CharField(max_length=100, null=True)
-    type = fields.CharEnumField(FunctionalCaseType, default=FunctionalCaseType.functional)
+    case_category = fields.CharEnumField(CaseCategory, default=CaseCategory.functional)
     status = fields.CharEnumField(
         FunctionalCaseStatus, default=FunctionalCaseStatus.design
-    )
-    exec_result = fields.CharEnumField(
-        FunctionalExecResult, default=FunctionalExecResult.pending
     )
     content_format = fields.CharEnumField(ContentFormat, default=ContentFormat.text)
     preconditions = fields.TextField(null=True)
     test_steps = fields.TextField(null=True)
     test_data = fields.TextField(null=True)
     expected_result = fields.TextField(null=True)
-    actual_result = fields.TextField(null=True)
-    jira_issue_key = fields.CharField(max_length=50, null=True)
     sort_order = fields.IntField(default=0)
     source = fields.CharEnumField(SourceType, default=SourceType.manual)
     generation_session = fields.ForeignKeyField(

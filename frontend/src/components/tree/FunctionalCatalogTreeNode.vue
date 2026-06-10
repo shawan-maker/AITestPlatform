@@ -35,8 +35,6 @@
               <el-dropdown-item command="child">{{ t('page.functional.addCatalog') }}</el-dropdown-item>
               <el-dropdown-item command="rename">{{ t('page.functional.renameCatalog') }}</el-dropdown-item>
               <el-dropdown-item command="move">{{ t('page.functional.moveCatalog') }}</el-dropdown-item>
-              <el-dropdown-item command="up">{{ t('page.functional.moveUp') }}</el-dropdown-item>
-              <el-dropdown-item command="down">{{ t('page.functional.moveDown') }}</el-dropdown-item>
               <el-dropdown-item command="root">{{ t('page.functional.moveToRoot') }}</el-dropdown-item>
               <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
             </el-dropdown-menu>

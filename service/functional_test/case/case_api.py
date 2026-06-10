@@ -7,8 +7,11 @@ from service.functional_test.case.case_service import CaseService
 from service.functional_test.case.export_service import ExportService
 from service.functional_test.case.schemas import (
     CaseBatchDeleteRequest,
+    CaseBatchMoveRequest,
+    CaseBatchCopyRequest,
     CaseBatchUpdateRequest,
     CaseCreateRequest,
+    CaseDetail,
     CaseListQuery,
     CaseReorderRequest,
     CaseUpdateRequest,
@@ -20,8 +23,12 @@ router = APIRouter(tags=["功能测试-用例"])
 
 def get_case_list_query(
     project_id: int = Query(..., ge=1),
-    catalog_id: int | None = Query(None, ge=1),
+    catalog_id: int | None = Query(None),
     case_name: str | None = Query(None),
+    priority: int | None = Query(None, ge=1, le=4),
+    case_category: str | None = Query(None),
+    sort_field: str | None = Query(None),
+    sort_order: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
 ) -> CaseListQuery:
@@ -29,6 +36,10 @@ def get_case_list_query(
         project_id=project_id,
         catalog_id=catalog_id,
         case_name=case_name,
+        priority=priority,
+        case_category=case_category,
+        sort_field=sort_field,
+        sort_order=sort_order,
         page=page,
         page_size=page_size,
     )
@@ -63,10 +74,6 @@ async def get_case(
     user: User = Depends(get_current_active_user),
 ):
     data = await CaseService.get_detail(user, case_id)
-    # 调试代码：检查返回的JSON响应格式
-    import json
-    print(f"[DEBUG] get_case response type: {type(data)}")
-    print(f"[DEBUG] get_case response: {json.dumps(data.model_dump() if hasattr(data, 'model_dump') else data, ensure_ascii=False, default=str)}")
     return success(data=data)
 
 
@@ -132,3 +139,21 @@ async def batch_delete_cases(
 ):
     data = await CaseService.batch_delete(user, body)
     return success(data=data, message="批量删除完成")
+
+
+@router.post("/cases/batch-move", summary="批量移动用例")
+async def batch_move_cases(
+    body: CaseBatchMoveRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await CaseService.batch_move(user, body)
+    return success(data=data, message="批量移动完成")
+
+
+@router.post("/cases/batch-copy", summary="批量复制用例")
+async def batch_copy_cases(
+    body: CaseBatchCopyRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await CaseService.batch_copy(user, body)
+    return success(data=data, message="批量复制完成")

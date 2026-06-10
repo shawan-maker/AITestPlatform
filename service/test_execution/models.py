@@ -171,7 +171,8 @@ class FunctionalCaseRunRecord(models.Model):
     task_run = fields.ForeignKeyField(
         "models.TestTaskRun",
         related_name="functional_case_run_records",
-        on_delete=fields.CASCADE,
+        null=True,
+        on_delete=fields.SET_NULL,
     )
     functional_case = fields.ForeignKeyField(
         "models.FunctionalCase",
