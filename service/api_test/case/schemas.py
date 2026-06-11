@@ -14,9 +14,19 @@ ApiGenerationSessionOut = AIGenerationSessionOut
 ApiSessionPreviewUpdateRequest = AIGenerationPreviewUpdateRequest
 
 
+class GenerationStatusOut(BaseModel):
+    """v3新增: AI预执行进度轮询响应"""
+    session_id: int
+    status: str  # running | success | failed | cancelled
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    progress: dict | None = None  # {total, completed, items[]}
+    error_message: str | None = None
+
+
 class GeneratePreviewRequest(BaseModel):
-    environment_id: int | None = Field(default=None, ge=1)
-    user_prompt: str | None = None
+    """v2修订: 移除user_prompt参数，直接AI生成（请求体可为空）"""
+    pass
 
 
 class BaseCasePreviewItem(BaseModel):

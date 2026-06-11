@@ -24,12 +24,14 @@ RAG_API_KEY=os.getenv("RAG_API_KEY")
 
 # 调用ChatOpenAI接口生成大模型对象
 # request_timeout: 单次 LLM API 请求超时(秒)，防止 agent.stream() 永久阻塞
+# max_tokens: 单次 LLM 最大输出 token 数（接口文档解析等长输出场景需足够大）
 # max_retries: 自动重试次数
 llm = ChatOpenAI(
     model=os.getenv("LLM_MODEL", "gpt-4o"),
     api_key=os.getenv("LLM_BINDING_API_KEY"),
     base_url=os.getenv("LLM_BINDING_HOST"),
     request_timeout=int(os.getenv("LLM_REQUEST_TIMEOUT", "120")),
+    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
     max_retries=int(os.getenv("LLM_MAX_RETRIES", "2")),
 )
 

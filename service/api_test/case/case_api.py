@@ -7,6 +7,7 @@ from service.api_test.case.schemas import (
     CaseBatchDeleteRequest,
     CaseDebugRunRequest,
     CaseUpdateRequest,
+    GenerationStatusOut,
     GenerateConfirmRequest,
     GeneratePreviewRequest,
     PreviewFromDocRequest,
@@ -163,4 +164,18 @@ async def list_run_records(
     data = await CaseService.list_run_records(
         user, case_id, page=page, page_size=page_size
     )
+    return success(data=data)
+
+
+@router.get(
+    "/interfaces/{interface_id}/cases/generation-status",
+    summary="AI预执行进度轮询(v2)",
+)
+async def get_generation_status(
+    interface_id: int,
+    session_id: int = Query(..., ge=1),
+    user: User = Depends(get_current_active_user),
+):
+    """v2-Q3: 前端每5秒轮询此接口获取预执行进度"""
+    data = await ApiCaseGenerationService.get_generation_status(user, interface_id, session_id)
     return success(data=data)

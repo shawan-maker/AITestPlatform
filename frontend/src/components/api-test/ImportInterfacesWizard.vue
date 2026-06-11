@@ -1,4 +1,5 @@
 <template>
+  <!-- v2-L4: 强制选择新目录，移除mode选项，冲突高亮并禁用confirm -->
   <el-dialog
     v-model="visible"
     :title="t('page.apiCases.importInterfaces')"
@@ -15,14 +16,15 @@
       </el-form-item>
       <el-button type="primary" :loading="previewing" @click="loadPreview">{{ t('page.apiCases.preview') }}</el-button>
     </el-form>
-    <el-form v-if="items.length" inline style="margin-bottom: 12px">
-      <el-form-item :label="t('page.apiCases.importMode')">
-        <el-radio-group v-model="importMode">
-          <el-radio value="skip">{{ t('page.apiCases.actionSkip') }}</el-radio>
-          <el-radio value="upsert">{{ t('page.apiCases.actionUpsert') }}</el-radio>
-        </el-radio-group>
-      </el-form-item>
-    </el-form>
+    <!-- v2-L4: 移除mode选择，强制新建模式；冲突时显示警告 -->
+    <div v-if="hasConflicts" style="margin-bottom: 12px">
+      <el-alert
+        type="warning"
+        :title="'以下接口与目标目录中已有接口冲突，请选择其他目录或修改接口路径'"
+        :closable="false"
+        show-icon
+      />
+    </div>
     <AppTable
       v-if="items.length"
       :data="items"
@@ -35,15 +37,20 @@
       <AppTableColumn prop="summary" variant="content" :label="t('page.apiCases.summary')" />
       <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
         <template #default="{ row }">
-          <el-tag :type="row.conflict ? 'warning' : 'success'">
-            {{ row.conflict ? t('page.apiCases.actionUpsert') : t('page.apiCases.actionCreate') }}
+          <el-tag :type="row._target_conflict ? 'danger' : 'success'">
+            {{ row._target_conflict ? '冲突' : '新建' }}
           </el-tag>
         </template>
       </AppTableColumn>
     </AppTable>
     <template #footer>
       <el-button @click="visible = false">{{ t('common.cancel') }}</el-button>
-      <el-button type="primary" :loading="confirming" :disabled="!selected.length" @click="confirm">
+      <el-button
+        type="primary"
+        :loading="confirming"
+        :disabled="!selected.length || hasConflicts"
+        @click="confirm"
+      >
         {{ t('common.confirm') }}
       </el-button>
     </template>
@@ -81,28 +88,36 @@ const items = ref([])
 const selected = ref([])
 const previewing = ref(false)
 const confirming = ref(false)
-const importMode = ref('skip')
 
 watch(visible, (v) => {
   if (!v) {
     items.value = []
     selected.value = []
-    importMode.value = 'skip'
   }
 })
 
+// v2-L4: 检查是否有目标目录内冲突
+const hasConflicts = computed(() =>
+  items.value.some((item) => item._target_conflict)
+)
+
 function rowClassName({ row }) {
-  if (row.conflict) return 'import-row--conflict'
+  if (row._target_conflict) return 'import-row--conflict'
   return ''
 }
 
 function onSelect(rows) {
-  selected.value = rows
+  // v2-L4: 不允许选中冲突行
+  selected.value = rows.filter((r) => !r._target_conflict)
 }
 
 async function loadPreview() {
   if (!documentId.value || !versionId.value) {
     ElMessage.warning(t('validation.required'))
+    return
+  }
+  if (!props.catalogId) {
+    ElMessage.warning('请先选择目标目录')
     return
   }
   previewing.value = true
@@ -111,7 +126,11 @@ async function loadPreview() {
       document_id: documentId.value,
       version_id: versionId.value,
     })
-    items.value = res.data.data?.items ?? []
+    const rawItems = res.data.data?.items ?? []
+    items.value = rawItems.map((i) => ({
+      ...i,
+      _target_conflict: false,
+    }))
     selected.value = [...items.value]
   } finally {
     previewing.value = false
@@ -120,26 +139,34 @@ async function loadPreview() {
 
 async function confirm() {
   if (!props.catalogId) {
-    ElMessage.warning(t('page.apiCases.selectCatalog'))
+    ElMessage.warning('请先选择目标目录')
     return
   }
   confirming.value = true
   try {
-    await confirmApiImport({
+    // v2-L4: 不再传mode参数，后端强制新目录模式
+    const res = await confirmApiImport({
       project_id: projectId.value,
       document_id: documentId.value,
       version_id: versionId.value,
       catalog_id: props.catalogId,
-      mode: importMode.value,
       items: selected.value.map((i) => ({
         method: i.method,
         path: i.path,
         summary: i.summary,
       })),
     })
-    ElMessage.success(t('common.saved'))
-    emit('imported')
-    visible.value = false
+    const result = res.data.data
+    if (result.failed > 0 && result.conflicts?.length) {
+      ElMessage.error(
+        `${result.failed}个接口导入失败（与目标目录已有接口冲突）：` +
+        result.conflicts.map((c) => `${c.method} ${c.path}`).join('; ')
+      )
+    } else {
+      ElMessage.success(t('common.saved'))
+      emit('imported')
+      visible.value = false
+    }
   } finally {
     confirming.value = false
   }
@@ -147,7 +174,7 @@ async function confirm() {
 </script>
 
 <style scoped lang="scss">
-:deep(.import-row--conflict) {
-  background-color: var(--el-color-warning-light-9);
+::deep(.import-row--conflict) {
+  background-color: var(--el-color-danger-light-9);
 }
 </style>

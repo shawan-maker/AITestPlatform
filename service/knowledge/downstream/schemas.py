@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 class ImportInterfacesRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
     catalog_id: int | None = Field(default=None, ge=1)
-    import_mode: Literal["skip", "upsert"] = "skip"
     items: list[dict[str, Any]] | None = None
 
 

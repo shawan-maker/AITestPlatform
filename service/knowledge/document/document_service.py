@@ -1,3 +1,7 @@
+import logging
+
+from tortoise.expressions import Q
+
 from service.core.config import MAX_UPLOAD_BYTES
 from service.core.deps import get_project_or_404
 from service.core.enums import IndexStatus, KnowledgeDocType
@@ -25,6 +29,8 @@ from service.knowledge.rules.file_rules import FileRules, sha256_hex
 from service.project.models import ProjectMember, ProjectModule
 from service.project.permissions import ensure_project_editor, ensure_project_viewer
 from service.user.models import User
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentService:
@@ -112,6 +118,8 @@ class DocumentService:
                 parse_mode=parse_mode,
                 content=content,
             )
+        # 从 DB 重新读取 version 状态，确认 start_processing 是否已经改了它
+        refreshed = await KnowledgeDocumentVersion.get_or_none(id=version.id)
         return await cls.get_detail(user, document.id)
 
     @classmethod
@@ -282,19 +290,40 @@ class DocumentService:
         interfaces_saved = False
         can_save_interfaces = False
         updated_by_username = None
+
+        # 确定用于展示的版本：优先取"最新处理中版本"，否则取 current_version
+        display_version = None
         if document.current_version_id:
-            version = await KnowledgeDocumentVersion.get_or_none(id=document.current_version_id)
-            if version:
-                version_label = version.version_label
-                index_status = version.index_status
-                parse_status = version.parse_status
-                save_state = await compute_version_save_state(document, version)
-                interfaces_saved = save_state.interfaces_saved
-                can_save_interfaces = save_state.can_save_interfaces
-                if version.created_by_id:
-                    creator = await version.created_by
-                    if creator is not None:
-                        updated_by_username = creator.username
+            display_version = await KnowledgeDocumentVersion.get_or_none(
+                id=document.current_version_id
+            )
+
+        # 检查是否存在比当前版本更新且仍在处理中的版本（重传/更新场景）
+        # 覆盖所有中间状态：
+        #   - index_status: pending / indexing / parsing（Swagger/OpenAPI 同步解析、RAG索引中）
+        #   - parse_status: parsing（RAG已完成但AI结构化解析仍在进行）
+        if display_version:
+            processing_version = await KnowledgeDocumentVersion.filter(
+                document_id=document.id,
+                version_seq__gt=display_version.version_seq,
+            ).filter(
+                Q(index_status__in=["pending", "indexing", "parsing"])
+                | Q(parse_status="parsing")
+            ).order_by("-version_seq").first()
+            if processing_version:
+                display_version = processing_version
+
+        if display_version:
+            version_label = display_version.version_label
+            index_status = display_version.index_status
+            parse_status = display_version.parse_status
+            save_state = await compute_version_save_state(document, display_version)
+            interfaces_saved = save_state.interfaces_saved
+            can_save_interfaces = save_state.can_save_interfaces
+            if display_version.created_by_id:
+                creator = await display_version.created_by
+                if creator is not None:
+                    updated_by_username = creator.username
         return KnowledgeDocumentBrief(
             id=document.id,
             project_id=document.project_id,

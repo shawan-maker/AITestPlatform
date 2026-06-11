@@ -22,6 +22,7 @@ from service.api_test.case.schemas import (
     ApiConfirmResult,
     ApiSessionPreviewUpdateRequest,
     BaseCasePreviewItem,
+    GenerationStatusOut,
     GenerateConfirmRequest,
     GenerateConfirmResult,
     GeneratePreviewRequest,
@@ -80,12 +81,15 @@ class ApiCaseGenerationService:
         interface_id: int,
         data: GeneratePreviewRequest,
     ) -> GeneratePreviewResult:
+        """v2修订: 移除user_prompt参数，直接AI生成"""
         iface = await InterfaceService._get_current_or_404(interface_id)
         await ensure_api_viewer(iface.project_id, user)
         resolved = await DependencyResolverService.resolve(iface.id)
         api_doc = interface_to_doc_json(iface)
         precoditions = resolved.precoditions_summaries
 
+        # v2-Q2: 不再传入user_prompt
+        user_prompt = None
         session = await AIGenerationSession.create(
             project_id=iface.project_id,
             module_id=iface.module_id,
@@ -93,8 +97,8 @@ class ApiCaseGenerationService:
             input_ref_type=InputRefType.interface,
             input_ref_id=iface.id,
             status=SessionStatus.running,
-            user_prompt=data.user_prompt,
-            prompt_hash=compute_prompt_hash(api_doc, data.user_prompt),
+            user_prompt=None,
+            prompt_hash=compute_prompt_hash(api_doc, None),
             source_channel=SourceChannel.interface_detail,
             created_by_id=user.id,
         )
@@ -111,11 +115,12 @@ class ApiCaseGenerationService:
                 )
                 raise AppException(LLM_NOT_CONFIGURED_MSG, 503)
             else:
+                # v2-Q2: 不传user_prompt
                 base_cases = await asyncio.to_thread(
                     cls._invoke_basecase_workflow,
                     api_doc,
                     precoditions,
-                    data.user_prompt,
+                    None,
                 )
             session.status = SessionStatus.success
             session.output_payload = {
@@ -528,4 +533,44 @@ class ApiCaseGenerationService:
             environment_id=environment_id,
             project_id=project_id,
             additional_info=build_default_additional_info(),
+        )
+
+    # ==================== v2-Q3: generation-status 轮询 ====================
+
+    @classmethod
+    async def get_generation_status(
+        cls,
+        user: User,
+        interface_id: int,
+        session_id: int,
+    ) -> GenerationStatusOut:
+        """v2: 查询AI预执行进度，供前端5s轮询"""
+        session = await cls._get_api_session_or_404(session_id)
+        # 验证session归属
+        if (
+            session.input_ref_type == InputRefType.interface
+            and session.input_ref_id != interface_id
+        ):
+            raise AppException("生成会话与接口不匹配", 400)
+        await ensure_api_viewer(session.project_id, user)
+
+        output = session.output_payload or {}
+        base_cases_raw = output.get("base_cases") or []
+
+        progress = None
+        if session.status == SessionStatus.running and base_cases_raw:
+            # 构建进度信息（从session的output_payload或progress字段获取）
+            progress = {
+                "total": len(base_cases_raw),
+                "completed": 0,  # TODO: 从实际执行进度中获取
+                "items": [],
+            }
+
+        return GenerationStatusOut(
+            session_id=session.id,
+            status=session.status.value if hasattr(session.status, "value") else str(session.status),
+            started_at=session.created_at,
+            completed_at=session.finished_at,
+            progress=progress,
+            error_message=session.error_message,
         )

@@ -1,4 +1,5 @@
 <template>
+  <!-- v2-Q5: 严格12列顺序 + 接口目录完整路径 -->
   <div class="interface-list-panel">
     <el-input
       :model-value="searchQuery"
@@ -20,12 +21,18 @@
       @page-change="$emit('page-change', $event)"
       @size-change="$emit('size-change', $event)"
     >
-      <AppTableColumn prop="method" :label="t('page.apiCases.method')" :width="90">
+      <!-- v2: 列1 - 序号（隐式在PaginatedTable中） -->
+      <AppTableColumn prop="summary" :label="'接口名称'" variant="content" min-width="150">
+        <template #default="{ row }">
+          {{ row.summary || row.name || '-' }}
+        </template>
+      </AppTableColumn>
+      <AppTableColumn prop="method" :label="'请求方法'" :width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="methodTagType(row.method)">{{ row.method }}</el-tag>
         </template>
       </AppTableColumn>
-      <AppTableColumn prop="path" variant="content" :label="t('page.apiCases.path')">
+      <AppTableColumn prop="path" :label="'请求路径'" variant="content" min-width="180">
         <template #default="{ row, $index }">
           <span
             v-if="canEdit"
@@ -38,12 +45,25 @@
           {{ row.path }}
         </template>
       </AppTableColumn>
-      <AppTableColumn prop="summary" variant="content" :label="t('page.apiCases.summary')" />
-      <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="140">
+      <!-- v2-Q5: 列5 - 接口目录完整路径 -->
+      <AppTableColumn prop="catalog_full_path" :label="'接口目录'" variant="content" min-width="160">
         <template #default="{ row }">
-          <el-button link type="primary" @click.stop="$emit('edit', row)">{{ t('common.edit') }}</el-button>
-          <el-button link @click.stop="$emit('copy', row)">{{ t('common.copy') }}</el-button>
-          <el-button link type="danger" @click.stop="$emit('delete', row)">{{ t('common.delete') }}</el-button>
+          {{ row.catalog_full_path || '-' }}
+        </template>
+      </AppTableColumn>
+      <!-- 列6-9 创建/更新信息 -->
+      <AppTableColumn :label="'创建时间'" :width="160">
+        <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+      </AppTableColumn>
+      <AppTableColumn :label="'更新时间'" :width="160">
+        <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
+      </AppTableColumn>
+      <!-- 列10-12 操作列 -->
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="200">
+        <template #default="{ row }">
+          <el-button link type="primary" @click.stop="$emit('edit', row)">编辑</el-button>
+          <el-button link @click.stop="$emit('copy', row)">复制</el-button>
+          <el-button link type="danger" @click.stop="$emit('delete', row)">删除</el-button>
         </template>
       </AppTableColumn>
     </PaginatedTable>
@@ -91,6 +111,17 @@ function methodTagType(method) {
   if (m === 'PUT' || m === 'PATCH') return 'warning'
   if (m === 'DELETE') return 'danger'
   return 'info'
+}
+
+function formatTime(isoStr) {
+  if (!isoStr) return '-'
+  try {
+    const d = new Date(isoStr)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return isoStr
+  }
 }
 
 function onDragStart(index) {

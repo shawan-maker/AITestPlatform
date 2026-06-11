@@ -96,6 +96,7 @@ import {
 } from '@/api/knowledge'
 import { usePermission } from '@/composables/usePermission'
 import { useDownload } from '@/composables/useDownload'
+import { usePolling } from '@/composables/usePolling'
 import { 
   canSaveInterfaces,
   isDocumentProcessing,
@@ -128,6 +129,16 @@ const importVersionId = ref(null)
 const showReupload = ref(false)
 const reuploading = ref(false)
 const showHistory = ref(false)
+
+const detailPolling = usePolling(
+  async () => {
+    await load({ silent: true })
+  },
+  {
+    interval: 3000,
+    until: () => !isProcessing.value,
+  },
+)
 
 const isProcessing = computed(() => isDocumentProcessing(doc.value))
 const processingTitle = computed(() => 
@@ -245,6 +256,7 @@ async function submitReupload(formData) {
     ElMessage.success(t('page.knowledge.reuploadOk'))
     showReupload.value = false
     await load()
+    detailPolling.start()
   } finally {
     reuploading.value = false
   }
@@ -262,7 +274,7 @@ watch(
 onMounted(async () => {
   await load()
   if (isProcessing.value) {
-    // Start polling
+    detailPolling.start()
   }
 })
 

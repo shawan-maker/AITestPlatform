@@ -61,7 +61,7 @@ const { t } = useI18n()
 let dragFromIndex = null
 
 function ifaceLabel(iface) {
-  return iface.summary ? `${iface.path} — ${iface.summary}` : iface.path
+  return iface.summary || iface.name || (iface.path || '-')
 }
 
 function methodTagType(method) {

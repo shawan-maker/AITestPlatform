@@ -20,6 +20,7 @@ from service.knowledge.rules.file_rules import detect_api_spec_kind
 from service.knowledge.rules.parse_router import resolve_parse_route
 from utils.parser.openapi_document_parser import parse_openapi_file
 from utils.parser.swagger_document_parser import parse_swagger_file
+from utils.parser.api_document_ai_parser import APIDocumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -59,17 +60,20 @@ class IndexWorker:
         content: bytes,
     ) -> None:
         """接口规范文件同步解析，其余文档异步索引（避免 create_task 被 GC 或未调度）。"""
-        if cls._should_process_inline(doc_type, parse_mode, content):
+        inline = cls._should_process_inline(doc_type, parse_mode, content)
+        kind = detect_api_spec_kind(content)
+        if inline:
             await cls.process_version(version_id)
         else:
             cls.schedule(version_id)
-
-    @staticmethod
     def _should_process_inline(
         doc_type: KnowledgeDocType,
         parse_mode: ParseMode,
         content: bytes,
     ) -> bool:
+        # AI 解析模式始终走异步，不管内容是否像 Swagger/OpenAPI
+        if parse_mode == ParseMode.ai:
+            return False
         if doc_type != KnowledgeDocType.api_doc:
             return False
         if parse_mode in (ParseMode.swagger, ParseMode.openapi):
@@ -178,6 +182,9 @@ class IndexWorker:
                     "index_error",
                 ]
             )
+            # 对 API 文档类型，额外执行 AI 结构化解析以提取接口数据
+            if document.doc_type == KnowledgeDocType.api_doc:
+                await cls._process_ai_parse(version, document, abs_path)
 
             await cls._activate_version(version, document)
 
@@ -196,6 +203,55 @@ class IndexWorker:
                 except Exception:
                     logger.critical("版本 %s 状态回滚完全失败，状态可能卡在 indexing", version.id)
             raise
+
+    @classmethod
+    async def _process_ai_parse(
+        cls,
+        version: KnowledgeDocumentVersion,
+        document: KnowledgeDocument,
+        abs_path: str,
+    ) -> None:
+        """RAG 索引成功后，额外用 AI 提取结构化接口数据（仅 api_doc 类型）。"""
+        version.parse_status = ParseStatus.parsing
+        version.parse_error = None
+        await version.save(update_fields=["parse_status", "parse_error"])
+
+        try:
+            file_path = Path(abs_path)
+            # 读取文件文本内容作为 AI 解析输入
+            raw_text = file_path.read_text(encoding="utf-8", errors="replace")
+
+            # 调用 AI Parser 提取接口数据（同步阻塞，放入线程池）
+            parsed = await asyncio.to_thread(
+                APIDocumentParser().api_parser, raw_text
+            )
+
+            if not isinstance(parsed, list):
+                parsed = [parsed] if isinstance(parsed, dict) else []
+
+            # 保存解析结果（复用 _save_parse_result）
+            relative_path = cls._save_parse_result(
+                project_id=document.project_id,
+                document_id=document.id,
+                version_label=version.version_label,
+                data=parsed,
+            )
+
+            version.parse_status = ParseStatus.parsed
+            version.parse_result_path = relative_path
+            version.parse_error = None
+            await version.save(
+                update_fields=["parse_status", "parse_result_path", "parse_error"]
+            )
+        except Exception as exc:
+            logger.exception("AI 结构化解析失败 document=%s version=%s", document.id, version.id)
+            err_msg = str(exc) or repr(exc) or "AI 结构化解析未知错误"
+            version.parse_status = ParseStatus.failed
+            version.parse_error = err_msg
+            try:
+                await version.save(update_fields=["parse_status", "parse_error"])
+            except Exception:
+                logger.error("保存 AI 解析失败状态也失败了 version=%s", version.id)
 
     @classmethod
     async def _process_swagger(

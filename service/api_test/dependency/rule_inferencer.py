@@ -1,4 +1,5 @@
 import re
+from collections import defaultdict
 from typing import Any
 
 from service.api_test.dependency.schemas import DependencyEdgeDraft
@@ -9,7 +10,7 @@ _TOKEN_FIELD_RE = re.compile(r"token|access_token|authorization", re.I)
 
 
 class RuleInferencer:
-    """OpenAPI/Swagger heuristic dependency inference."""
+    """OpenAPI/Swagger heuristic dependency inference. v2: 增加DFS环检测"""
 
     @classmethod
     def infer_for_target(
@@ -97,3 +98,46 @@ class RuleInferencer:
                     token_field = "responses.data.access_token"
                     break
         return {"headers.Authorization": token_field}
+
+    # ==================== v2-L3: DFS 环检测算法 ====================
+
+    @classmethod
+    def detect_cycle(
+        cls,
+        target_api_id: int,
+        edges: list[dict],
+    ) -> bool:
+        """
+        使用DFS检测依赖链中是否存在环。
+
+        Args:
+            target_api_id: 目标接口ID（from_api_id，即依赖发起方）
+            edges: 所有的依赖边列表，每项含 from_api_id, to_api_id
+
+        Returns:
+            True if cycle detected, False otherwise
+        """
+        graph: defaultdict[int, list[int]] = defaultdict(list)
+        for edge in edges:
+            from_id = edge.get("from_api_id")
+            to_id = edge.get("to_api_id")
+            if from_id is not None and to_id is not None:
+                graph[from_id].append(to_id)
+
+        visited: set[int] = set()
+        path: set[int] = set()
+
+        def dfs(api_id: int) -> bool:
+            if api_id in path:
+                return True  # 发现环！
+            if api_id in visited:
+                return False
+            path.add(api_id)
+            for neighbor in graph.get(api_id, []):
+                if dfs(neighbor):
+                    return True
+            path.remove(api_id)
+            visited.add(api_id)
+            return False
+
+        return dfs(target_api_id)

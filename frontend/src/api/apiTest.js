@@ -89,6 +89,7 @@ export function batchDeleteApiCases(data) {
 }
 
 export function generateCasePreview(interfaceId, data) {
+  // v2-Q2: 不再传user_prompt参数
   return request.post(`/api-test/interfaces/${interfaceId}/cases/generate-preview`, data)
 }
 
@@ -96,8 +97,16 @@ export function confirmCaseGeneration(interfaceId, data) {
   return request.post(`/api-test/interfaces/${interfaceId}/cases/confirm`, data)
 }
 
-export function debugRunApiCase(id, data) {
-  return request.post(`/api-test/cases/${id}/debug-run`, data)
+// v2-Q3: AI预执行进度轮询
+export function getGenerationStatus(interfaceId, sessionId) {
+  return request.get(`/api-test/interfaces/${interfaceId}/cases/generation-status`, {
+    params: { session_id: sessionId },
+  })
+}
+
+// v2-L2: 用例调试运行（支持AbortController取消）
+export function debugRunApiCase(id, data, { signal } = {}) {
+  return request.post(`/api-test/cases/${id}/debug-run`, data, { signal })
 }
 
 export function getApiCaseRunRecords(id) {
@@ -113,8 +122,9 @@ export function saveDebugTemplate(interfaceId, data) {
   return request.put(`/api-test/interfaces/${interfaceId}/debug-template`, data)
 }
 
-export function debugRunInterface(interfaceId, data) {
-  return request.post(`/api-test/interfaces/${interfaceId}/debug-run`, data)
+// v2-L2: 接口调试运行（支持AbortController取消）
+export function debugRunInterface(interfaceId, data, { signal } = {}) {
+  return request.post(`/api-test/interfaces/${interfaceId}/debug-run`, data, { signal })
 }
 
 export function fillDebugFromDoc(interfaceId) {

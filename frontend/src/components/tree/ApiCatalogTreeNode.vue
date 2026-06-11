@@ -35,8 +35,6 @@
               <el-dropdown-item command="child">{{ t('page.apiCases.addChildCatalog') }}</el-dropdown-item>
               <el-dropdown-item command="rename">{{ t('page.apiCases.renameCatalog') }}</el-dropdown-item>
               <el-dropdown-item command="move">{{ t('page.apiCases.moveCatalog') }}</el-dropdown-item>
-              <el-dropdown-item command="up">{{ t('page.apiCases.moveUp') }}</el-dropdown-item>
-              <el-dropdown-item command="down">{{ t('page.apiCases.moveDown') }}</el-dropdown-item>
               <el-dropdown-item command="root">{{ t('page.apiCases.moveToRoot') }}</el-dropdown-item>
               <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
             </el-dropdown-menu>

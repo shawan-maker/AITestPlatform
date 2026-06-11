@@ -5,6 +5,7 @@ from service.api_test.interface.models import ApiInterface
 from service.api_test.models import ApiDependency, ApiDependencyGroup
 from service.api_test.shared.interface_doc import interface_to_doc_dict
 from service.core.enums import DependencyInferenceSource
+from service.core.exceptions import AppException
 
 
 class DependencyMergeService:
@@ -26,6 +27,13 @@ class DependencyMergeService:
         ).all()
         candidate_docs = [interface_to_doc_dict(c) | {"id": c.id} for c in candidates]
         id_by_key = {f"{c.method}:{c.path}": c.id for c in candidates}
+        # v2-L3: 收集所有已有边用于环检测
+        from service.api_test.models import ApiDependency as _Dep
+        existing_edges_raw = await _Dep.all().values("from_api_id", "to_api_id")
+        all_edges_list = [
+            {"from_api_id": e["from_api_id"], "to_api_id": e["to_api_id"]}
+            for e in existing_edges_raw
+        ]
 
         for target_id in target_interface_ids:
             target = await ApiInterface.get_or_none(id=target_id, is_current=True)
@@ -55,12 +63,30 @@ class DependencyMergeService:
                     continue
                 resolved.append((to_id, draft))
 
+            # v2-L3: 环检测 — 在写入前检查新边是否会形成环
+            if resolved:
+                test_edges = list(all_edges_list) + [
+                    {"from_api_id": target_id, "to_api_id": to_id}
+                    for to_id, _ in resolved
+                ]
+                has_cycle = RuleInferencer.detect_cycle(target_id, test_edges)
+                if has_cycle:
+                    errors.append(
+                        f"{target.method} {target.path}: 检测到循环依赖，跳过保存"
+                    )
+                    continue
+
             await cls.merge_edges(
                 target_id,
                 project_id,
                 resolved,
                 user_id=user_id,
             )
+            # 更新all_edges_list用于后续目标的检测
+            all_edges_list.extend([
+                {"from_api_id": target_id, "to_api_id": to_id}
+                for to_id, _ in resolved
+            ])
         return target_interface_ids, errors
 
     @classmethod

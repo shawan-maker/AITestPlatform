@@ -20,8 +20,10 @@ class ImportService:
         user: User,
         document_id: int,
         version_id: int,
+        *,
+        catalog_id: int | None = None,
     ):
-        return await ApiTestImportService.preview(user, document_id, version_id)
+        return await ApiTestImportService.preview(user, document_id, version_id, catalog_id=catalog_id)
 
     @classmethod
     async def import_interfaces(
@@ -96,14 +98,15 @@ class ImportService:
                 module_id=body.module_id,
                 document_id=document_id,
                 version_id=version_id,
-                mode=body.import_mode,
+                mode="skip",
                 items=items,
             ),
         )
         mark_interfaces_imported(version.parse_result_path)
+        # ImportConfirmResult 无 updated/skipped 字段（v2 全部为新建模式）
         return ImportInterfacesResult(
             created=result.created,
-            updated=result.updated,
-            skipped=result.skipped,
+            updated=result.failed,
+            skipped=len(result.conflicts),
             interface_ids=result.interface_ids,
         )

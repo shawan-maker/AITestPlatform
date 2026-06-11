@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from service.core.deps import get_current_active_user
 from service.core.response import success
@@ -16,9 +16,10 @@ router = APIRouter()
 async def preview_import_interfaces(
     document_id: int,
     version_id: int,
+    catalog_id: int | None = Query(default=None, description="目标目录ID，用于目录范围冲突检测"),
     user: User = Depends(get_current_active_user),
 ):
-    data = await ImportService.preview_interfaces(user, document_id, version_id)
+    data = await ImportService.preview_interfaces(user, document_id, version_id, catalog_id=catalog_id)
     return success(data=data)
 
 

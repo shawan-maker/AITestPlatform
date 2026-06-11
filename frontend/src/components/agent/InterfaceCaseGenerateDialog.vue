@@ -1,4 +1,5 @@
 <template>
+  <!-- v2-Q2/Q3: 移除user_prompt输入框，直接生成preview；confirm后5s轮询进度 -->
   <el-dialog
     :model-value="modelValue"
     :title="t('page.apiCases.generateCases')"
@@ -9,27 +10,37 @@
     @update:model-value="$emit('update:modelValue', $event)"
     @closed="reset"
   >
-    <el-form v-if="step === 'form'" label-width="100px">
-      <el-form-item :label="t('page.agent.prompt')">
-        <el-input v-model="userPrompt" type="textarea" :rows="3" :placeholder="t('page.agent.promptPlaceholder')" />
-      </el-form-item>
+    <div v-if="step === 'form'" class="generate-form">
       <el-form-item :label="t('page.apiCases.selectEnv')">
         <EnvironmentSelect v-model="environmentId" />
       </el-form-item>
-    </el-form>
+      <!-- v2-Q2: 不再显示user_prompt输入框，点击生成即直接调用API -->
+      <p style="color: var(--el-text-color-secondary); font-size: 13px; margin: 0">
+        {{ t('page.apiCases.generateHint') || '将基于接口文档自动生成测试用例预览' }}
+      </p>
+    </div>
 
-    <div v-else v-loading="previewLoading" class="case-preview-body" :style="{ maxHeight: `${bodyMaxHeight}px` }">
+    <div v-else-if="step === 'preview'" v-loading="previewLoading" class="case-preview-body" :style="{ maxHeight: `${bodyMaxHeight}px` }">
       <el-alert v-if="sessionError" type="error" :title="sessionError" show-icon :closable="false" />
-      <el-checkbox-group v-else v-model="selectedIndexes">
-        <div v-for="(item, index) in baseCases" :key="index" class="case-row">
-          <el-checkbox :label="index">{{ item.name || `Case ${index + 1}` }}</el-checkbox>
-          <ul v-if="item.steps?.length">
-            <li v-for="(step, si) in item.steps" :key="si">{{ step }}</li>
-          </ul>
+      <template v-else>
+        <!-- v2-Q3: 轮询中显示进度 -->
+        <div v-if="pollingStatus === 'running'" class="polling-status">
+          <el-progress :percentage="pollingProgress" :stroke-width="8" />
+          <span style="font-size: 12px; color: var(--el-text-color-secondary)">
+            正在执行预验证... ({{ pollingCompleted }}/{{ pollingTotal }})
+          </span>
         </div>
-      </el-checkbox-group>
-      <el-empty v-if="!previewLoading && !baseCases.length && !sessionError" :description="t('page.agent.noPreview')" />
-      <el-form-item v-if="baseCases.length" :label="t('page.apiCases.selectEnv')" style="margin-top: 16px">
+        <el-checkbox-group v-model="selectedIndexes">
+          <div v-for="(item, index) in baseCases" :key="index" class="case-row">
+            <el-checkbox :label="index">{{ item.name || `Case ${index + 1}` }}</el-checkbox>
+            <ul v-if="item.steps?.length">
+              <li v-for="(step, si) in item.steps" :key="si">{{ step }}</li>
+            </ul>
+          </div>
+        </el-checkbox-group>
+        <el-empty v-if="!previewLoading && !baseCases.length && !sessionError" :description="t('page.agent.noPreview')" />
+      </template>
+      <el-form-item v-if="baseCases.length && step === 'preview'" :label="t('page.apiCases.selectEnv')" style="margin-top: 16px">
         <EnvironmentSelect v-model="confirmEnvId" />
       </el-form-item>
     </div>
@@ -41,7 +52,12 @@
       </el-button>
       <template v-else>
         <el-button @click="step = 'form'">{{ t('common.back') }}</el-button>
-        <el-button type="primary" :loading="confirming" :disabled="!canConfirm" @click="runConfirm">
+        <el-button
+          type="primary"
+          :loading="confirming || pollingStatus === 'running'"
+          :disabled="!canConfirm"
+          @click="runConfirm"
+        >
           {{ t('common.confirm') }}
         </el-button>
       </template>
@@ -50,10 +66,14 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { confirmCaseGeneration, generateCasePreview } from '@/api/apiTest'
+import {
+  confirmCaseGeneration,
+  generateCasePreview,
+  getGenerationStatus,
+} from '@/api/apiTest'
 import { useContentDialog } from '@/composables/useContentDialog'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 
@@ -67,8 +87,8 @@ const emit = defineEmits(['update:modelValue', 'confirmed'])
 const { t } = useI18n()
 const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(220)
 
+// v2-Q2: 移除 userPrompt，仅保留环境选择
 const step = ref('form')
-const userPrompt = ref('')
 const environmentId = ref(null)
 const confirmEnvId = ref(null)
 const previewLoading = ref(false)
@@ -78,7 +98,17 @@ const baseCases = ref([])
 const selectedIndexes = ref([])
 const sessionError = ref('')
 
-const canConfirm = computed(() => Boolean(confirmEnvId.value && selectedIndexes.value.length && sessionId.value))
+// v2-Q3: 轮询状态
+const pollingStatus = ref('')
+const pollingProgress = ref(0)
+const pollingCompleted = ref(0)
+const pollingTotal = ref(0)
+let pollTimer = null
+
+const canConfirm = computed(() => {
+  if (pollingStatus.value === 'running') return false
+  return Boolean(confirmEnvId.value && selectedIndexes.value.length && sessionId.value)
+})
 
 watch(
   () => props.modelValue,
@@ -88,8 +118,8 @@ watch(
 )
 
 function reset() {
+  stopPolling()
   step.value = 'form'
-  userPrompt.value = ''
   environmentId.value = null
   confirmEnvId.value = null
   previewLoading.value = false
@@ -98,14 +128,18 @@ function reset() {
   baseCases.value = []
   selectedIndexes.value = []
   sessionError.value = ''
+  pollingStatus.value = ''
+  pollingProgress.value = 0
+  pollingCompleted.value = 0
+  pollingTotal.value = 0
 }
 
 async function runPreview() {
   previewLoading.value = true
   sessionError.value = ''
   try {
+    // v2-Q2: 不再传user_prompt参数
     const res = await generateCasePreview(props.interfaceId, {
-      user_prompt: userPrompt.value || undefined,
       environment_id: environmentId.value || undefined,
     })
     const data = res.data.data
@@ -132,18 +166,88 @@ async function runConfirm() {
       selected_indexes: selectedIndexes.value,
       environment_id: confirmEnvId.value,
     })
-    ElMessage.success(t('page.agent.saved'))
-    emit('confirmed')
-    emit('update:modelValue', false)
-  } finally {
+    // v2-Q3: confirm后开始轮询generation-status
+    startPolling()
+  } catch (err) {
+    sessionError.value = err.message || t('common.requestFailed')
     confirming.value = false
   }
 }
+
+// ==================== v2-Q3: 5s轮询逻辑 ====================
+
+function startPolling() {
+  pollingStatus.value = 'running'
+  pollingCompleted.value = 0
+  pollingTotal.value = baseCases.value.length
+
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await getGenerationStatus(props.interfaceId, sessionId.value)
+      const statusData = res.data.data
+      const status = statusData.status
+
+      if (status === 'success' || status === 'failed' || status === 'cancelled') {
+        stopPolling()
+        pollingStatus.value = status
+        if (status === 'success') {
+          pollingProgress.value = 100
+          pollingCompleted.value = pollingTotal.value
+          ElMessage.success(t('page.agent.saved'))
+          emit('confirmed')
+          emit('update:modelValue', false)
+        } else if (status === 'failed') {
+          sessionError.value = statusData.error_message || '执行失败'
+        } else {
+          sessionError.value = '用户取消了本次生成'
+        }
+        confirming.value = false
+      } else {
+        // 更新进度
+        const progress = statusData.progress
+        if (progress) {
+          pollingCompleted.value = progress.completed || 0
+          pollingTotal.value = progress.total || baseCases.value.length
+          pollingProgress.value =
+            pollingTotal.value > 0
+              ? Math.round((pollingCompleted.value / pollingTotal.value) * 100)
+              : 0
+        }
+      }
+    } catch {
+      // 网络错误继续轮询
+    }
+  }, 5000) // v2: 每5秒查询一次
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+onUnmounted(() => {
+  stopPolling()
+})
 </script>
 
 <style scoped lang="scss">
+.generate-form {
+  padding: 10px 0;
+}
+
 .case-preview-body {
   overflow: auto;
+}
+
+.polling-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  margin-bottom: 8px;
 }
 
 .case-row {

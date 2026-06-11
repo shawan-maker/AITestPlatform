@@ -35,7 +35,7 @@ class InterfaceService:
         return iface
 
     @classmethod
-    def _to_out(cls, iface: ApiInterface) -> InterfaceOut:
+    def _to_out(cls, iface: ApiInterface, catalog_full_path: str | None = None) -> InterfaceOut:
         return InterfaceOut(
             id=iface.id,
             project_id=iface.project_id,
@@ -55,6 +55,7 @@ class InterfaceService:
             sort_order=iface.sort_order,
             created_at=iface.created_at,
             updated_at=iface.updated_at,
+            catalog_full_path=catalog_full_path,
         )
 
     @classmethod
@@ -99,11 +100,36 @@ class InterfaceService:
         return list(result)
 
     @classmethod
+    async def _build_catalog_full_path(cls, catalog_id: int | None, project_id: int) -> str | None:
+        """v2: 递归构建目录完整路径，格式: 一级/二级/三级"""
+        if catalog_id is None:
+            return None
+        catalogs = await ApiInterfaceCatalog.filter(
+            project_id=project_id
+        ).values("id", "parent_id", "name")
+        id_to_cat = {c["id"]: c for c in catalogs}
+        if catalog_id not in id_to_cat:
+            return None
+        parts: list[str] = []
+        cid = catalog_id
+        visited = set()
+        while cid is not None and cid not in visited:
+            visited.add(cid)
+            cat = id_to_cat.get(cid)
+            if not cat:
+                break
+            parts.append(cat["name"])
+            cid = cat.get("parent_id")
+        parts.reverse()
+        return " / ".join(parts)
+
+    @classmethod
     async def list_interfaces(
         cls, user: User, query: InterfaceListQuery
     ) -> PaginatedInterfaces:
         await ensure_api_viewer(query.project_id, user)
         qs = ApiInterface.filter(project_id=query.project_id, is_current=True)
+        # v2-L1: 默认全局搜索，可选按catalog_id筛选（含子目录）
         if query.catalog_id is not None:
             catalog_ids = await cls._collect_catalog_ids_with_descendants(
                 query.project_id, query.catalog_id
@@ -114,11 +140,16 @@ class InterfaceService:
             qs = qs.filter(Q(path__icontains=kw) | Q(summary__icontains=kw))
         qs = qs.order_by("sort_order", "id")
         total, items = await paginate(qs, query.page, query.page_size)
+        # v2-Q5: 批量构建catalog_full_path
+        out_items = []
+        for iface in items:
+            full_path = await cls._build_catalog_full_path(iface.catalog_id, query.project_id)
+            out_items.append(cls._to_out(iface, catalog_full_path=full_path))
         return PaginatedInterfaces(
             total=total,
             page=query.page,
             page_size=query.page_size,
-            items=[cls._to_out(i) for i in items],
+            items=out_items,
         )
 
     @classmethod
@@ -185,34 +216,25 @@ class InterfaceService:
     async def update(
         cls, user: User, interface_id: int, data: InterfaceUpdateRequest
     ) -> InterfaceOut:
+        """v2修订: 白名单仅3字段(name/method/path)，其他字段忽略。改method/path走版本管理"""
         iface = await cls._get_current_or_404(interface_id)
         await ensure_api_editor(iface.project_id, user)
+        # v2-Q1: 仅允许 name(summary)、method、path 三字段
         updates: dict = {}
-        if data.catalog_id is not None:
-            await cls._validate_catalog(iface.project_id, data.catalog_id)
-            updates["catalog_id"] = data.catalog_id
-        if data.module_id is not None:
-            await cls._validate_module(iface.project_id, data.module_id)
-            updates["module_id"] = data.module_id
-        if data.summary is not None:
-            updates["summary"] = data.summary
-        if data.parameters is not None:
-            updates["parameters"] = data.parameters
-        if data.request_body is not None:
-            updates["request_body"] = data.request_body
-        if data.responses is not None:
-            updates["responses"] = data.responses
+        if data.name is not None:
+            updates["summary"] = data.name
 
         method = data.method.upper() if data.method else iface.method
         path = data.path if data.path is not None else iface.path
 
         if data.method is not None or data.path is not None:
+            # method或path变更 → 走版本管理(新行)
             iface = await VersionService.bump_version_on_identity_change(
                 iface, method=method, path=path, user_id=user.id, updates=updates
             )
         elif updates:
-            for key, value in updates.items():
-                setattr(iface, key, value)
+            # 仅修改summary(name) → 原地更新
+            setattr(iface, "summary", updates["summary"])
             iface.updated_by_id = user.id
             await iface.save()
         return cls._to_out(iface)

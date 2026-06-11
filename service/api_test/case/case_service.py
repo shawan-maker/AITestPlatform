@@ -22,9 +22,10 @@ from service.user.models import User
 class CaseService:
     @classmethod
     async def _get_case_or_404(cls, case_id: int) -> ApiTestCase:
+        # v2-L5: 并发删除时返回友好提示
         case = await ApiTestCase.get_or_none(id=case_id)
         if case is None:
-            raise AppException("用例不存在", 404)
+            raise AppException("该用例已被删除，请刷新页面", 404)
         return case
 
     @classmethod

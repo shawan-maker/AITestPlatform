@@ -20,6 +20,8 @@ class DebugRunRequest(BaseModel):
     environment_id: int = Field(..., ge=1)
     payload: dict[str, Any] | None = None
     file_id: int | None = Field(default=None, ge=1)
+    # v2-L2: 调试取消令牌标识（前端传入，后端用于标记cancelled状态）
+    cancel_token: str | None = None
 
 
 class DebugRunOut(BaseModel):

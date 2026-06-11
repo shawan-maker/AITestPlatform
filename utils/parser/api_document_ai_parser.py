@@ -146,13 +146,24 @@ def safe_structure_parser(prompt, llm, parser, input_data):
         # JsonOutputParser 通常返回 list（当 schema 是 List[] 时）或单个对象
         # 这里直接透传，不强制转换为 list
         if not isinstance(resp, (dict, list)):
+            logging.warning(f"AI 返回类型异常: {type(resp).__name__}, 值={resp!r:.200}")
             resp = None
+        else:
+            count = len(resp) if isinstance(resp, list) else 1
+            logging.info(f"AI 结构化解析成功: type={type(resp).__name__}, count={count}")
     except Exception as e:
         # JsonOutputParser 解析失败时，回退到手动安全解析
-        logging.info(f"【JSON解析异常】 generate_test_points: {e}，启用容错解析")
+        logging.warning(f"【JSON解析异常】 {e}，启用容错解析")
         raw_chain = prompt | llm
         raw_resp = raw_chain.invoke(input_data)
-        resp = _safe_json_parse(raw_resp.content)
+        raw_content = raw_resp.content if hasattr(raw_resp, 'content') else str(raw_resp)
+        logging.info(f"LLM 原始响应长度: {len(raw_content)} 字符, 前500字: {raw_content[:500]}")
+        resp = _safe_json_parse(raw_content)
+        if resp is not None:
+            count = len(resp) if isinstance(resp, list) else 1
+            logging.info(f"容错解析成功: type={type(resp).__name__}, count={count}")
+        else:
+            logging.error("容错解析也失败，返回 None")
 
     logging.info(f"【执行节点完成】 解析接口文档为特定json格式，结果类型: {type(resp).__name__}")
     return resp

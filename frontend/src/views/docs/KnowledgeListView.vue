@@ -63,6 +63,13 @@
       >
         <template #default="{ row }">{{ row.module_name || '—' }}</template>
       </AppTableColumn>
+      <AppTableColumn prop="doc_type" variant="flex" :label="t('page.knowledge.docType')">
+        <template #default="{ row }">
+          <el-tag :type="docTypeTagType(row.doc_type)" size="small">
+            {{ docTypeLabel(row.doc_type) }}
+          </el-tag>
+        </template>
+      </AppTableColumn>
       <AppTableColumn variant="flex" :label="t('page.knowledge.indexStatus')" :max-width="112">
         <template #default="{ row }">
           <IndexStatusBadge
@@ -84,7 +91,7 @@
         variant="flex"
         :label="t('page.admin.projects.name')"
       />
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="300">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="420">
         <template #default="{ row }">
           <el-button link type="primary" @click="goDetail(row)">{{ t('common.view') }}</el-button>
           <el-button link @click="downloadRow(row)">{{ t('common.download') }}</el-button>
@@ -164,6 +171,20 @@ import KnowledgeImportWizard from '@/components/knowledge/KnowledgeImportWizard.
 import { useKnowledgeStore } from '@/stores/knowledge'
 
 const INDEX_STATUS_FILTER = INDEX_STATUS.filter((s) => s !== 'na' && s !== 'parsing')
+
+const DOC_TYPE_MAP = {
+  requirement: { label: '需求文档', tagType: '' },
+  api_doc: { label: '接口文档', tagType: 'success' },
+  other: { label: '其他', tagType: 'info' },
+}
+
+function docTypeLabel(docType) {
+  return DOC_TYPE_MAP[docType]?.label ?? docType ?? '—'
+}
+
+function docTypeTagType(docType) {
+  return DOC_TYPE_MAP[docType]?.tagType ?? 'info'
+}
 
 const { t } = useI18n()
 const router = useRouter()
@@ -259,7 +280,8 @@ async function submitReupload(formData) {
     await uploadVersion(reuploadDocId.value, formData)
     ElMessage.success(t('page.knowledge.reuploadOk'))
     showReupload.value = false
-    load()
+    await load()
+    listPolling.start()
   } finally {
     reuploading.value = false
   }
