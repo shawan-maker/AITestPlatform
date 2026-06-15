@@ -1,4 +1,4 @@
-from service.api_test.debug.schemas import DebugRunOut, DebugTemplateOut, DebugTemplateSaveRequest
+from service.api_test.debug.schemas import DebugTemplateOut, DebugTemplateSaveRequest
 from service.api_test.interface.interface_service import InterfaceService
 from service.api_test.interface.models import ApiInterfaceDebugTemplate
 from service.api_test.permissions import ensure_api_editor, ensure_api_viewer
@@ -70,7 +70,11 @@ class DebugTemplateService:
         environment_id: int,
         payload: dict | None,
         file_id: int | None,
-    ) -> DebugRunOut:
+    ):
+        """执行调试运行，返回原始运行记录对象（ORM Model）。
+
+        API 层负责将原始记录组装为响应结构。
+        """
         iface = await InterfaceService._get_current_or_404(interface_id)
         await ensure_api_editor(iface.project_id, user)
         env = await TestEnvironment.get_or_none(
@@ -90,8 +94,4 @@ class DebugTemplateService:
             payload=payload,
             triggered_by_id=user.id,
         )
-        return DebugRunOut(
-            run_record_id=record.id,
-            status=record.status.value,
-            duration_ms=record.duration_ms,
-        )
+        return record

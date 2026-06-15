@@ -131,6 +131,10 @@ export function fillDebugFromDoc(interfaceId) {
   return request.post(`/api-test/interfaces/${interfaceId}/debug-template/fill-from-doc`)
 }
 
+export function listDebugRecords(interfaceId, params) {
+  return request.get(`/api-test/interfaces/${interfaceId}/debug-records`, { params })
+}
+
 // Dependencies
 export function getDocPreview(interfaceId) {
   return request.get(`/api-test/interfaces/${interfaceId}/doc-preview`)

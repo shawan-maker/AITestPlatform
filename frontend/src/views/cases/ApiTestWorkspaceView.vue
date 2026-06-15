@@ -106,14 +106,20 @@
                 <el-button :icon="Filter" circle size="default" />
               </div>
               <div class="case-toolbar-right">
-                <el-dropdown trigger="click">
+                <el-dropdown trigger="click" popper-class="var-file-dropdown">
                   <el-button>
                     <el-icon><Document /></el-icon> {{ t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item>$base_url</el-dropdown-item>
-                      <el-dropdown-item>$token</el-dropdown-item>
+                      <el-dropdown-item
+                        v-for="env in environmentList"
+                        :key="env.id"
+                        :class="{ 'is-active': caseEnvId === env.id }"
+                        @click="selectCaseEnvironment(env.id)"
+                      >{{ env.env_name }}</el-dropdown-item>
+                      <el-dropdown-item v-if="!environmentList.length" disabled>暂无变量文件</el-dropdown-item>
+                      <el-dropdown-item divided @click="refreshEnvironmentList">刷新</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
@@ -217,18 +223,23 @@
           </div>
 
           <!-- ====== Tab 1: 接口调试 ====== -->
-          <div v-show="activeTab === 'interface-debug'" class="detail-panel">
+          <div v-show="activeTab === 'interface-debug'" class="detail-panel detail-panel--flex">
             <div class="debug-header-row">
               <h3 class="detail-title">{{ currentIfaceSummary || '-' }}</h3>
-              <el-dropdown trigger="click" size="small">
+              <el-dropdown trigger="click" popper-class="var-file-dropdown">
                 <el-button size="default">
-                  <el-icon><Document /></el-icon> {{ t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                  <el-icon><Document /></el-icon> {{ currentEnvName || t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
                 </el-button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item>默认环境</el-dropdown-item>
-                    <el-dropdown-item>测试环境</el-dropdown-item>
-                    <el-dropdown-item>预发环境</el-dropdown-item>
+                    <el-dropdown-item
+                      v-for="env in environmentList"
+                      :key="env.id"
+                      :class="{ 'is-active': debugEnvId === env.id }"
+                      @click="selectDebugEnvironment(env.id)"
+                    >{{ env.env_name }}</el-dropdown-item>
+                    <el-dropdown-item v-if="!environmentList.length" disabled>暂无变量文件</el-dropdown-item>
+                    <el-dropdown-item divided @click="refreshEnvironmentList">刷新</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -306,40 +317,87 @@
                   </el-table>
                 </div>
               </el-tab-pane>
-              <!-- Path -->
-              <el-tab-pane :label="t('page.apiCases.subTabPath')" name="path">
-                <div class="sub-tab-content">
-                  <el-table :data="pathParamRows" border size="small" empty_text="">
-                    <el-table-column prop="name" :label="t('page.apiCases.paramName')" min-width="150">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < pathParamRows.length - 1" v-model="row.name" size="small" placeholder="" />
-                        <span v-else class="add-param-link" @click="addPathParam">{{ t('page.apiCases.addParam') }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="value" :label="t('page.apiCases.paramValue')" min-width="200">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < pathParamRows.length - 1" v-model="row.value" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="140">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < pathParamRows.length - 1" v-model="row.desc" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('page.apiCases.operation')" width="60" align="center">
-                      <template #default="{ $index }">
-                        <el-button v-if="$index < pathParamRows.length - 1" link type="danger" size="small" :icon="Close" @click="removePathParam($index)" />
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </el-tab-pane>
               <!-- Body -->
               <el-tab-pane :label="t('page.apiCases.subTabBody')" name="body">
                 <div class="sub-tab-content body-editor">
-                  <MonacoJsonEditor v-model="requestJson" :height="260" />
+                  <div class="body-type-selector">
+                    <el-radio-group v-model="bodyType" size="small">
+                      <el-radio value="json">JSON</el-radio>
+                      <el-radio value="urlencoded">x-www-form-urlencoded</el-radio>
+                      <el-radio value="form-data">multipart/form-data</el-radio>
+                    </el-radio-group>
+                  </div>
+                  <div v-if="bodyType === 'json'" class="body-json-section">
+                    <MonacoJsonEditor v-model="requestJson" :height="260" language="json" />
+                  </div>
+                  <div v-else-if="bodyType === 'urlencoded'" class="body-urlencoded-section">
+                    <el-table :data="urlencodedRows" border size="small" empty_text="">
+                      <el-table-column prop="name" label="参数名" min-width="140">
+                        <template #default="{ row, $index }">
+                          <el-input v-if="$index < urlencodedRows.length - 1" v-model="row.name" size="small" placeholder="" />
+                          <span v-else class="add-param-link" @click="addUrlencodedRow">添加参数</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="value" label="参数值" min-width="180">
+                        <template #default="{ row, $index }">
+                          <el-input v-if="$index < urlencodedRows.length - 1" v-model="row.value" size="small" placeholder="" />
+                          <span v-else></span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="desc" label="说明" min-width="120">
+                        <template #default="{ row, $index }">
+                          <el-input v-if="$index < urlencodedRows.length - 1" v-model="row.desc" size="small" placeholder="" />
+                          <span v-else></span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="操作" width="60" align="center">
+                        <template #default="{ $index }">
+                          <el-button v-if="$index < urlencodedRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeUrlencodedRow($index)" />
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
+                  <div v-else class="body-formdata-section">
+                    <el-table :data="formDataRows" border size="small" empty_text="">
+                      <el-table-column prop="name" label="参数名" min-width="130">
+                        <template #default="{ row, $index }">
+                          <el-input v-if="$index < formDataRows.length - 1" v-model="row.name" size="small" placeholder="" />
+                          <span v-else class="add-param-link" @click="addFormDataRow">添加参数</span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="type" label="类型" width="110">
+                        <template #default="{ row, $index }">
+                          <el-select v-if="$index < formDataRows.length - 1" v-model="row.type" size="small" style="width: 100%">
+                            <el-option label="string" value="string" />
+                            <el-option label="file" value="file" />
+                          </el-select>
+                          <span v-else></span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="value" label="参数值" min-width="180">
+                        <template #default="{ row, $index }">
+                          <template v-if="$index < formDataRows.length - 1">
+                            <el-select v-if="row.type === 'file'" v-model="row.fileId" filterable clearable size="small" style="width: 100%" placeholder="选择已上传的文件">
+                              <el-option v-for="item in uploadFileOptions" :key="item.id" :label="displayFileLabel(item)" :value="item.id" />
+                            </el-select>
+                            <el-input v-else v-model="row.value" size="small" placeholder="" />
+                          </template>
+                          <span v-else></span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column prop="desc" label="说明" min-width="100">
+                        <template #default="{ row, $index }">
+                          <el-input v-if="$index < formDataRows.length - 1" v-model="row.desc" size="small" placeholder="" />
+                          <span v-else></span>
+                        </template>
+                      </el-table-column>
+                      <el-table-column label="操作" width="60" align="center">
+                        <template #default="{ $index }">
+                          <el-button v-if="$index < formDataRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeFormDataRow($index)" />
+                        </template>
+                      </el-table-column>
+                    </el-table>
+                  </div>
                 </div>
               </el-tab-pane>
               <!-- Extract (提取) -->
@@ -385,13 +443,7 @@
                     <el-table-column prop="method" :label="t('page.apiCases.compareMethod')" min-width="130">
                       <template #default="{ row, $index }">
                         <el-select v-if="$index < assertRows.length - 1" v-model="row.method" size="small" style="width:100%">
-                          <el-option label="==" value="eq" />
-                          <el-option label="!=" value="neq" />
-                          <el-option label="contains" value="contains" />
-                          <el-option label=">" value="gt" />
-                          <el-option label="<" value="lt" />
-                          <el-option label="in" value="in" />
-                          <el-option label="exists" value="exists" />
+                          <el-option v-for="m in assertMethods" :key="m.value" :label="m.label" :value="m.value" />
                         </el-select>
                         <span v-else></span>
                       </template>
@@ -413,35 +465,97 @@
               <!-- PreOps (Python) -->
               <el-tab-pane :label="t('page.apiCases.subTabPreOps')" name="preops">
                 <div class="sub-tab-content prepost-editor">
-                  <div class="prepost-hint">
-                    <el-tag size="small" type="info">test.方法名() 调用接口测试引擎方法</el-tag>
-                    <el-button text size="small" type="primary" @click="showPreMethods = !showPreMethods">{{ t('page.apiCases.predefinedMethods') }}</el-button>
+                  <div class="prepost-container">
+                    <div class="prepost-code">
+                      <MonacoJsonEditor v-model="preOpsCode" :height="260" language="python" />
+                    </div>
+                    <div class="prepost-template">
+                      <div class="template-header">前置操作模板</div>
+                      <div class="template-list">
+                        <div class="template-item" @click="insertPreTemplate('env')">
+                          <span class="template-name">设置临时变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('global')">
+                          <span class="template-name">设置环境变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('sql')">
+                          <span class="template-name">执行SQL</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('get_env')">
+                          <span class="template-name">获取临时变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('get_global')">
+                          <span class="template-name">获取环境变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('request')">
+                          <span class="template-name">发送请求</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('sleep')">
+                          <span class="template-name">等待</span>
+                        </div>
+                        <div class="template-item" @click="insertPreTemplate('call_func')">
+                          <span class="template-name">执行自定义函数</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div v-if="showPreMethods" class="methods-helper">
-                    <p><code>test.set_env_var(key, value)</code> — 设置环境变量</p>
-                    <p><code>test.get_env_var(key)</code> — 获取环境变量</p>
-                    <p><code>test.request(method, url, **kwargs)</code> — 发送HTTP请求</p>
-                    <p><code>test.sleep(seconds)</code> — 等待</p>
-                    <p><code>test.extract_json(response, json_path)</code> — 从响应提取JSON</p>
-                  </div>
-                  <MonacoJsonEditor v-model="preOpsCode" :height="220" lang="python" />
                 </div>
               </el-tab-pane>
               <!-- PostOps (Python) -->
               <el-tab-pane :label="t('page.apiCases.subTabPostOps')" name="postops">
                 <div class="sub-tab-content prepost-editor">
-                  <div class="prepost-hint">
-                    <el-tag size="small" type="info">test.方法名() 调用接口测试引擎方法</el-tag>
-                    <el-button text size="small" type="primary" @click="showPostMethods = !showPostMethods">{{ t('page.apiCases.predefinedMethods') }}</el-button>
+                  <div class="prepost-container">
+                    <div class="prepost-code">
+                      <MonacoJsonEditor v-model="postOpsCode" :height="260" language="python" />
+                    </div>
+                    <div class="prepost-template">
+                      <div class="template-header">后置操作模板</div>
+                      <div class="template-list">
+                        <div class="template-item" @click="insertPostTemplate('body')">
+                          <span class="template-name">获取响应体</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('json')">
+                          <span class="template-name">获取JSON响应</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('json_res')">
+                          <span class="template-name">JSONPath提取单个</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('json_all')">
+                          <span class="template-name">JSONPath提取列表</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('re_res')">
+                          <span class="template-name">正则提取单个</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('re_all')">
+                          <span class="template-name">正则提取列表</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('assert')">
+                          <span class="template-name">断言结果</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('env')">
+                          <span class="template-name">设置临时变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('global')">
+                          <span class="template-name">设置环境变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('delete_global')">
+                          <span class="template-name">删除全局变量</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('sql')">
+                          <span class="template-name">执行SQL</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('save_file')">
+                          <span class="template-name">保存到文件</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('log')">
+                          <span class="template-name">记录日志</span>
+                        </div>
+                        <div class="template-item" @click="insertPostTemplate('call_func')">
+                          <span class="template-name">执行自定义函数</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div v-if="showPostMethods" class="methods-helper">
-                    <p><code>test.set_env_var(key, value)</code> — 设置环境变量</p>
-                    <p><code>test.get_env_var(key)</code> — 获取环境变量</p>
-                    <p><code>test.assert_eq(actual, expected)</code> — 断言相等</p>
-                    <p><code>test.save_to_file(filename, content)</code> — 保存到文件</p>
-                    <p><code>test.log(message)</code> — 记录日志</p>
-                  </div>
-                  <MonacoJsonEditor v-model="postOpsCode" :height="220" lang="python" />
                 </div>
               </el-tab-pane>
             </el-tabs>
@@ -449,22 +563,137 @@
             <div class="response-area">
               <div class="response-area-toolbar">
                 <el-tabs v-model="responseSubTab" class="response-sub-tabs">
-                  <el-tab-pane :label="t('page.apiCases.resultInfo')" name="result" />
+                  <el-tab-pane name="result">
+                    <template #label>
+                      <span>{{ t('page.apiCases.resultInfo') }}</span>
+                      <el-tag
+                        v-if="responseDataInfo && responseDataInfo.status_code"
+                        :type="getStatusCodeType(responseDataInfo.status_code)"
+                        size="small"
+                        style="margin-left: 4px; font-size: 11px;"
+                      >{{ responseDataInfo.status_code }}</el-tag>
+                    </template>
+                  </el-tab-pane>
                   <el-tab-pane :label="t('page.apiCases.responseInfo')" name="response-info" />
                   <el-tab-pane :label="t('page.apiCases.requestInfo')" name="request-info" />
-                  <el-tab-pane :label="t('page.apiCases.extractInfo')" name="extract-info" />
-                  <el-tab-pane :label="t('page.apiCases.assertInfo')" name="assert-info" />
+                  <el-tab-pane :label="t('page.apiCases.requestHeadersInfo')" name="request-headers-info" />
+                  <el-tab-pane v-if="hasConfiguredExtracts" :label="t('page.apiCases.extractInfo')" name="extract-info" />
+                  <el-tab-pane v-if="hasConfiguredAsserts" :label="t('page.apiCases.assertInfo')" name="assert-info" />
+                  <el-tab-pane label="日志信息" name="log-info" />
                 </el-tabs>
-                <el-button link type="primary" size="small" :icon="Clock" @click="showTestRecords = true">{{ t('page.apiCases.testRecord') }}</el-button>
+                <el-button link type="primary" :icon="Clock" @click="showTestRecords = true">{{ t('page.apiCases.testRecord') }}</el-button>
               </div>
               <div class="response-body">
-                <template v-if="responseSubTab === 'result' && responseJson">
-                  <div v-if="!debugging" class="run-result-block">
-                    <el-icon color="#67C23A"><CircleCheckFilled /></el-icon>
-                    <span class="result-label">执行成功</span>
-                    <span class="result-meta">操作人: yexuemei &nbsp;&nbsp; 时间: {{ formatDateTime(new Date()) }}</span>
+                <!-- 响应数据 -->
+                <template v-if="responseSubTab === 'result' && responseResult">
+                  <div class="run-result-block" :class="responseResult.status || ''">
+                    <el-icon :color="getStatusColor(responseResult.status)"><CircleCheckFilled /></el-icon>
+                    <span class="result-label">{{ getStatusLabel(responseResult.status) }}</span>
+                    <el-tag
+                      v-if="responseDataInfo && responseDataInfo.status_code"
+                      :type="getStatusCodeType(responseDataInfo.status_code)"
+                      size="small"
+                      style="margin-left: 8px;"
+                    >{{ responseDataInfo.status_code }}</el-tag>
+                    <span class="result-meta">耗时: {{ (responseResult.duration_ms || 0) }}ms &nbsp;&nbsp; 操作人: {{ responseResult.executor || '-' }}</span>
                   </div>
-                  <pre class="response-pre">{{ responseJson }}</pre>
+                  <div v-if="responseResult.error_message" class="error-message">
+                    <strong>错误信息:</strong> {{ responseResult.error_message }}
+                  </div>
+                  <pre v-if="responseDataInfo && responseDataInfo.body" class="response-pre">{{ formatResponseBody(responseDataInfo.body) }}</pre>
+                  <el-empty v-else-if="!responseResult.error_message" description="暂无响应体" :image-size="48" />
+                </template>
+                <!-- 响应头信息 -->
+                <template v-else-if="responseSubTab === 'response-info' && responseDataInfo">
+                  <div class="structured-response">
+                    <table v-if="responseDataInfo.headers && Object.keys(responseDataInfo.headers).length" class="info-table">
+                      <thead><tr><th>Header</th><th>Value</th></tr></thead>
+                      <tbody>
+                        <tr v-for="(value, key) in responseDataInfo.headers" :key="key">
+                          <td style="font-weight: 500;">{{ key }}</td>
+                          <td>{{ value }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <el-empty v-else description="暂无响应头信息" :image-size="48" />
+                  </div>
+                </template>
+                <!-- 请求数据 -->
+                <template v-else-if="responseSubTab === 'request-info' && requestInfo">
+                  <div class="structured-response">
+                    <div class="info-row"><strong>请求方法:</strong> <el-tag size="small" :class="'method-tag-' + (requestInfo.method || 'GET').toLowerCase()">{{ (requestInfo.method || '-').toUpperCase() }}</el-tag></div>
+                    <div class="info-row"><strong>请求URL:</strong> <code>{{ requestInfo.url || '-' }}</code></div>
+                    <div class="info-row" v-if="requestInfo.params && Object.keys(requestInfo.params).length"><strong>Query参数:</strong></div>
+                    <table v-if="requestInfo.params && Object.keys(requestInfo.params).length" class="info-table">
+                      <tr v-for="(value, key) in requestInfo.params" :key="key">
+                        <td>{{ key }}</td>
+                        <td>{{ value }}</td>
+                      </tr>
+                    </table>
+                    <div class="info-row" v-if="requestInfo.body !== undefined && requestInfo.body !== null"><strong>请求体:</strong></div>
+                    <pre class="response-pre" v-if="requestInfo.body !== undefined && requestInfo.body !== null">{{ typeof requestInfo.body === 'string' ? requestInfo.body : JSON.stringify(requestInfo.body, null, 2) }}</pre>
+                  </div>
+                </template>
+                <!-- 请求头信息 -->
+                <template v-else-if="responseSubTab === 'request-headers-info' && requestInfo">
+                  <div class="structured-response">
+                    <table v-if="requestInfo.headers && Object.keys(requestInfo.headers).length" class="info-table">
+                      <thead><tr><th>Header</th><th>Value</th></tr></thead>
+                      <tbody>
+                        <tr v-for="(value, key) in requestInfo.headers" :key="key">
+                          <td style="font-weight: 500;">{{ key }}</td>
+                          <td>{{ value }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <el-empty v-else description="暂无请求头信息" :image-size="48" />
+                  </div>
+                </template>
+                <!-- 提取信息 -->
+                <template v-else-if="responseSubTab === 'extract-info' && extractInfo">
+                  <table class="info-table extract-table" v-if="extractInfo.length">
+                    <thead><tr><th>变量名</th><th>表达式</th><th>值</th></tr></thead>
+                    <tbody>
+                      <tr v-for="(item, idx) in extractInfo" :key="idx">
+                        <td>{{ item.var_name || item.name }}</td>
+                        <td>{{ item.extract_expr || item.expression }}</td>
+                        <td>{{ item.value !== undefined ? item.value : '-' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <el-empty v-else description="暂无提取数据" :image-size="48" />
+                </template>
+                <!-- 断言信息 -->
+                <template v-else-if="responseSubTab === 'assert-info' && assertInfo">
+                  <table class="info-table assert-table" v-if="assertInfo.length">
+                    <thead><tr><th style="width:40px">结果</th><th>断言目标</th><th>比较方式</th><th>预期值</th><th>实际值</th></tr></thead>
+                    <tbody>
+                      <tr v-for="(item, idx) in assertInfo" :key="idx" :class="item.passed ? 'assert-passed' : 'assert-failed'">
+                        <td><el-icon v-if="item.passed" color="#67C23A"><CircleCheckFilled /></el-icon><el-icon v-else color="#F56C6C"><CircleCloseFilled /></el-icon></td>
+                        <td>{{ item.field || item.target }}</td>
+                        <td>{{ getAssertMethodLabel(item.type || item.method) }}</td>
+                        <td>{{ item.expected }}</td>
+                        <td>{{ item.actual !== undefined && item.actual !== null ? item.actual : '-' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <el-empty v-else description="暂无断言数据" :image-size="48" />
+                </template>
+                <!-- 日志信息 -->
+                <template v-else-if="responseSubTab === 'log-info' && logData">
+                  <div class="log-container">
+                    <div
+                      v-for="(logItem, idx) in logData"
+                      :key="idx"
+                      class="log-item"
+                      :class="'log-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : logItem.level?.toLowerCase() || 'info')"
+                    >
+                      <span class="log-level-badge" :class="'badge-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : logItem.level?.toLowerCase() || 'info')">
+                        {{ Array.isArray(logItem) ? logItem[0] : (logItem.level || 'INFO') }}
+                      </span>
+                      <span class="log-message">{{ Array.isArray(logItem) ? logItem.slice(1).join(' ') : (logItem.message || '') }}</span>
+                    </div>
+                  </div>
                 </template>
                 <el-empty v-else description="暂无数据" :image-size="48" />
               </div>
@@ -503,6 +732,137 @@
       :loading="moveLoading"
       @confirm="confirmMoveCatalog"
     />
+    <el-drawer v-model="showTestRecords" title="调试记录" direction="rtl" size="50%" :destroy-on-close="false">
+      <!-- 列表视图 -->
+      <div v-if="!drawerRecordDetail">
+        <el-table :data="debugRecords" v-loading="debugRecordsLoading" size="small" stripe style="width: 100%">
+          <el-table-column prop="triggered_by_username" label="执行人" width="100" />
+          <el-table-column prop="created_at" label="执行时间" min-width="170">
+            <template #default="{ row }">{{ formatRecordTime(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column prop="status" label="结果" width="80">
+            <template #default="{ row }">
+              <el-tag :type="getStatusCodeType(row.status === 'success' ? 200 : row.status === 'fail' ? 400 : 500)" size="small">{{ row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="duration_ms" label="耗时" width="80">
+            <template #default="{ row }">{{ row.duration_ms || 0 }}ms</template>
+          </el-table-column>
+          <el-table-column label="操作" width="80">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="viewDebugRecord(row)">查看</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <!-- 详情视图 -->
+      <div v-else class="drawer-detail-view">
+        <div class="drawer-detail-header">
+          <el-button link type="primary" @click="drawerRecordDetail = null">← 返回列表</el-button>
+          <span class="drawer-detail-meta">
+            <el-tag :type="getStatusCodeType(drawerRecordDetail.status === 'success' ? 200 : drawerRecordDetail.status === 'fail' ? 400 : 500)" size="small">{{ drawerRecordDetail.status }}</el-tag>
+            {{ formatRecordTime(drawerRecordDetail.created_at) }} &nbsp; 耗时: {{ drawerRecordDetail.duration_ms || 0 }}ms
+            &nbsp; 操作人: {{ drawerRecordDetail.triggered_by_username || '-' }}
+          </span>
+        </div>
+        <div class="response-area" style="flex:1; min-height:0;">
+          <div class="response-area-toolbar">
+            <el-tabs v-model="drawerResponseSubTab" class="response-sub-tabs">
+              <el-tab-pane name="result">
+                <template #label>
+                  <span>响应数据</span>
+                  <el-tag v-if="drawerResponseDataInfo && drawerResponseDataInfo.status_code" :type="getStatusCodeType(drawerResponseDataInfo.status_code)" size="small" style="margin-left:4px;font-size:11px">{{ drawerResponseDataInfo.status_code }}</el-tag>
+                </template>
+              </el-tab-pane>
+              <el-tab-pane label="响应头信息" name="response-headers" />
+              <el-tab-pane label="请求数据" name="request-data" />
+              <el-tab-pane label="请求头信息" name="request-headers" />
+              <el-tab-pane v-if="drawerExtractInfo && drawerExtractInfo.length" label="提取信息" name="extract-info" />
+              <el-tab-pane v-if="drawerAssertInfo && drawerAssertInfo.length" label="断言信息" name="assert-info" />
+              <el-tab-pane label="日志信息" name="log" />
+            </el-tabs>
+          </div>
+          <div class="response-body">
+            <!-- 响应数据 -->
+            <template v-if="drawerResponseSubTab === 'result'">
+              <div class="run-result-block" :class="drawerRecordDetail.status || ''">
+                <el-icon :color="getStatusColor(drawerRecordDetail.status)"><CircleCheckFilled /></el-icon>
+                <span class="result-label">{{ getStatusLabel(drawerRecordDetail.status) }}</span>
+                <el-tag v-if="drawerResponseDataInfo && drawerResponseDataInfo.status_code" :type="getStatusCodeType(drawerResponseDataInfo.status_code)" size="small" style="margin-left:8px">{{ drawerResponseDataInfo.status_code }}</el-tag>
+                <span class="result-meta">耗时: {{ drawerRecordDetail.duration_ms || 0 }}ms</span>
+              </div>
+              <div v-if="drawerRecordDetail.error_message" class="error-message"><strong>错误信息:</strong> {{ drawerRecordDetail.error_message }}</div>
+              <pre v-if="drawerResponseDataInfo && drawerResponseDataInfo.body" class="response-pre">{{ formatResponseBody(drawerResponseDataInfo.body) }}</pre>
+              <el-empty v-else-if="!drawerRecordDetail.error_message" description="暂无响应体" :image-size="48" />
+            </template>
+            <!-- 响应头信息 -->
+            <template v-else-if="drawerResponseSubTab === 'response-headers'">
+              <table v-if="drawerResponseDataInfo && drawerResponseDataInfo.headers && Object.keys(drawerResponseDataInfo.headers).length" class="info-table">
+                <thead><tr><th>Header</th><th>Value</th></tr></thead>
+                <tbody><tr v-for="(value, key) in drawerResponseDataInfo.headers" :key="key"><td style="font-weight:500">{{ key }}</td><td>{{ value }}</td></tr></tbody>
+              </table>
+              <el-empty v-else description="暂无响应头信息" :image-size="48" />
+            </template>
+            <!-- 请求数据 -->
+            <template v-else-if="drawerResponseSubTab === 'request-data'">
+              <div v-if="drawerRequestInfo" class="structured-response">
+                <div class="info-row"><strong>请求方法:</strong> <el-tag size="small">{{ (drawerRequestInfo.method || '-').toUpperCase() }}</el-tag></div>
+                <div class="info-row"><strong>请求URL:</strong> <code>{{ drawerRequestInfo.url || '-' }}</code></div>
+                <div class="info-row" v-if="drawerRequestInfo.params && Object.keys(drawerRequestInfo.params).length"><strong>Query参数:</strong></div>
+                <table v-if="drawerRequestInfo.params && Object.keys(drawerRequestInfo.params).length" class="info-table">
+                  <tr v-for="(value, key) in drawerRequestInfo.params" :key="key"><td>{{ key }}</td><td>{{ value }}</td></tr>
+                </table>
+                <div class="info-row" v-if="drawerRequestInfo.body"><strong>请求体:</strong></div>
+                <pre class="response-pre" v-if="drawerRequestInfo.body">{{ typeof drawerRequestInfo.body === 'string' ? drawerRequestInfo.body : JSON.stringify(drawerRequestInfo.body, null, 2) }}</pre>
+              </div>
+              <el-empty v-else description="暂无请求数据" :image-size="48" />
+            </template>
+            <!-- 请求头信息 -->
+            <template v-else-if="drawerResponseSubTab === 'request-headers'">
+              <table v-if="drawerRequestInfo && drawerRequestInfo.headers && Object.keys(drawerRequestInfo.headers).length" class="info-table">
+                <thead><tr><th>Header</th><th>Value</th></tr></thead>
+                <tbody><tr v-for="(value, key) in drawerRequestInfo.headers" :key="key"><td style="font-weight:500">{{ key }}</td><td>{{ value }}</td></tr></tbody>
+              </table>
+              <el-empty v-else description="暂无请求头信息" :image-size="48" />
+            </template>
+            <!-- 提取信息 -->
+            <template v-else-if="drawerResponseSubTab === 'extract-info'">
+              <table class="info-table extract-table" v-if="drawerExtractInfo && drawerExtractInfo.length">
+                <thead><tr><th>变量名</th><th>表达式</th><th>值</th></tr></thead>
+                <tbody><tr v-for="(item, idx) in drawerExtractInfo" :key="idx"><td>{{ item.var_name || item.name }}</td><td>{{ item.extract_expr || item.expression }}</td><td>{{ item.value !== undefined ? item.value : '-' }}</td></tr></tbody>
+              </table>
+              <el-empty v-else description="暂无提取数据" :image-size="48" />
+            </template>
+            <!-- 断言信息 -->
+            <template v-else-if="drawerResponseSubTab === 'assert-info'">
+              <table class="info-table assert-table" v-if="drawerAssertInfo && drawerAssertInfo.length">
+                <thead><tr><th style="width:40px">结果</th><th>断言目标</th><th>比较方式</th><th>预期值</th><th>实际值</th></tr></thead>
+                <tbody>
+                  <tr v-for="(item, idx) in drawerAssertInfo" :key="idx" :class="item.passed ? 'assert-passed' : 'assert-failed'">
+                    <td><el-icon v-if="item.passed" color="#67C23A"><CircleCheckFilled /></el-icon><el-icon v-else color="#F56C6C"><CircleCloseFilled /></el-icon></td>
+                    <td>{{ item.field || item.target }}</td>
+                    <td>{{ getAssertMethodLabel(item.type || item.method) }}</td>
+                    <td>{{ item.expected }}</td>
+                    <td>{{ item.actual !== undefined && item.actual !== null ? item.actual : '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <el-empty v-else description="暂无断言数据" :image-size="48" />
+            </template>
+            <!-- 日志信息 -->
+            <template v-else-if="drawerResponseSubTab === 'log'">
+              <div v-if="drawerLogData && drawerLogData.length" class="log-container">
+                <div v-for="(logItem, idx) in drawerLogData" :key="idx" class="log-item" :class="'log-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : 'info')">
+                  <span class="log-level-badge" :class="'badge-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : 'info')">{{ Array.isArray(logItem) ? logItem[0] : 'INFO' }}</span>
+                  <span class="log-message">{{ Array.isArray(logItem) ? logItem.slice(1).join(' ') : '' }}</span>
+                </div>
+              </div>
+              <el-empty v-else description="暂无日志" :image-size="48" />
+            </template>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -523,9 +883,8 @@ import {
   MagicStick,
   Search,
   View,
-} from '@element-plus/icons-vue'
-import {
   CircleCheckFilled,
+  CircleCloseFilled,
 } from '@element-plus/icons-vue'
 import {
   copyInterface,
@@ -534,6 +893,7 @@ import {
   deleteApiCatalog,
   deleteInterface,
   fillDebugFromDoc,
+  listDebugRecords,
   getApiCatalogTree,
   getDebugTemplate,
   getDocPreview,
@@ -559,8 +919,9 @@ import InterfaceCaseGenerateDialog from '@/components/agent/InterfaceCaseGenerat
 import ApiCatalogSidebar from '@/components/tree/ApiCatalogSidebar.vue'
 import InterfaceListPanel from '@/components/api-test/InterfaceListPanel.vue'
 import CatalogMoveDialog from '@/components/tree/CatalogMoveDialog.vue'
+import { listEnvironments as fetchEnvList, listUploadedFiles } from '@/api/environment'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
@@ -585,12 +946,33 @@ const listSearch = ref('')
 const activeTab = ref('interface-debug')
 const environmentId = ref(null)
 
+// 变量文件选择相关
+const environmentList = ref([])
+const debugEnvId = ref(null)
+const caseEnvId = ref(null)
+
+// 文件上传相关
+const bodyType = ref('json')
+const uploadFileOptions = ref([])
+const uploadFieldName = ref('file')
+const selectedUploadId = ref(null)
+const urlencodedRows = ref([{ name: '', value: '', desc: '' }])
+const formDataRows = ref([{ name: '', type: 'string', value: '', fileId: null, desc: '' }])
+
 // 调试相关
 const requestJson = ref('{}')
-const responseJson = ref('')
-const assertionsJson = ref('[]')
+const assertionsJson = ref('[]')  // 断言数据JSON格式（兼容旧逻辑）
 const debugging = ref(false)
 const debugAbortController = ref(null)
+
+// 结果解析相关（结构化展示）
+const responseResult = ref(null)
+const responseDataInfo = ref(null)
+const requestInfo = ref(null)
+const requestHeadersInfo = ref(null)
+const extractInfo = ref(null)
+const assertInfo = ref(null)
+const logData = ref([])
 const debugMethod = ref('POST')
 const debugBaseUrl = ref('$(base_url)')
 const debugPath = ref('')
@@ -606,7 +988,97 @@ const postOpsCode = ref('# 后置操作代码\n')
 const showPreMethods = ref(false)
 const showPostMethods = ref(false)
 const showTestRecords = ref(false)
+const debugRecords = ref([])
+const debugRecordsLoading = ref(false)
+const drawerRecordDetail = ref(null)
+const drawerResponseSubTab = ref('result')
+const drawerResponseDataInfo = ref(null)
+const drawerRequestInfo = ref(null)
+const drawerLogData = ref([])
+const drawerExtractInfo = ref([])
+const drawerAssertInfo = ref([])
 const httpMethods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+
+async function loadDebugRecords() {
+  if (!selectedInterfaceId.value) return
+  debugRecordsLoading.value = true
+  try {
+    var res = await listDebugRecords(selectedInterfaceId.value, { page: 1, page_size: 50 })
+    debugRecords.value = res.data.data?.items || []
+  } catch (e) {
+    console.error('加载调试记录失败:', e)
+    debugRecords.value = []
+  } finally {
+    debugRecordsLoading.value = false
+  }
+}
+
+function viewDebugRecord(row) {
+  drawerRecordDetail.value = row
+  drawerResponseSubTab.value = 'result'
+  if (row.api_requests_info) {
+    var data = row.api_requests_info
+    var debugDetail = data._debug_detail || data
+    // Populate drawer response info
+    var ri = debugDetail.response_info || data.response_info || {}
+    drawerResponseDataInfo.value = {
+      status_code: ri.status_code || data.response_code,
+      content_type: ri.content_type,
+      body: ri.body || data.response_body,
+      elapsed_ms: ri.elapsed_ms || data.run_time,
+      headers: ri.headers || data.response_headers || {},
+    }
+    drawerRequestInfo.value = debugDetail.request_info || data.request_info || {
+      method: data.method,
+      url: data.url,
+      headers: data.request_headers || {},
+      params: data.params || {},
+      body: data.request_body,
+    }
+    drawerLogData.value = debugDetail.log_data || data.log_data || []
+    drawerExtractInfo.value = debugDetail.extract_info || data.extract_info || []
+    drawerAssertInfo.value = debugDetail.assert_info || data.assert_info || []
+  } else {
+    drawerResponseDataInfo.value = null
+    drawerRequestInfo.value = null
+    drawerLogData.value = []
+    drawerExtractInfo.value = []
+    drawerAssertInfo.value = []
+    drawerLogData.value = []
+  }
+}
+
+function formatRecordTime(val) {
+  if (!val) return '-'
+  var d = new Date(val)
+  if (isNaN(d.getTime())) return val
+  var pad = function (n) { return n < 10 ? '0' + n : '' + n }
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds())
+}
+
+watch(showTestRecords, function (val) {
+  if (val) loadDebugRecords()
+})
+
+// Body 类型切换时自动更新 Content-Type 请求头
+var contentTypeMap = {
+  'json': 'application/json',
+  'urlencoded': 'application/x-www-form-urlencoded',
+  'form-data': 'multipart/form-data',
+}
+watch(bodyType, function (newType) {
+  var newCt = contentTypeMap[newType] || 'application/json'
+  // 查找 Content-Type 行并更新
+  for (var i = 0; i < headerRows.value.length; i++) {
+    if (headerRows.value[i].name && headerRows.value[i].name.toLowerCase() === 'content-type') {
+      headerRows.value[i].value = newCt
+      return
+    }
+  }
+  // 没有 Content-Type 行，在末尾空行前插入
+  var lastIdx = headerRows.value.length - 1
+  headerRows.value.splice(lastIdx, 0, { name: 'Content-Type', value: newCt, desc: '' })
+})
 
 // 文档预览相关
 const reanalyzing = ref(false)
@@ -662,6 +1134,49 @@ var currentIfaceSummary = computed(function () { var f = _getCachedIface(); retu
 var currentIfaceMethod = computed(function () { var f = _getCachedIface(); return f ? (f.method ? f.method.toUpperCase() : '') : '' })
 var currentIfacePath = computed(function () { var f = _getCachedIface(); return f ? (f.path || '') : '' })
 
+const currentEnvName = computed(function () {
+  if (!debugEnvId.value) return ''
+  var env = environmentList.value.find(function (e) { return e.id === debugEnvId.value })
+  return env ? env.env_name : ''
+})
+
+const hasConfiguredExtracts = computed(function () {
+  return extractRows.value.some(function (r, i) {
+    return i < extractRows.value.length - 1 && r.name && r.name.trim()
+  })
+})
+
+const hasConfiguredAsserts = computed(function () {
+  return assertRows.value.some(function (r, i) {
+    return i < assertRows.value.length - 1 && r.target && r.target.trim()
+  })
+})
+
+const assertMethods = computed(function () {
+  var isZh = locale.value === 'zh-cn' || locale.value === 'zh-CN'
+  return [
+    { value: 'eq', label: isZh ? '相等' : 'Equals' },
+    { value: 'eq_ignore_case', label: isZh ? '相等(忽略大小写)' : 'Equals (ignore case)' },
+    { value: 'ne', label: isZh ? '不相等' : 'Not Equals' },
+    { value: 'contains', label: isZh ? '包含' : 'Contains' },
+    { value: 'not_contains', label: isZh ? '不包含' : 'Not Contains' },
+    { value: 'gt', label: isZh ? '大于' : 'Greater Than' },
+    { value: 'lt', label: isZh ? '小于' : 'Less Than' },
+    { value: 'ge', label: isZh ? '大于等于' : 'Greater or Equal' },
+    { value: 'le', label: isZh ? '小于等于' : 'Less or Equal' },
+    { value: 'regex', label: isZh ? '正则匹配' : 'Regex Match' },
+  ]
+})
+
+/** 将断言比较方式值映射为显示标签 */
+function getAssertMethodLabel(methodValue) {
+  if (!methodValue) return '-'
+  var found = assertMethods.value.find(function (m) { return m.value === methodValue })
+  if (found) return found.label
+  // 兼容引擎返回的中英文标签（如 "相等"、"包含"）
+  return methodValue
+}
+
 /** 从 docPreview 解析请求体字段表格 */
 var requestBodyFields = computed(function () {
   if (!docPreview.value) return []
@@ -715,6 +1230,179 @@ function findCatalogNode(nodes, id) {
 function findCatalogName(nodes, catalogId) {
   var n = findCatalogNode(nodes, catalogId)
   return n ? n.name : String(catalogId)
+}
+
+// ==================== 变量文件相关方法 ====================
+async function refreshEnvironmentList() {
+  if (!projectId.value) return
+  try {
+    var params = { project_id: projectId.value, page: 1, page_size: 100 }
+    var res = await fetchEnvList(params)
+    environmentList.value = res.data.data?.items ?? []
+  } catch (e) {
+    console.error('加载变量文件失败:', e)
+  }
+}
+
+function selectDebugEnvironment(envId) {
+  debugEnvId.value = envId
+  environmentId.value = envId
+  ElMessage.success('已选择变量文件: ' + (environmentList.value.find(e => e.id === envId)?.env_name || envId))
+}
+
+function selectCaseEnvironment(envId) {
+  caseEnvId.value = envId
+  ElMessage.success('已选择变量文件: ' + (environmentList.value.find(e => e.id === envId)?.env_name || envId))
+}
+
+// ==================== 文件上传相关方法 ====================
+async function loadUploadFiles() {
+  if (!projectId.value) return
+  try {
+    var res = await listUploadedFiles({ project_id: projectId.value })
+    uploadFileOptions.value = res.data?.data?.items || []
+  } catch (e) {
+    console.error('加载上传文件列表失败:', e)
+  }
+}
+
+function displayFileLabel(item) {
+  if (!item) return ''
+  if (item.info && Array.isArray(item.info) && item.info[0]) return item.info[0]
+  const path = item.file
+  if (!path) return ''
+  try {
+    const urlPath = path.indexOf('://') >= 0 ? new URL(path).pathname : path
+    const parts = urlPath.replace(/\\/g, '/').split('/').filter(Boolean)
+    const last = parts[parts.length - 1] || ''
+    return decodeURIComponent(last)
+  } catch {
+    const parts = String(path).split(/[\\/]/)
+    return decodeURIComponent(parts[parts.length - 1] || '') || parts[parts.length - 1] || ''
+  }
+}
+
+// ==================== 前置/后置操作模板插入方法 ====================
+function insertPreTemplate(templateType) {
+  const templates = {
+    'env': "\n# 设置临时变量 \ntest.save_env_variable('var_name',var_value)",
+    'global': "\n# 设置环境变量 \ntest.save_global_variable('var_name',var_value)",
+    'sql': "\n# 执行sql语句 \nvar_name = db.服务器名称.execute_all('sql语句')",
+    'get_env': "\n# 获取临时变量 \nvar_name = test.get_env_variable('var_name', default_value)",
+    'get_global': "\n# 获取环境变量 \nvar_name = test.get_global_variable('var_name', default_value)",
+    'request': "\n# 发送HTTP请求 \ntest.request(method, url, **kwargs)",
+    'sleep': "\n# 等待 \ntest.sleep(seconds)",
+    'call_func': "\n# 执行自定义函数\nresult = global_func.方法名()\n# 如需保存结果到变量：\n# test.save_env_variable('var_name', result)",
+  }
+  preOpsCode.value += templates[templateType] || ''
+}
+
+function insertPostTemplate(templateType) {
+  const templates = {
+    'body': "\n# 获取响应体 \nvar_name = response.data",
+    'json': "\n# 获取json响应 \nvar_name = response.json()",
+    'json_res': "\n# jsonpath提取单个数据 \nvar_name = test.json_extract(json响应,jsonpath表达式)",
+    'json_all': "\n# jsonpath提取一组数据 \nvar_name = test.json_extract_list(json响应,jsonpath表达式)",
+    're_res': "\n# 正则表达式方式提取单个数据 \nvar_name = test.re_extract(响应体数据,正则表达式)",
+    're_all': "\n# 正则表达式方式提取一组数据 \nvar_name = test.re_extract_list(响应体数据,正则表达式)",
+    'assert': "\n# 对响应结果进行断言 \ntest.assertion('比较方式',预期结果,实际结果)",
+    'env': "\n# 设置临时变量 \ntest.save_env_variable('var_name',var_value)",
+    'global': "\n# 设置环境变量 \ntest.save_global_variable('var_name',var_value)",
+    'delete_global': "\n# 删除全局变量 \ntest.del_global_variable('var_name')",
+    'sql': "\n# 执行sql语句 \nvar_name = db.服务器名称.execute_all('sql语句')",
+    'save_file': "\n# 保存到文件 \ntest.save_to_file(filename, content)",
+    'log': "\n# 记录日志 \ntest.log(message)",
+    'call_func': "\n# 执行自定义函数\nresult = global_func.方法名()\n# 如需保存结果到变量：\n# test.save_env_variable('var_name', result)",
+  }
+  postOpsCode.value += templates[templateType] || ''
+}
+
+// ==================== 结果展示辅助方法 ====================
+function getStatusColor(status) {
+  const s = (status || '').toLowerCase()
+  if (s.indexOf('success') >= 0 || s.indexOf('pass') >= 0) return '#67C23A'
+  if (s.indexOf('fail') >= 0 || s.indexOf('error') >= 0) return '#F56C6C'
+  return '#E6A23C'
+}
+
+function getStatusLabel(status) {
+  const s = (status || '').toLowerCase()
+  if (s.indexOf('success') >= 0 || s.indexOf('pass') >= 0) return '执行成功'
+  if (s.indexOf('fail') >= 0 || s.indexOf('error') >= 0) return '执行失败'
+  return status || '未知状态'
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+function getStatusCodeType(code) {
+  if (!code) return 'info'
+  var c = Number(code)
+  if (c >= 200 && c < 300) return 'success'
+  if (c >= 300 && c < 400) return ''
+  if (c >= 400 && c < 500) return 'warning'
+  if (c >= 500) return 'danger'
+  return 'info'
+}
+
+function formatResponseBody(body) {
+  if (!body) return ''
+  if (typeof body === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(body), null, 2)
+    } catch (e) {
+      return body
+    }
+  }
+  return JSON.stringify(body, null, 2)
+}
+
+function parseDebugResponse(data) {
+  // 解析后端返回的调试结果，进行结构化展示
+  // 后端将 _debug_detail 字段合并到顶层：response_info, request_info, extract_info, assert_info, log_data
+  responseResult.value = data || {}
+
+  // 响应信息（包含响应头）
+  if (data.response_info) {
+    var ri = data.response_info
+    responseDataInfo.value = {
+      status_code: ri.status_code,
+      content_type: ri.content_type,
+      elapsed_ms: ri.elapsed_ms || data.duration_ms,
+      body_size: ri.body_size,
+      body: ri.body,
+      headers: ri.headers || {},
+    }
+  } else {
+    responseDataInfo.value = null
+  }
+
+  // 请求信息（包含请求头）
+  if (data.request_info) {
+    requestInfo.value = {
+      method: data.request_info.method || debugMethod.value,
+      url: data.request_info.url,
+      headers: data.request_info.headers || {},
+      params: data.request_info.params || data.request_info.query_params || {},
+      body: data.request_info.body,
+    }
+  } else {
+    requestInfo.value = null
+  }
+
+  // 提取信息
+  extractInfo.value = data.extract_info || []
+
+  // 断言信息
+  assertInfo.value = data.assert_info || []
+
+  // 日志信息
+  logData.value = data.log_data || data.logs || []
 }
 
 function getSiblingList(nodes, parentId) {
@@ -859,6 +1547,18 @@ function addQueryParam() {
 function removeQueryParam(idx) {
   queryParamRows.value.splice(idx, 1)
 }
+function addUrlencodedRow() {
+  urlencodedRows.value.push({ name: '', value: '', desc: '' })
+}
+function removeUrlencodedRow(idx) {
+  urlencodedRows.value.splice(idx, 1)
+}
+function addFormDataRow() {
+  formDataRows.value.push({ name: '', type: 'string', value: '', fileId: null, desc: '' })
+}
+function removeFormDataRow(idx) {
+  formDataRows.value.splice(idx, 1)
+}
 
 // Headers
 function addHeaderRow() {
@@ -893,6 +1593,12 @@ function removeAssertRow(idx) {
 }
 
 /** 构建调试请求payload（将表格数据转换为后端格式） */
+function hasRealCode(code) {
+  if (!code) return false
+  // Remove comments and whitespace, check if anything remains
+  return code.replace(/#[^\n]*/g, '').trim().length > 0
+}
+
 function buildDebugPayload() {
   var headers = {}
   for (var hi = 0; hi < headerRows.value.length; hi++) {
@@ -936,24 +1642,60 @@ function buildDebugPayload() {
   }
 
   var body = null
-  try { body = JSON.parse(requestJson.value) } catch (e) {}
+  // 根据bodyType决定如何处理body
+  if (bodyType.value === 'json') {
+    try { body = JSON.parse(requestJson.value) } catch (e) {}
+  } else if (bodyType.value === 'urlencoded') {
+    body = {}
+    for (var ui = 0; ui < urlencodedRows.value.length; ui++) {
+      var u = urlencodedRows.value[ui]
+      if (u.name && u.name.trim()) body[u.name.trim()] = u.value || ''
+    }
+  } else if (bodyType.value === 'form-data') {
+    body = {}
+    for (var fi = 0; fi < formDataRows.value.length; fi++) {
+      var f = formDataRows.value[fi]
+      if (f.name && f.name.trim() && f.type !== 'file') body[f.name.trim()] = f.value || ''
+    }
+  }
 
-  return {
+  var payload = {
     method: debugMethod.value,
     path: debugPath.value,
     headers: headers,
     query: query,
     path_params: pathParams,
     body: body,
+    body_type: bodyType.value,
     extracts: extracts,
     assertions: assertions,
-    preconditions: [
-      { kind: 'python', code: preOpsCode.value },
-    ],
-    postconditions: [
-      { kind: 'python', code: postOpsCode.value },
-    ],
+    preconditions: hasRealCode(preOpsCode.value) ? [{ kind: 'python', code: preOpsCode.value }] : [],
+    postconditions: hasRealCode(postOpsCode.value) ? [{ kind: 'python', code: postOpsCode.value }] : [],
   }
+
+  // 保存 urlencoded/form-data 行数据用于恢复
+  if (bodyType.value === 'urlencoded') {
+    payload.urlencoded_rows = urlencodedRows.value.filter(function (r, i) {
+      return i < urlencodedRows.value.length - 1 && r.name && r.name.trim()
+    })
+  } else if (bodyType.value === 'form-data') {
+    payload.form_data_rows = formDataRows.value.filter(function (r, i) {
+      return i < formDataRows.value.length - 1 && r.name && r.name.trim()
+    }).map(function (r) {
+      return { name: r.name, type: r.type || 'string', value: r.value || '', fileId: r.fileId || null, desc: r.desc || '' }
+    })
+    // form-data 文件类型行单独提取
+    var files = []
+    for (var ffi = 0; ffi < formDataRows.value.length; ffi++) {
+      var ff = formDataRows.value[ffi]
+      if (ff.name && ff.name.trim() && ff.type === 'file' && ff.fileId) {
+        files.push({ field: ff.name.trim(), upload_id: ff.fileId })
+      }
+    }
+    if (files.length) payload.files = files
+  }
+
+  return payload
 }
 
 // ==================== 目录/接口列表加载 ====================
@@ -1054,17 +1796,85 @@ function loadMoreCatalogInterfaces(catalogId) {
 }
 
 // ==================== 模板/用例/依赖/文档 加载 ====================
+
+/** 从 payload 字典填充调试表单各字段 */
+function populateFormFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return
+  // 方法 & 路径
+  if (payload.method) debugMethod.value = payload.method.toUpperCase()
+  if (payload.path) debugPath.value = payload.path
+  // headers → headerRows
+  var headers = payload.headers || {}
+  var hRows = Object.keys(headers).map(function (k) { return { name: k, value: headers[k], desc: '' } })
+  hRows.push({ name: '', value: '', desc: '' })
+  headerRows.value = hRows.length > 1 ? hRows : [{ name: 'Content-Type', value: 'application/json', desc: '' }]
+  // query → queryParamRows
+  var query = payload.query || {}
+  var qRows = Object.keys(query).map(function (k) { return { name: k, value: query[k], desc: '' } })
+  qRows.push({ name: '', value: '', desc: '' })
+  queryParamRows.value = qRows
+  // path_params → pathParamRows
+  var pathParams = payload.path_params || {}
+  var pRows = Object.keys(pathParams).map(function (k) { return { name: k, value: pathParams[k], desc: '' } })
+  pRows.push({ name: '', value: '', desc: '' })
+  pathParamRows.value = pRows
+  // body → 根据 body_type 恢复到对应的编辑器
+  var savedBodyType = payload.body_type || 'json'
+  bodyType.value = savedBodyType
+  if (savedBodyType === 'json') {
+    requestJson.value = JSON.stringify(payload.body || {}, null, 2)
+  } else if (savedBodyType === 'urlencoded') {
+    var savedURows = payload.urlencoded_rows || []
+    var uRows = savedURows.map(function (r) { return { name: r.name || '', value: r.value || '', desc: r.desc || '' } })
+    uRows.push({ name: '', value: '', desc: '' })
+    urlencodedRows.value = uRows
+  } else if (savedBodyType === 'form-data') {
+    var savedFRows = payload.form_data_rows || []
+    var fRows = savedFRows.map(function (r) { return { name: r.name || '', type: r.type || 'string', value: r.value || '', fileId: r.fileId || null, desc: r.desc || '' } })
+    fRows.push({ name: '', type: 'string', value: '', fileId: null, desc: '' })
+    formDataRows.value = fRows
+  } else {
+    requestJson.value = JSON.stringify(payload.body || {}, null, 2)
+  }
+  // extracts → extractRows
+  var extracts = payload.extracts || []
+  var eRows = extracts.map(function (e) { return { name: e.name || '', expression: e.json_path || e.expression || '', desc: e.description || '' } })
+  eRows.push({ name: '', expression: '', desc: '' })
+  extractRows.value = eRows
+  // assertions → assertRows
+  var assertions = payload.assertions || []
+  var aRows = assertions.map(function (a) { return { target: a.target || '', method: a.comparator || 'eq', expected: a.expected !== undefined ? a.expected : '' } })
+  aRows.push({ target: '', method: 'eq', expected: '' })
+  assertRows.value = aRows
+  // preconditions / postconditions
+  var pre = payload.preconditions || []
+  if (pre.length > 0 && pre[0].code) preOpsCode.value = pre[0].code
+  var post = payload.postconditions || []
+  if (post.length > 0 && post[0].code) postOpsCode.value = post[0].code
+  // assertionsJson (for display)
+  assertionsJson.value = JSON.stringify(payload.assertions || [], null, 2)
+}
+
 async function loadTemplate() {
   if (!selectedInterfaceId.value) return
   var res = await getDebugTemplate(selectedInterfaceId.value).catch(function () { return null })
   var tpl = res && res.data ? res.data.data : {}
-  requestJson.value = JSON.stringify(tpl, null, 2)
-  assertionsJson.value = JSON.stringify(tpl.assertions || [], null, 2)
-  var iface = _getCachedIface()
-  if (iface) {
-    debugMethod.value = iface.method ? iface.method.toUpperCase() : 'POST'
-    debugPath.value = iface.path || ''
+  // tpl 是 DebugTemplateOut: { interface_id, payload, default_file_id, updated_at }
+  var payload = tpl.payload || null
+  if (payload) {
+    populateFormFromPayload(payload)
+  } else {
+    // 无已保存的模板，用接口默认值
+    requestJson.value = '{}'
+    assertionsJson.value = '[]'
+    var iface = _getCachedIface()
+    if (iface) {
+      debugMethod.value = iface.method ? iface.method.toUpperCase() : 'POST'
+      debugPath.value = iface.path || ''
+    }
   }
+  // 恢复默认文件
+  if (tpl.default_file_id) selectedUploadId.value = tpl.default_file_id
 }
 
 async function loadCases() {
@@ -1096,22 +1906,64 @@ async function loadDocPreview() {
 
 // ==================== 调试操作 ====================
 async function runDebug() {
+  // 检查是否选择了变量文件
+  if (!debugEnvId.value) {
+    ElMessage.warning('请先选择变量文件')
+    return
+  }
+
+  // multipart/form-data 必须包含至少一个 file 类型参数
+  if (bodyType.value === 'form-data') {
+    var hasFile = formDataRows.value.some(function (r, i) {
+      return i < formDataRows.value.length - 1 && r.type === 'file' && r.name && r.name.trim() && r.fileId
+    })
+    if (!hasFile) {
+      ElMessage.warning('multipart/form-data 需要至少一个 file 类型的参数。如无文件上传，请使用 x-www-form-urlencoded')
+      return
+    }
+  }
+
   var controller = new AbortController()
   debugAbortController.value = controller
   debugging.value = true
+  
+  // 重置结果状态
+  responseResult.value = null
+  responseDataInfo.value = null
+  requestInfo.value = null
+  requestHeadersInfo.value = null
+  extractInfo.value = null
+  assertInfo.value = null
+  logData.value = []
+  responseSubTab.value = 'result'
+  
   try {
     var payload = buildDebugPayload()
     var res = await debugRunInterface(
       selectedInterfaceId.value,
-      { environment_id: environmentId.value, payload: payload },
+      { 
+        environment_id: debugEnvId.value, 
+        payload: payload,
+        file_id: selectedUploadId.value || undefined,
+      },
       { signal: controller.signal },
     )
-    responseJson.value = JSON.stringify(res.data.data, null, 2)
+    
+    // 解析返回结果并结构化展示
+    parseDebugResponse(res.data.data)
+    
   } catch (err) {
     if (err.name === 'AbortError') {
-      responseJson.value = '{"status":"cancelled","message":' + JSON.stringify(t('common.cancelled')) + '}'
+      // 用户取消操作，不显示错误
     } else {
-      throw err
+      console.error('调试执行失败:', err)
+      
+      // 尝试解析错误响应（如果后端返回了部分结果）
+      if (err.response && err.response.data) {
+        parseDebugResponse(err.response.data.data || err.response.data)
+      }
+      
+      ElMessage.error(err.message || '调试执行失败')
     }
   } finally {
     debugging.value = false
@@ -1127,15 +1979,19 @@ function cancelDebug() {
 
 async function saveTemplate() {
   var payload = buildDebugPayload()
-  await saveDebugTemplate(selectedInterfaceId.value, payload)
+  await saveDebugTemplate(selectedInterfaceId.value, {
+    payload: payload,
+    default_file_id: selectedUploadId.value || null,
+  })
   ElMessage.success(t('common.saved'))
 }
 
 async function fillFromDoc() {
   var res = await fillDebugFromDoc(selectedInterfaceId.value)
   var tpl = res.data.data || {}
-  requestJson.value = JSON.stringify(tpl, null, 2)
-  assertionsJson.value = JSON.stringify(tpl.assertions || [], null, 2)
+  // tpl 是 DebugTemplateOut，实际 payload 在 tpl.payload 中
+  var payload = tpl.payload || tpl
+  populateFormFromPayload(payload)
   ElMessage.success(t('page.apiCases.filledFromDoc'))
 }
 
@@ -1234,7 +2090,7 @@ async function onListInterfaceReorder(payload) {
   reordered.splice(payload.toIndex, 0, item)
   interfaceList.value = reordered
   var catId = selectedCatalogId.value != null ? selectedCatalogId.value : item.catalog_id
-  if (catId) await applyInterfaceReorder(catId,_reordered.map(function (r) { return r.id }))
+  if (catId) await applyInterfaceReorder(catId, reordered.map(function (r) { return r.id }))
 }
 
 async function onSidebarInterfaceReorder(payload) {
@@ -1357,6 +2213,9 @@ function goAgentCenter() {
 watch(projectId, function () {
   loadTree()
   loadInterfaceList()
+  // 项目切换时重新加载变量文件和上传文件
+  refreshEnvironmentList()
+  loadUploadFiles()
 })
 
 watch(selectedCatalogId, function () {
@@ -1364,6 +2223,16 @@ watch(selectedCatalogId, function () {
 })
 
 watch(selectedInterfaceId, function () {
+  // 切换接口时清空响应区域
+  responseResult.value = null
+  responseDataInfo.value = null
+  requestInfo.value = null
+  requestHeadersInfo.value = null
+  extractInfo.value = null
+  assertInfo.value = null
+  logData.value = []
+  responseSubTab.value = 'result'
+
   if (selectedInterfaceId.value) {
     loadTemplate()
     loadCases()
@@ -1375,6 +2244,10 @@ watch(selectedInterfaceId, function () {
 onMounted(async function () {
   await loadTree()
   await loadInterfaceList()
+  // 加载变量文件列表
+  refreshEnvironmentList()
+  // 加载上传文件列表
+  loadUploadFiles()
   if (selectedInterfaceId.value) {
     await loadTemplate()
     await loadCases()
@@ -1396,6 +2269,12 @@ onMounted(async function () {
   flex: 1;
   padding: 16px;
   overflow-y: auto;
+}
+
+.detail-panel--flex {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .detail-nav-tabs {
@@ -1512,6 +2391,7 @@ onMounted(async function () {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  flex-shrink: 0;
 
   .detail-title {
     margin-bottom: 0;
@@ -1531,18 +2411,44 @@ onMounted(async function () {
   gap: 8px;
   margin-bottom: 12px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .debug-sub-tabs {
+  flex-shrink: 0;
+  height: 340px;
+  overflow: hidden;
   :deep(.el-tabs__header) {
     margin-bottom: 0;
     background: var(--fill-color-blank);
+  }
+  :deep(.el-tabs__content) {
+    height: calc(100% - 40px);
+    overflow: hidden;
+  }
+  :deep(.el-tab-pane) {
+    height: 100%;
+    overflow: auto;
   }
 }
 
 .sub-tab-content {
   padding: 12px 0;
-  min-height: 120px;
+  height: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+
+  :deep(.el-table) {
+    font-size: 14px;
+  }
+
+  :deep(.el-input__inner) {
+    font-size: 14px;
+  }
+
+  :deep(.el-select .el-input__inner) {
+    font-size: 14px;
+  }
 
   h4 {
     font-size: 13px;
@@ -1598,6 +2504,10 @@ onMounted(async function () {
   margin-top: 12px;
   border-top: 1px solid var(--el-border-color-lighter);
   padding-top: 12px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .response-area-toolbar {
@@ -1605,6 +2515,7 @@ onMounted(async function () {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
+  flex-shrink: 0;
 
   .response-sub-tabs {
     :deep(.el-tabs__header) {
@@ -1617,8 +2528,8 @@ onMounted(async function () {
 }
 
 .response-body {
-  min-height: 100px;
-  max-height: 300px;
+  flex: 1;
+  min-height: 80px;
   overflow: auto;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
@@ -1655,5 +2566,297 @@ onMounted(async function () {
   font-size: 12px;
   line-height: 1.6;
   color: var(--el-text-color-primary);
+}
+
+/* Body类型选择器 */
+.body-type-selector {
+  margin-bottom: 10px;
+}
+
+.form-data-box {
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 6px;
+  
+  .tip {
+    margin-bottom: 12px;
+    color: #888;
+    font-size: 13px;
+    margin: 0 0 10px 0;
+  }
+}
+
+/* 前置/后置操作 - 左右分栏布局 */
+.prepost-container {
+  display: flex;
+  gap: 12px;
+  height: 100%;
+  
+  .prepost-code {
+    flex: 1;
+    min-width: 0;
+  }
+  
+  .prepost-template {
+    width: 280px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--el-border-color-lighter);
+    padding-left: 12px;
+    
+    .template-header {
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--el-text-color-primary);
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--el-border-color-lighter);
+    }
+
+    .template-list {
+      overflow-y: auto;
+
+      .template-item {
+        padding: 6px 10px;
+        margin-bottom: 2px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.2s;
+
+        &:hover {
+          background: #ecf5ff;
+          border-color: #b3d8ff;
+        }
+
+        .template-name {
+          display: block;
+          font-size: 14px;
+          font-weight: 500;
+          color: var(--el-text-color-primary);
+        }
+        
+        code {
+          display: block;
+          font-family: 'Fira Code', Consolas, monospace;
+          font-size: 11px;
+          color: #c7254e;
+          background: #f5f5f5;
+          padding: 4px 6px;
+          border-radius: 3px;
+          word-break: break-all;
+        }
+      }
+    }
+  }
+}
+
+/* 结构化响应展示 */
+.structured-response {
+  .info-row {
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.6;
+
+    strong {
+      color: var(--el-text-color-secondary);
+      min-width: 100px;
+      display: inline-block;
+    }
+
+    code {
+      background: #f5f7fa;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+  }
+}
+
+/* 通用表格样式 — 提取信息/断言信息/响应头等 tab 共用 */
+.response-body,
+.structured-response,
+.drawer-response-body {
+  .info-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0;
+    table-layout: auto;
+
+    th, td {
+      border: 1px solid var(--el-border-color-lighter);
+      padding: 6px 10px;
+      font-size: 12px;
+      text-align: left;
+      word-break: break-all;
+    }
+
+    th {
+      background: #fafafa;
+      font-weight: 600;
+    }
+  }
+}
+
+.error-message {
+  padding: 10px 14px;
+  background: #fef0f0;
+  border-radius: 4px;
+  color: #f56c6c;
+  font-size: 13px;
+  margin-top: 8px;
+  
+  strong {
+    margin-right: 6px;
+  }
+}
+
+/* 断言表格 */
+.assert-table {
+  tr.assert-passed {
+    background: #f0f9eb;
+  }
+  tr.assert-failed {
+    background: #fef0f0;
+  }
+}
+
+/* 日志信息容器 */
+.log-container {
+  height: 100%;
+  overflow-y: auto;
+  font-family: 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 12px;
+  border-radius: 4px;
+  
+  .log-item {
+    padding: 4px 8px;
+    margin-bottom: 2px;
+    border-radius: 2px;
+    line-height: 1.6;
+    
+    .log-level-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-right: 8px;
+      min-width: 50px;
+      text-align: center;
+      
+      &.badge-debug {
+        background: #6a9955;
+        color: #fff;
+      }
+      
+      &.badge-info {
+        background: #3794ff;
+        color: #fff;
+      }
+      
+      &.badge-warning, &.badge-warn {
+        background: #cca700;
+        color: #000;
+      }
+      
+      &.badge-error {
+        background: #f44747;
+        color: #fff;
+      }
+    }
+    
+    .log-message {
+      word-break: break-word;
+    }
+    
+    /* 不同级别日志的背景色 */
+    &.log-debug {
+      background: rgba(106, 153, 85, 0.15);
+    }
+    
+    &.log-info {
+      background: rgba(55, 148, 255, 0.15);
+    }
+    
+    &.log-warning,
+    &.log-warn {
+      background: rgba(204, 167, 0, 0.15);
+    }
+    
+    &.log-error {
+      background: rgba(244, 71, 71, 0.25);
+      color: #f48771;
+    }
+  }
+}
+
+.drawer-detail-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+
+  .drawer-detail-meta {
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.drawer-response-tabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  :deep(.el-tabs__header) {
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  :deep(.el-tabs__content) {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  :deep(.el-tab-pane) {
+    height: 100%;
+  }
+}
+
+.drawer-response-body {
+  height: 100%;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  background: #fafafa;
+
+  .log-container {
+    height: 100%;
+    max-height: none;
+  }
+}
+</style>
+
+<!-- 全局样式：变量文件下拉菜单（popper 挂载在 body，scoped 无法生效） -->
+<style lang="scss">
+.var-file-dropdown {
+  .el-dropdown-menu__item {
+    font-size: 14px;
+    line-height: 22px;
+    padding: 5px 16px;
+  }
 }
 </style>

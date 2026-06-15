@@ -101,8 +101,12 @@ class TestEnvDataAssembler:
                     cfg["password"] = decrypt_secret(pwd)
                 except Exception:
                     pass
-            if "username" in cfg and "user" not in cfg:
-                cfg["user"] = cfg["username"]
+            username_val = cfg.pop("username", None)
+            if username_val is not None and "user" not in cfg:
+                cfg["user"] = username_val
+            db_name_val = cfg.pop("database_name", None)
+            if db_name_val is not None and "database" not in cfg:
+                cfg["database"] = db_name_val
             db_list.append(
                 {
                     "name": conn.server_name,
@@ -128,6 +132,26 @@ class TestEnvDataAssembler:
             "db": db_list,
         }
 
+    @staticmethod
+    def _sanitize_db_config(payload: dict) -> dict:
+        """Normalize db config keys for pymysql/pymssql compatibility."""
+        db_list = payload.get("db")
+        if not db_list or not isinstance(db_list, list):
+            return payload
+        for item in db_list:
+            cfg = item.get("config")
+            if not cfg or not isinstance(cfg, dict):
+                continue
+            if "username" in cfg:
+                username_val = cfg.pop("username")
+                if "user" not in cfg:
+                    cfg["user"] = username_val
+            if "database_name" in cfg:
+                db_name_val = cfg.pop("database_name")
+                if "database" not in cfg:
+                    cfg["database"] = db_name_val
+        return payload
+
     @classmethod
     async def get_test_env_data(
         cls,
@@ -139,7 +163,7 @@ class TestEnvDataAssembler:
         if use_snapshot and snapshot_id:
             snapshot = await TestEnvironmentSnapshot.get_or_none(id=snapshot_id)
             if snapshot:
-                return copy.deepcopy(snapshot.payload)
+                return cls._sanitize_db_config(copy.deepcopy(snapshot.payload))
         if use_snapshot:
             snapshot = (
                 await TestEnvironmentSnapshot.filter(environment_id=environment_id)
@@ -147,7 +171,7 @@ class TestEnvDataAssembler:
                 .first()
             )
             if snapshot:
-                return copy.deepcopy(snapshot.payload)
+                return cls._sanitize_db_config(copy.deepcopy(snapshot.payload))
         return await cls.assemble(environment_id)
 
     @classmethod

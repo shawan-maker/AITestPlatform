@@ -1,4 +1,5 @@
 import copy
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -16,6 +17,54 @@ from service.test_execution.shared.run_var_context import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _make_json_safe(obj: Any) -> Any:
+    """Recursively convert non-JSON-serializable types for orjson.
+
+    Handles CaseInsensitiveDict (requests headers), bytes, and other
+    common non-serializable types returned by the ApiEngine.
+    """
+    if isinstance(obj, dict):
+        return {k: _make_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_make_json_safe(v) for v in obj]
+    if isinstance(obj, bytes):
+        try:
+            return obj.decode("utf-8", errors="replace")
+        except Exception:
+            return obj.hex()
+    if isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    if hasattr(obj, "items"):
+        # MutableMapping subclasses (e.g. CaseInsensitiveDict)
+        return {str(k): _make_json_safe(v) for k, v in obj.items()}
+    return str(obj)
+
+
+def _build_request_info(result: dict, case_payload: dict) -> dict:
+    """Build request_info from engine result, using the actual URL with replaced params."""
+    from urllib.parse import urlparse, parse_qs
+    actual_url = result.get('url') or ''
+    method = result.get('method') or case_payload.get('method', '')
+    # Parse actual query params from the URL the engine sent (has replaced values)
+    params = {}
+    if actual_url:
+        try:
+            parsed = urlparse(actual_url)
+            for k, v in parse_qs(parsed.query).items():
+                params[k] = v[0] if len(v) == 1 else v
+        except Exception:
+            pass
+    if not params:
+        params = case_payload.get('request', {}).get('params') or {}
+    return {
+        'method': method.upper(),
+        'url': actual_url,
+        'headers': result.get('request_headers') or {},
+        'params': params,
+        'body': result.get('request_body') or case_payload.get('request', {}).get('data') or case_payload.get('request', {}).get('json'),
+    }
 
 
 def map_runner_status(result: dict[str, Any]) -> CaseRunStatus:
@@ -51,11 +100,66 @@ class RunnerGateway:
         runner_env = prepare_runner_env(test_env_data, temp_vars)
         runner = TestRunner(runner_env)
         start = datetime.now(timezone.utc)
+        
+        # 初始化详细结果信息
+        detailed_result = {
+            'status': 'pending',
+            'executor': triggered_by_id or None,
+            'duration_ms': 0,
+            'error_message': None,
+            'log_data': [],
+        }
+        
         try:
             result = runner.execute_cases(case_payload)
+
+            # 解析引擎返回的详细结果
+            if isinstance(result, dict):
+                detailed_result['status'] = result.get('status', 'unknown')
+                detailed_result['error_message'] = result.get('message') if result.get('status') == 'error' else None
+
+                # 引擎单条用例结果使用 flat 结构：response_code, response_headers, response_body,
+                # request_headers, request_body, url, method, log_data
+                # 也可能有嵌套的 response_info / request_info（兼容两种格式）
+                ri = result.get('response_info') or {}
+                detailed_result.update({
+                    'response_info': {
+                        'status_code': ri.get('status_code') or result.get('response_code'),
+                        'content_type': ri.get('content_type') or result.get('content_type'),
+                        'body': ri.get('body') or result.get('response_body'),
+                        'elapsed_ms': ri.get('elapsed_ms') or result.get('run_time'),
+                        'headers': ri.get('headers') or result.get('response_headers') or {},
+                    },
+                    'request_info': _build_request_info(result, case_payload),
+                    'extract_info': result.get('extract_info') or result.get('extracts') or [],
+                    'assert_info': result.get('assert_info') or result.get('assertions') or [],
+                    'log_data': result.get('log_data') or result.get('logs') or [],
+                })
+                
+                # 如果断言信息没有passed字段，尝试从结果中推断
+                assertions = detailed_result.get('assert_info', [])
+                for assertion in assertions:
+                    if 'passed' not in assertion:
+                        # 默认认为断言通过（除非明确标记为失败）
+                        assertion['passed'] = assertion.get('success', True)
+            
+            # 将详细结果合并到result中，供api_requests_info存储
+            result['_debug_detail'] = detailed_result
+            
         except Exception as exc:
             result = {"status": "error", "message": str(exc)}
+            detailed_result['status'] = 'error'
+            detailed_result['error_message'] = str(exc)
+            detailed_result['log_data'].append(['ERROR', f'执行异常: {str(exc)}'])
+            result['_debug_detail'] = detailed_result
+            
         end = datetime.now(timezone.utc)
+        
+        # 计算耗时（毫秒）
+        duration_ms = int((end - start).total_seconds() * 1000)
+        detailed_result['duration_ms'] = duration_ms
+        if '_debug_detail' in result:
+            result['_debug_detail']['duration_ms'] = duration_ms
 
         engine_snapshot = {
             "envs": copy.deepcopy(dict(ENV.get("envs") or {})),
@@ -73,6 +177,7 @@ class RunnerGateway:
                 )
 
         status = map_runner_status(result if isinstance(result, dict) else {})
+        safe_result = _make_json_safe(result) if isinstance(result, dict) else None
         return await ApiCaseRunRecord.create(
             api_case_id=api_case_id,
             interface_id=interface_id,
@@ -89,7 +194,7 @@ class RunnerGateway:
             start_time=start,
             end_time=end,
             duration_ms=int((end - start).total_seconds() * 1000),
-            api_requests_info=result if isinstance(result, dict) else None,
+            api_requests_info=safe_result,
         )
 
     @classmethod

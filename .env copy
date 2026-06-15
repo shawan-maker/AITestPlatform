@@ -1,0 +1,55 @@
+HOST=0.0.0.0
+PORT=9621
+WEBUI_TITLE='MyRAG'
+WEBUI_DESCRIPTION="RAG"
+# 用更轻量的OCR模式（不使用VLM）
+PARSE_METHOD=ocr
+TIKTOKEN_CACHE_DIR=./temp/tiktoken
+
+SUMMARY_LANGUAGE=Chainese
+ENABLE_LLM_CACHE_FOR_EXTRACT=true
+
+MAX_ASYNC=4
+MAX_PARALLEL_INSERT=2
+
+### LLM
+LLM_BINDING=openai
+LLM_MODEL=deepseek-ai/DeepSeek-V3.2
+LLM_BINDING_HOST=https://api.siliconflow.cn/v1
+LLM_BINDING_API_KEY=sk-heaqmnspjkwtpbllahjbvipoyxvuhcmvwlfvczlaffoqxbyf
+
+### Embedding
+EMBEDDING_BINDING=openai
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
+EMBEDDING_DIM=4096
+EMBEDDING_BINDING_HOST=https://api.siliconflow.cn/v1
+EMBEDDING_BINDING_API_KEY=sk-heaqmnspjkwtpbllahjbvipoyxvuhcmvwlfvczlaffoqxbyf
+
+# RERANK
+ENABLE_RERANK=True
+MIN_RERANK_SCORE=0.6
+RERANK_MODEL=Qwen/Qwen3-Reranker-8B
+RERANK_BINDING_HOST=https://api.siliconflow.cn/v1/rerank
+RERANK_BINDING_API_KEY=sk-heaqmnspjkwtpbllahjbvipoyxvuhcmvwlfvczlaffoqxbyf
+
+### Visual Model
+Visual_BINDING=openai
+VISUAL_MODEL=Qwen/Qwen3.5-9B
+VISUAL_BINDING_HOST=https://api.siliconflow.cn/v1/chat/completions
+VISUAL_BINDING_API_KEY=sk-heaqmnspjkwtpbllahjbvipoyxvuhcmvwlfvczlaffoqxbyf
+
+# RAG Server
+RAG_SERVER_URL=http://127.0.0.1:9621
+RAG_API_KEY=your-secure-api-key-here
+
+# Database
+DATABASE_URL=mysql://root:123456@192.168.40.145:3306/aiTestPlatform
+
+# JWT
+JWT_SECRET_KEY=change-me-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# Redis (optional)
+REDIS_URL=redis://192.168.40.145:6379/0
