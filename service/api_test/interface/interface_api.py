@@ -4,6 +4,7 @@ from service.api_test.interface.import_service import ImportService
 from service.api_test.interface.interface_service import InterfaceService
 from service.api_test.interface.schemas import (
     ImportConfirmRequest,
+    InterfaceBatchDeleteRequest,
     InterfaceCreateRequest,
     InterfaceListQuery,
     InterfaceReorderRequest,
@@ -75,6 +76,15 @@ async def update_interface(
 ):
     data = await InterfaceService.update(user, interface_id, body)
     return success(data=data, message="接口更新成功")
+
+
+@router.post("/interfaces/batch-delete", summary="批量删除接口")
+async def batch_delete_interfaces(
+    body: InterfaceBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await InterfaceService.batch_delete(user, body)
+    return success(data=result)
 
 
 @router.delete("/interfaces/{interface_id}", summary="删除接口")

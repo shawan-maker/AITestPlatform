@@ -8,7 +8,7 @@ from service.core.exceptions import AppException
 from service.core.response import success
 from service.knowledge.document.document_service import DocumentService
 from service.knowledge.document.permissions import ensure_document_editor
-from service.knowledge.document.schemas import KnowledgeDocumentListQuery
+from service.knowledge.document.schemas import DocumentBatchDeleteRequest, KnowledgeDocumentListQuery
 from service.knowledge.document.version_service import VersionService
 from service.knowledge.rules.file_rules import FileRules, sha256_hex
 from service.user.models import User
@@ -72,6 +72,15 @@ async def list_documents(
 ):
     data = await DocumentService.list_documents(user, query)
     return success(data=data)
+
+
+@router.post("/documents/batch-delete", summary="批量删除知识库文档")
+async def batch_delete(
+    data: DocumentBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await DocumentService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.get("/documents/{document_id}", summary="知识库文档详情")

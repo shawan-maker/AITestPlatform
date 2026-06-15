@@ -84,6 +84,8 @@ export function resolveParseDisplayStatus(doc) {
     if (parseStatus === 'parsed') return 'parsed'
     // 结构化解析中
     if (parseStatus === 'parsing') return 'parsing'
+    // 结构化解析失败（AI 解析失败时 parse_status=failed，index_status 仍为 indexed）
+    if (parseStatus === 'failed') return 'failed'
     // Swagger/OpenAPI 走 _process_spec_parse 时 index_status=na, parse_status=parsed 已在上面处理
     // 兜底回退到 index_status
   }

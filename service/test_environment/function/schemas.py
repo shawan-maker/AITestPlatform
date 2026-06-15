@@ -113,3 +113,17 @@ class FunctionValidateRequest(BaseModel):
         if not FUNCTION_FILE_PATTERN.match(value):
             raise ValueError(FUNCTION_FILE_NAME_ERROR)
         return value
+
+
+class FunctionFileBatchDeleteRequest(BaseModel):
+    file_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class FunctionFileBatchDeleteFailure(BaseModel):
+    file_id: int
+    message: str
+
+
+class FunctionFileBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[FunctionFileBatchDeleteFailure]

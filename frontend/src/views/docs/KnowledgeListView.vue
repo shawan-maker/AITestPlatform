@@ -7,6 +7,7 @@
         <el-button v-if="canEdit && projectId" type="primary" @click="showUpload = true">
           {{ t('page.knowledge.upload') }}
         </el-button>
+        <el-button v-if="canEdit && projectId && selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
       </template>
       <el-input
         v-model="filters.title"
@@ -47,9 +48,12 @@
       :data="items"
       :loading="loading"
       :total="total"
+      row-key="id"
       @page-change="load"
       @size-change="load"
+      @selection-change="onSelectionChange"
     >
+      <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
       <AppTableColumn
         prop="title"
         variant="content"
@@ -139,8 +143,9 @@
 import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  batchDeleteDocuments,
   deleteDocument,
   downloadDocument,
   downloadVersion,
@@ -210,6 +215,7 @@ const importDocId = ref(null)
 const importVersionId = ref(null)
 const importDocumentTitle = ref('')
 const importVersionLabel = ref('')
+const selectedIds = ref([])
 
 const hasFilters = computed(
   () => !!(filters.title || filters.project_name || filters.doc_type || filters.index_status),
@@ -321,6 +327,33 @@ async function remove(row) {
   await deleteDocument(row.id)
   ElMessage.success(t('common.deleted'))
   load()
+}
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
+
+async function batchRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var res = await batchDeleteDocuments(selectedIds.value)
+    var data = res.data.data
+    selectedIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else if (data && data.deleted_ids && data.deleted_ids.length) {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
+    }
+    load()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
 }
 
 async function upload(formData) {

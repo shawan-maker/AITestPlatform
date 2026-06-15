@@ -1,14 +1,19 @@
 <template>
   <!-- v2-Q5: 严格12列顺序 + 接口目录完整路径 -->
   <div class="interface-list-panel">
-    <el-input
-      :model-value="searchQuery"
-      :placeholder="t('page.apiCases.searchInterfaces')"
-      clearable
-      class="search-input"
-      @update:model-value="$emit('update:searchQuery', $event)"
-      @keyup.enter="$emit('search')"
-    />
+    <div class="toolbar-row">
+      <el-button v-if="canEdit && selectedIds.length" type="danger" @click="$emit('batch-delete', selectedIds)">
+        {{ t('common.batchDelete') }} ({{ selectedIds.length }})
+      </el-button>
+      <el-input
+        :model-value="searchQuery"
+        :placeholder="t('page.apiCases.searchInterfaces')"
+        clearable
+        class="search-input"
+        @update:model-value="$emit('update:searchQuery', $event)"
+        @keyup.enter="$emit('search')"
+      />
+    </div>
 
     <PaginatedTable
       :data="interfaces"
@@ -17,10 +22,12 @@
       :page="page"
       :page-size="pageSize"
       row-key="id"
+      @selection-change="onSelectionChange"
       @row-click="(row) => $emit('select', row)"
       @page-change="$emit('page-change', $event)"
       @size-change="$emit('size-change', $event)"
     >
+      <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
       <!-- v2: 列1 - 序号（隐式在PaginatedTable中） -->
       <AppTableColumn prop="summary" :label="'接口名称'" variant="content" min-width="150">
         <template #default="{ row }">
@@ -96,6 +103,7 @@ const emit = defineEmits([
   'edit',
   'copy',
   'delete',
+  'batch-delete',
   'page-change',
   'size-change',
   'reorder',
@@ -103,6 +111,11 @@ const emit = defineEmits([
 
 const { t } = useI18n()
 const dragFromIndex = ref(null)
+const selectedIds = ref([])
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
 
 function methodTagType(method) {
   const m = (method || '').toUpperCase()
@@ -142,6 +155,12 @@ function onDrop(toIndex) {
   flex-direction: column;
   gap: 12px;
   min-height: 0;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .search-input {

@@ -6,6 +6,7 @@
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+          <el-button v-if="canEdit && selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
         </template>
         <el-input v-model="filters.q" :placeholder="t('common.keyword')" clearable />
         <el-select v-model="filters.status" :placeholder="t('common.status')" clearable>
@@ -15,7 +16,8 @@
           <el-option v-for="s in DEFECT_SEVERITY" :key="s" :label="s" :value="s" />
         </el-select>
       </FilterBar>
-      <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" @page-change="load">
+      <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" row-key="id" @page-change="load" @selection-change="onSelectionChange">
+        <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
         <AppTableColumn prop="title" variant="content" :label="t('page.defects.title')" />
         <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
           <template #default="{ row }"><DefectStatusTag :status="row.status" /></template>
@@ -48,8 +50,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { createDefect, listDefects } from '@/api/testManagement'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { batchDeleteDefects, createDefect, listDefects } from '@/api/testManagement'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
@@ -71,6 +73,34 @@ const items = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
 const createForm = reactive({ title: '', severity: DEFECT_SEVERITY[0], priority: '?' })
+const selectedIds = ref([])
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
+
+async function batchRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var res = await batchDeleteDefects(selectedIds.value)
+    var data = res.data.data
+    selectedIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else if (data && data.deleted_ids && data.deleted_ids.length) {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
+    }
+    load()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
+}
 
 async function load() {
   const params = withProjectParams({

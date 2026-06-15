@@ -194,3 +194,17 @@ class SuiteService:
 
         await assert_no_running_for_suite(suite_id)
         await suite.delete()
+
+    @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.suite_ids:
+            try:
+                await cls.delete(user, item_id)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'suite_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'suite_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}

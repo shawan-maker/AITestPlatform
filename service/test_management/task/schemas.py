@@ -126,3 +126,17 @@ class TaskCaseTreeNode(BaseModel):
 
 
 TaskCaseTreeNode.model_rebuild()
+
+
+class TaskBatchDeleteRequest(BaseModel):
+    task_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class TaskBatchDeleteFailure(BaseModel):
+    task_id: int
+    message: str
+
+
+class TaskBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[TaskBatchDeleteFailure]

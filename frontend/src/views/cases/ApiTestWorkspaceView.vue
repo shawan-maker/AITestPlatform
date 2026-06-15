@@ -46,6 +46,7 @@
             @edit="openEditInterface"
             @copy="copyInterfaceItem"
             @delete="removeInterfaceItem"
+            @batch-delete="batchDeleteInterfaces"
             @page-change="onListPageChange"
             @size-change="onListSizeChange"
             @reorder="onListInterfaceReorder"
@@ -54,6 +55,9 @@
 
         <!-- 选中接口后展示3个Tab详情页 -->
         <div v-else class="interface-detail-view">
+          <div class="detail-back-row">
+            <el-button :icon="ArrowLeft" @click="selectedInterfaceId = null">{{ t('common.back') }}</el-button>
+          </div>
 
           <!-- ====== Tab 1: 文档预览 ====== -->
           <div v-show="activeTab === 'doc-preview'" class="detail-panel">
@@ -67,26 +71,35 @@
             </section>
             <section class="doc-section">
               <h4>{{ t('page.apiCases.requestBody') }}</h4>
-              <el-table :data="requestBodyFields" border size="small" empty-text="-" row-key="__path">
-                <el-table-column prop="name" :label="t('page.apiCases.fieldName')" min-width="160" />
-                <el-table-column prop="path" :label="t('page.apiCases.fieldPath')" min-width="200" />
-                <el-table-column prop="type" :label="t('page.apiCases.fieldType')" width="140" />
+              <el-table :data="requestBodyFields" border size="small" empty-text="-" row-key="__path" :tree-props="{ children: 'children' }" default-expand-all class="doc-preview-table">
+                <el-table-column prop="name" :label="t('page.apiCases.fieldName')" min-width="180" align="left" />
+                <el-table-column prop="path" :label="t('page.apiCases.fieldPath')" min-width="220" align="left" />
+                <el-table-column prop="type" :label="t('page.apiCases.fieldType')" width="120" align="left" />
                 <el-table-column prop="required" :label="t('page.apiCases.fieldRequired')" width="70" align="center">
                   <template #default="{ row }">{{ row.required ? '是' : '否' }}</template>
                 </el-table-column>
-                <el-table-column prop="nullable" :label="t('page.apiCases.fieldNullable')" width="70" align="center">
-                  <template #default="{ row }">{{ row.nullable ? '是' : '否' }}</template>
-                </el-table-column>
-                <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="180" show-overflow-tooltip />
+                <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="200" align="left" show-overflow-tooltip />
               </el-table>
             </section>
             <section class="doc-section">
               <h4>{{ t('page.apiCases.responseParams') }}</h4>
-              <el-table :data="responseBodyFields" border size="small" empty-text="-">
-                <el-table-column prop="name" :label="t('page.apiCases.fieldName')" min-width="160" />
-                <el-table-column prop="path" :label="t('page.apiCases.fieldPath')" min-width="200" />
-                <el-table-column prop="type" :label="t('page.apiCases.fieldType')" width="140" />
-                <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="180" show-overflow-tooltip />
+              <el-table :data="responseBodyFields" border size="small" empty-text="-" row-key="__path" :tree-props="{ children: 'children' }" default-expand-all class="doc-preview-table">
+                <el-table-column prop="name" :label="t('page.apiCases.fieldName')" min-width="180" align="left" />
+                <el-table-column prop="path" :label="t('page.apiCases.fieldPath')" min-width="220" align="left" />
+                <el-table-column prop="type" :label="t('page.apiCases.fieldType')" width="120" align="left" />
+                <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="200" align="left" show-overflow-tooltip />
+              </el-table>
+            </section>
+            <section class="doc-section">
+              <h4>返回码</h4>
+              <el-table :data="responseCodes" border size="small" empty-text="-" class="doc-preview-table">
+                <el-table-column prop="http_code" label="状态码" width="100" align="left" />
+                <el-table-column prop="response_example" label="响应示例" min-width="260" align="left" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.response_example || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="description" label="说明" min-width="200" align="left" show-overflow-tooltip>
+                  <template #default="{ row }">{{ row.description || '-' }}</template>
+                </el-table-column>
               </el-table>
             </section>
           </div>
@@ -123,18 +136,19 @@
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
-                <el-dropdown trigger="click">
-                  <el-button>
-                    {{ t('page.apiCases.batchOps') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                <el-dropdown trigger="click" @command="onBatchCaseCommand">
+                  <el-button :disabled="!selectedCaseIds.length">
+                    {{ t('page.apiCases.batchOps') }} ({{ selectedCaseIds.length }})<el-icon class="el-icon--right"><ArrowDown /></el-icon>
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
-                      <el-dropdown-item>批量运行</el-dropdown-item>
-                      <el-dropdown-item>批量删除</el-dropdown-item>
-                      <el-dropdown-item>批量导出</el-dropdown-item>
+                      <el-dropdown-item command="run" :disabled="!selectedCaseIds.length">批量运行</el-dropdown-item>
+                      <el-dropdown-item command="delete" :disabled="!selectedCaseIds.length">批量删除</el-dropdown-item>
+                      <el-dropdown-item command="export" :disabled="!selectedCaseIds.length">批量导出</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
+                <el-button v-if="canEdit && selectedCaseIds.length" type="danger" @click="batchDeleteCases">{{ t('common.batchDelete') }} ({{ selectedCaseIds.length }})</el-button>
                 <el-button v-if="canEdit" type="primary" :icon="MagicStick" @click="showGenerate = true">{{ t('page.apiCases.generateCases') }}</el-button>
               </div>
             </div>
@@ -146,8 +160,8 @@
                   <span class="collapse-title">{{ t('page.apiCases.preconditionCases') }}</span>
                   <el-badge :value="filteredPreconditionCases.length" type="info" class="collapse-badge" />
                 </template>
-                <el-table :data="filteredPreconditionCases" border size="small" row-key="id" empty_text="-" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
-                  <el-table-column type="selection" width="40" />
+                <el-table :data="filteredPreconditionCases" border size="small" row-key="id" empty_text="-" @selection-change="onCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
+                  <el-table-column type="selection" width="50" />
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
                   </el-table-column>
@@ -187,8 +201,8 @@
                   <span class="collapse-title">{{ t('page.apiCases.mainCases') }}</span>
                   <el-badge :value="filteredMainCases.length" type="info" class="collapse-badge" />
                 </template>
-                <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
-                  <el-table-column type="selection" width="40" />
+                <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
+                  <el-table-column type="selection" width="50" />
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
                   </el-table-column>
@@ -873,6 +887,7 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown,
+  ArrowLeft,
   Clock,
   Close,
   CopyDocument,
@@ -906,6 +921,8 @@ import {
   reorderInterfaces,
   saveDebugTemplate,
   updateApiCatalog,
+  batchDeleteApiCases,
+  batchDeleteInterfaces as batchDeleteInterfacesApi,
 } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
@@ -1090,6 +1107,11 @@ const preconditionCases = ref([])
 const mainCases = ref([])
 const casesLoading = ref(false)
 const caseSearchKey = ref('')
+const selectedCaseIds = ref([])
+
+function onCaseSelectionChange(rows) {
+  selectedCaseIds.value = rows.map(function (r) { return r.id })
+}
 const preCollapseOpen = ref(['pre'])
 const mainCollapseOpen = ref(['main'])
 const showImport = ref(false)
@@ -1177,21 +1199,152 @@ function getAssertMethodLabel(methodValue) {
   return methodValue
 }
 
-/** 从 docPreview 解析请求体字段表格 */
+/** 从 docPreview 解析请求体字段表格（树形结构） */
 var requestBodyFields = computed(function () {
   if (!docPreview.value) return []
-  var body = docPreview.value.request_body || []
-  return flattenSchema(body, 'root')
+  var doc = docPreview.value.doc || docPreview.value
+  var body = doc.requestBody || doc.request_body
+  if (!body) return []
+  // 格式 A: BodyField 列表 {content_type, body: [{name, type, description, required, nested_fields}]}
+  if (body.body && Array.isArray(body.body)) {
+    return buildBodyFieldTree(body.body, '')
+  }
+  // 格式 B: JSON Schema {properties, required, type}
+  if (body.properties || body.type) {
+    return buildSchemaTree(body, 'root')
+  }
+  // 格式 C: 数组
+  if (Array.isArray(body)) {
+    return buildBodyFieldTree(body, '')
+  }
+  return []
 })
 
-/** 从 docPreview 解析返回参数字段表格 */
+/** 将 BodyField 列表构建为树形结构 */
+function buildBodyFieldTree(fields, parentPath) {
+  if (!Array.isArray(fields)) return []
+  var rows = []
+  for (var i = 0; i < fields.length; i++) {
+    var f = fields[i]
+    if (!f || typeof f !== 'object') continue
+    var fpath = parentPath ? parentPath + '.' + f.name : f.name
+    var row = {
+      __path: fpath,
+      name: f.name,
+      path: fpath,
+      type: f.type || '-',
+      required: f.required || false,
+      desc: f.description || '',
+      children: [],
+    }
+    // 递归 nested_fields（object 类型的子字段）
+    if (f.nested_fields && Array.isArray(f.nested_fields)) {
+      row.children = buildBodyFieldTree(f.nested_fields, fpath)
+    }
+    // 递归 array_item_fields（array 类型的元素字段）
+    if (f.array_item_fields && Array.isArray(f.array_item_fields)) {
+      row.children = buildBodyFieldTree(f.array_item_fields, fpath + '[]')
+    }
+    if (row.children.length === 0) delete row.children
+    rows.push(row)
+  }
+  return rows
+}
+
+/** 将 JSON Schema 构建为树形结构 */
+function buildSchemaTree(schema, parentPath) {
+  if (!schema || typeof schema !== 'object') return []
+  var props = schema.properties || {}
+  var requiredSet = new Set(schema.required || [])
+  var rows = []
+  var keys = Object.keys(props)
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i]
+    var val = props[key]
+    if (typeof val !== 'object' || val === null) continue
+    var fpath = parentPath === 'root' ? key : parentPath + '.' + key
+    var typeStr = Array.isArray(val.type) ? val.type.join('|') : (val.type || (val.properties ? 'object' : '-'))
+    var row = {
+      __path: fpath,
+      name: key,
+      path: fpath,
+      type: typeStr,
+      required: requiredSet.has(key),
+      desc: val.description || val.title || '',
+    }
+    if (val.properties && Object.keys(val.properties).length > 0) {
+      row.children = buildSchemaTree(val, fpath)
+    }
+    rows.push(row)
+  }
+  return rows
+}
+
+/** 从 docPreview 解析返回参数字段表格（树形结构） */
 var responseBodyFields = computed(function () {
   if (!docPreview.value) return []
-  var responses = docPreview.value.responses || []
+  var doc = docPreview.value.doc || docPreview.value
+  var responses = doc.responses || []
   if (responses.length === 0) return []
   var firstResp = responses[0]
-  if (typeof firstResp === 'string' || !firstResp.body) return []
-  return flattenResponseSchema(firstResp.body)
+  if (!firstResp) return []
+  var body = firstResp.response_body || firstResp.body
+  if (!body) return []
+  if (typeof body === 'object' && !Array.isArray(body)) {
+    return buildExampleTree(body, '')
+  }
+  if (body.properties || body.type) {
+    return buildSchemaTree(body, '')
+  }
+  return []
+})
+
+/** 从具体示例对象构建树形结构 */
+function buildExampleTree(obj, parentPath) {
+  if (!obj || typeof obj !== 'object') return []
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return []
+    var first = obj[0]
+    if (typeof first === 'object' && first !== null) {
+      return buildExampleTree(first, parentPath + '[]')
+    }
+    return []
+  }
+  var rows = []
+  var keys = Object.keys(obj)
+  for (var k = 0; k < keys.length; k++) {
+    var key = keys[k]
+    var val = obj[key]
+    var rpath = parentPath ? parentPath + '.' + key : key
+    var typeStr = Array.isArray(val) ? 'array' : (val === null ? 'null' : typeof val)
+    var row = { __path: rpath, name: key, path: rpath, type: typeStr, desc: '' }
+    if (val && typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length > 0) {
+      row.children = buildExampleTree(val, rpath)
+    } else if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'object' && val[0] !== null) {
+      row.children = buildExampleTree(val, rpath)
+    }
+    rows.push(row)
+  }
+  return rows
+}
+
+/** 从 docPreview 解析返回码列表 */
+var responseCodes = computed(function () {
+  if (!docPreview.value) return []
+  var doc = docPreview.value.doc || docPreview.value
+  var responses = doc.responses || []
+  if (!Array.isArray(responses)) return []
+  return responses.map(function (r) {
+    var example = ''
+    if (r.response_body) {
+      try { example = typeof r.response_body === 'string' ? r.response_body : JSON.stringify(r.response_body) } catch (e) { example = String(r.response_body) }
+    }
+    return {
+      http_code: r.http_code || r.status_code || '-',
+      response_example: example,
+      description: r.description || '',
+    }
+  })
 })
 
 /** 过滤后的前置操作用例 */
@@ -1892,6 +2045,37 @@ async function loadCases() {
   }
 }
 
+function onBatchCaseCommand(command) {
+  if (command === 'delete') {
+    batchDeleteCases()
+  }
+}
+
+async function batchDeleteCases() {
+  if (!selectedCaseIds.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedCaseIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var count = selectedCaseIds.value.length
+    var res = await batchDeleteApiCases({ case_ids: selectedCaseIds.value })
+    var data = res.data.data
+    selectedCaseIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: count }))
+    }
+    loadCases()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
+}
+
 async function loadDeps() {
   if (!selectedInterfaceId.value) return
   var res = await listDependencies(selectedInterfaceId.value)
@@ -2026,6 +2210,32 @@ async function removeInterfaceItem(row) {
   if (selectedInterfaceId.value === id) selectedInterfaceId.value = null
   await refreshAfterInterfaceChange()
   ElMessage.success(t('common.deleted'))
+}
+
+async function batchDeleteInterfaces(selectedIds) {
+  if (!selectedIds || !selectedIds.length) return
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var res = await batchDeleteInterfacesApi(selectedIds)
+    var data = res.data.data
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: selectedIds.length }))
+    }
+    if (selectedIds.includes(selectedInterfaceId.value)) {
+      selectedInterfaceId.value = null
+    }
+    await refreshAfterInterfaceChange()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
 }
 
 async function copyInterfaceItem(row) {
@@ -2265,6 +2475,11 @@ onMounted(async function () {
   overflow: hidden;
 }
 
+.detail-back-row {
+  flex-shrink: 0;
+  padding-bottom: 8px;
+}
+
 .detail-panel {
   flex: 1;
   padding: 16px;
@@ -2293,6 +2508,12 @@ onMounted(async function () {
 }
 
 /* 文档预览 Tab */
+.doc-preview-table {
+  :deep(.el-table__cell) {
+    text-align: left !important;
+  }
+}
+
 .doc-section {
   margin-bottom: 20px;
 

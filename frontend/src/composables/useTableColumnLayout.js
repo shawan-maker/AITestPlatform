@@ -99,15 +99,21 @@ export function useTableColumnLayout(tableRef, dataRef) {
     const list = [...columns.value.values()]
     const data = dataRef?.value ?? []
     const actionCols = list.filter((c) => c.actions)
-    const dataCols = list.filter((c) => !c.actions)
+    const selectionCols = list.filter((c) => c.type === 'selection')
+    const dataCols = list.filter((c) => !c.actions && !selectionCols.includes(c))
     const next = {}
 
     for (const col of actionCols) {
       next[col.id] = col.userWidth ?? Math.round(measureColumnWidth(col, data))
     }
 
-    const actionUsed = actionCols.reduce((sum, col) => sum + next[col.id], 0)
-    const dataBudget = Math.max(0, tableWidth - actionUsed)
+    for (const col of selectionCols) {
+      next[col.id] = col.userWidth ?? col.width ?? 48
+    }
+
+    const fixedUsed = actionCols.reduce((sum, col) => sum + next[col.id], 0)
+      + selectionCols.reduce((sum, col) => sum + next[col.id], 0)
+    const dataBudget = Math.max(0, tableWidth - fixedUsed)
 
     const baseWidths = {}
     let baseSum = 0

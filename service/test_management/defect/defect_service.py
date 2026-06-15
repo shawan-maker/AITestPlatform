@@ -357,3 +357,27 @@ class DefectService:
             defect.id, user, comment_id=comment.id
         )
         return await cls.get_detail(user, defect_id)
+
+    @classmethod
+    async def delete(cls, user: User, defect_id: int) -> None:
+        defect = await TestDefect.get_or_none(id=defect_id)
+        if not defect:
+            raise AppException("缺陷不存在", 404)
+        ensure_tm_editor(defect.project_id, user)
+        await TestDefectComment.filter(defect_id=defect_id).delete()
+        await TestDefectHistory.filter(defect_id=defect_id).delete()
+        await defect.delete()
+
+    @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.defect_ids:
+            try:
+                await cls.delete(user, item_id)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'defect_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'defect_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}

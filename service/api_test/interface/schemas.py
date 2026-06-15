@@ -107,3 +107,17 @@ class ImportConfirmResult(BaseModel):
 
 
 PaginatedInterfaces = Paginated[InterfaceOut]
+
+
+class InterfaceBatchDeleteRequest(BaseModel):
+    interface_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class InterfaceBatchDeleteFailure(BaseModel):
+    interface_id: int
+    message: str
+
+
+class InterfaceBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[InterfaceBatchDeleteFailure]

@@ -197,6 +197,20 @@ class UserService:
         await invalidate_user_tokens(user.id)
 
     @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.user_ids:
+            try:
+                await cls.soft_delete(item_id, user)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'user_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'user_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}
+
+    @classmethod
     async def change_own_password(cls, user: User, data: ChangeOwnPasswordRequest) -> None:
         if not verify_password(data.old_password, user.password_hash):
             raise AppException("原密码不正确", 400)

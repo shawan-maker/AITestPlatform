@@ -83,7 +83,7 @@
           @page-change="onPageChange"
           @size-change="onSizeChange"
         >
-          <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="48" />
+          <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
           <AppTableColumn type="index" variant="fixed" :width="50" :index="(i) => (currentPage - 1) * pageSize + i + 1" />
           <!-- 用例编号列 -->
           <AppTableColumn prop="case_no" variant="content" :label="t('page.functional.caseNo')" width="120" />

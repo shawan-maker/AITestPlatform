@@ -146,6 +146,20 @@ class UploadedFileService:
         await record.save()
 
     @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.file_ids:
+            try:
+                await cls.soft_delete(user, item_id)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'file_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'file_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}
+
+    @classmethod
     async def resolve_path(cls, user: User, file_id: int) -> UploadedFilePathResolved:
         record = await EnvUploadedFile.get_or_none(id=file_id, is_deleted=False)
         if record is None:

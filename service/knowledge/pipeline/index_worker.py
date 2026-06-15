@@ -221,13 +221,38 @@ class IndexWorker:
             # 读取文件文本内容作为 AI 解析输入
             raw_text = file_path.read_text(encoding="utf-8", errors="replace")
 
+            # 使用独立的 LLM 实例，max_tokens 设为 16384 以支持大文档的多接口 JSON 输出
+            import os
+            from langchain_openai import ChatOpenAI
+            parse_llm = ChatOpenAI(
+                model=os.getenv("LLM_MODEL", "gpt-4o"),
+                api_key=os.getenv("LLM_BINDING_API_KEY"),
+                base_url=os.getenv("LLM_BINDING_HOST"),
+                request_timeout=int(os.getenv("LLM_REQUEST_TIMEOUT", "300")),
+                max_tokens=int(os.getenv("LLM_PARSE_MAX_TOKENS", "16384")),
+                max_retries=int(os.getenv("LLM_MAX_RETRIES", "2")),
+            )
+
             # 调用 AI Parser 提取接口数据（同步阻塞，放入线程池）
             parsed = await asyncio.to_thread(
-                APIDocumentParser().api_parser, raw_text
+                APIDocumentParser().api_parser, raw_text, parse_llm
             )
 
             if not isinstance(parsed, list):
                 parsed = [parsed] if isinstance(parsed, dict) else []
+
+            # 过滤无效项（必须有 method 和 path）
+            parsed = [
+                item for item in parsed
+                if isinstance(item, dict) and item.get("method") and item.get("path")
+            ]
+
+            if not parsed:
+                logger.warning("AI 解析结果为空 document=%s version=%s", document.id, version.id)
+                version.parse_status = ParseStatus.failed
+                version.parse_error = "AI 解析未提取到任何有效接口（需包含 method 和 path）"
+                await version.save(update_fields=["parse_status", "parse_error"])
+                return
 
             # 保存解析结果（复用 _save_parse_result）
             relative_path = cls._save_parse_result(

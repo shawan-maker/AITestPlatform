@@ -6,6 +6,7 @@
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
+          <el-button v-if="canEdit && selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
         </template>
         <el-input v-model="filters.keyword" :placeholder="t('page.env.function.keywordPlaceholder')" clearable />
         <el-input v-model="filters.method_name" :placeholder="t('page.env.function.methodNameFilter')" clearable />
@@ -29,8 +30,11 @@
         :total="total"
         v-model:page="page"
         v-model:page-size="pageSize"
+        row-key="id"
         @page-change="load"
+        @selection-change="onSelectionChange"
       >
+        <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
         <AppTableColumn prop="file_name" variant="content" :label="t('page.env.function.fileName')" />
         <AppTableColumn prop="method_names" variant="flex" :label="t('page.env.function.methodNames')">
           <template #default="{ row }">{{ formatNames(row.method_names) }}</template>
@@ -66,6 +70,7 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  batchDeleteFunctionFiles,
   deleteFunctionFile,
   getFunctionFile,
   listFunctionBoundEnvironments,
@@ -98,6 +103,35 @@ const showDetail = ref(false)
 const detailId = ref(null)
 const showDebug = ref(false)
 const debugFile = ref(null)
+const selectedIds = ref([])
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
+
+async function batchRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    const res = await batchDeleteFunctionFiles(selectedIds.value)
+    const data = res.data.data
+    selectedIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else if (data && data.deleted_ids && data.deleted_ids.length) {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
+    }
+    loadBoundEnvOptions()
+    load()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
+}
 
 function formatNames(names) {
   if (!names?.length) return '—'

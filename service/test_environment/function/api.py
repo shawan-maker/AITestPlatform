@@ -6,6 +6,7 @@ from service.test_environment.function.service import FunctionFileService
 from service.test_environment.function.schemas import (
     EnvironmentFunctionBindRequest,
     FunctionDebugRequest,
+    FunctionFileBatchDeleteRequest,
     FunctionFileCreateRequest,
     FunctionFileUpdateRequest,
     FunctionValidateRequest,
@@ -65,6 +66,15 @@ async def validate_function_file(
 ):
     result = await FunctionFileService.validate_source(data.file_name, data.source_code)
     return success(data=result, message="语法校验通过")
+
+
+@router.post("/batch-delete", summary="批量删除函数文件")
+async def batch_delete(
+    data: FunctionFileBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await FunctionFileService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.post("/{file_id}/debug", summary="调试执行函数")

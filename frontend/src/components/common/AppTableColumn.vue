@@ -86,6 +86,7 @@ const columnHeaderClass = computed(() => `${columnCellClass.value} app-table-col
 onMounted(() => {
   layout?.register({
     id: columnId,
+    type: props.type,
     variant: props.type === 'selection' ? 'fixed' : props.variant,
     prop: props.prop,
     label: props.label,

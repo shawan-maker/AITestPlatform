@@ -76,3 +76,17 @@ class ParsedInterfaceListResult(BaseModel):
     document_id: int
     version_id: int
     items: list[ParsedInterfaceItem]
+
+
+class DocumentBatchDeleteRequest(BaseModel):
+    document_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class DocumentBatchDeleteFailure(BaseModel):
+    document_id: int
+    message: str
+
+
+class DocumentBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[DocumentBatchDeleteFailure]

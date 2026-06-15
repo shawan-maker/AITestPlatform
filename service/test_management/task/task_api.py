@@ -4,6 +4,7 @@ from service.core.deps import get_current_active_user
 from service.core.response import success
 from service.test_management.task.case_relation_service import TaskCaseRelationService
 from service.test_management.task.schemas import (
+    TaskBatchDeleteRequest,
     TaskCaseBatchRemoveRequest,
     TaskCaseReplaceRequest,
     TaskCaseReorderRequest,
@@ -52,6 +53,15 @@ async def create_task(
 ):
     data = await TaskService.create(user, body)
     return success(data=data, message="任务创建成功")
+
+
+@router.post("/batch-delete", summary="批量删除任务")
+async def batch_delete(
+    data: TaskBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await TaskService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.get("/{task_id}", summary="任务详情")

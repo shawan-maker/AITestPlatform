@@ -28,7 +28,7 @@
       @size-change="load"
       @selection-change="onSelectionChange"
     >
-      <AppTableColumn v-if="auth.isSuperAdmin" type="selection" variant="fixed" :width="48" />
+      <AppTableColumn v-if="auth.isSuperAdmin" type="selection" variant="fixed" :width="50" />
       <AppTableColumn prop="name" variant="content" :label="t('page.admin.projects.name')" />
       <AppTableColumn prop="description" variant="content" :label="t('page.admin.projects.description')" />
       <AppTableColumn prop="member_count" variant="flex" :label="t('page.projectSettings.members')" />

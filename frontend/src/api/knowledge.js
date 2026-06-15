@@ -46,6 +46,10 @@ export function deleteDocument(documentId) {
   return request.delete(`/knowledge/documents/${documentId}`)
 }
 
+export function batchDeleteDocuments(ids) {
+  return request.post('/knowledge/documents/batch-delete', { document_ids: ids })
+}
+
 export function getVersionTextPreview(documentId, versionId) {
   return request.get(
     `/knowledge/documents/${documentId}/versions/${versionId}/text-preview`,

@@ -6,6 +6,7 @@
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="fileInput?.click()">{{ t('common.upload') }}</el-button>
+          <el-button v-if="canEdit && selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
           <input ref="fileInput" type="file" hidden @change="onUpload" />
         </template>
         <el-input v-model="filters.keyword" :placeholder="t('page.env.files.keywordPlaceholder')" clearable />
@@ -25,8 +26,11 @@
         :total="total"
         v-model:page="page"
         v-model:page-size="pageSize"
+        row-key="id"
         @page-change="load"
+        @selection-change="onSelectionChange"
       >
+        <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
         <AppTableColumn prop="file_name" variant="content" :label="t('common.name')" />
         <AppTableColumn prop="storage_path" variant="flex" :label="t('page.env.files.storagePath')">
           <template #default="{ row }">files/{{ row.project_id }}/{{ row.file_name }}</template>
@@ -62,8 +66,8 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { deleteUploadedFile, downloadUploadedFile, listUploadedFiles, uploadFile } from '@/api/environment'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { batchDeleteUploadedFiles, deleteUploadedFile, downloadUploadedFile, listUploadedFiles, uploadFile } from '@/api/environment'
 import { lookupUsers } from '@/api/users'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
@@ -90,6 +94,7 @@ const showPreview = ref(false)
 const previewFile = ref(null)
 const uploaderOptions = ref([])
 const uploaderMap = ref({})
+const selectedIds = ref([])
 const filters = reactive({ keyword: '', uploaded_by_id: null, mime_type: '' })
 
 function uploaderLabel(id) {
@@ -188,6 +193,33 @@ async function remove(row) {
   ElMessage.success(t('common.deleted'))
   if (previewFile.value?.id === row.id) previewFile.value = null
   load()
+}
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
+
+async function batchRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var res = await batchDeleteUploadedFiles(selectedIds.value)
+    var data = res.data.data
+    selectedIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else if (data && data.deleted_ids && data.deleted_ids.length) {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
+    }
+    load()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
 }
 
 onMounted(() => {

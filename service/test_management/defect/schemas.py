@@ -138,3 +138,17 @@ class DefectDetailOut(BaseModel):
 
 
 PaginatedDefects = Paginated[DefectListItemOut]
+
+
+class DefectBatchDeleteRequest(BaseModel):
+    defect_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class DefectBatchDeleteFailure(BaseModel):
+    defect_id: int
+    message: str
+
+
+class DefectBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[DefectBatchDeleteFailure]

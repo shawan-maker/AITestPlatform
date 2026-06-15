@@ -101,3 +101,17 @@ class SuiteCaseReorderRequest(BaseModel):
 class SuiteCaseDependencyPatchRequest(BaseModel):
     case_ids: list[int] = Field(min_length=1)
     use_dependency: bool
+
+
+class SuiteBatchDeleteRequest(BaseModel):
+    suite_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class SuiteBatchDeleteFailure(BaseModel):
+    suite_id: int
+    message: str
+
+
+class SuiteBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[SuiteBatchDeleteFailure]

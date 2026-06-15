@@ -7,6 +7,7 @@ from service.core.enums import DefectCategory, DefectPriority, DefectSeverity, D
 from service.core.response import success
 from service.test_management.defect.defect_service import DefectService
 from service.test_management.defect.schemas import (
+    DefectBatchDeleteRequest,
     DefectCommentCreateRequest,
     DefectListQuery,
     DefectManualCreateRequest,
@@ -61,6 +62,15 @@ async def create_defect(
 ):
     data = await DefectService.create_manual(user, body)
     return success(data=data, message="缺陷创建成功")
+
+
+@router.post("/batch-delete", summary="批量删除缺陷")
+async def batch_delete(
+    data: DefectBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await DefectService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.get("/{defect_id}", summary="缺陷详情")

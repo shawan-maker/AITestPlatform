@@ -24,6 +24,10 @@ export function deleteUser(userId) {
   return request.delete(`/users/${userId}`)
 }
 
+export function batchDeleteUsers(ids) {
+  return request.post('/users/batch-delete', { user_ids: ids })
+}
+
 export function changeMyPassword(data) {
   return request.put('/users/me/password', data)
 }

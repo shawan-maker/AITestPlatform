@@ -139,3 +139,17 @@ class AdminResetPasswordRequest(BaseModel):
         if self.new_password != self.verify_password:
             raise ValueError("两次密码不一致")
         return self
+
+
+class UserBatchDeleteRequest(BaseModel):
+    user_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class UserBatchDeleteFailure(BaseModel):
+    user_id: int
+    message: str
+
+
+class UserBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[UserBatchDeleteFailure]

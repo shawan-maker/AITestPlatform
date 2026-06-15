@@ -97,3 +97,17 @@ class ExportDbConnectionEmbed(BaseModel):
     db_type: DbType
     config: DbConnectionConfigInput
     description: str | None = None
+
+
+class DbConnectionBatchDeleteRequest(BaseModel):
+    connection_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class DbConnectionBatchDeleteFailure(BaseModel):
+    connection_id: int
+    message: str
+
+
+class DbConnectionBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[DbConnectionBatchDeleteFailure]

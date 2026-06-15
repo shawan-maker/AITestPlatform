@@ -223,3 +223,17 @@ class TaskService:
 
         await assert_no_running_for_task(task_id)
         await task.delete()
+
+    @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.task_ids:
+            try:
+                await cls.delete(user, item_id)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'task_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'task_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}

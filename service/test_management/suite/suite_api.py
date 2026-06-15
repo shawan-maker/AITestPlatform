@@ -11,7 +11,7 @@ from service.test_management.suite.schemas import (
     SuiteCaseReplaceRequest,
 )
 from service.test_management.suite.suite_service import SuiteService
-from service.test_management.suite.schemas import SuiteCreateRequest, SuiteListQuery, SuiteUpdateRequest
+from service.test_management.suite.schemas import SuiteCreateRequest, SuiteListQuery, SuiteUpdateRequest, SuiteBatchDeleteRequest
 from service.user.models import User
 
 router = APIRouter(prefix="/suites", tags=["测试管理-套件"])
@@ -48,6 +48,15 @@ async def create_suite(
 ):
     data = await SuiteService.create(user, body)
     return success(data=data, message="套件创建成功")
+
+
+@router.post("/batch-delete", summary="批量删除测试套件")
+async def batch_delete(
+    data: SuiteBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await SuiteService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.get("/{suite_id}", summary="套件详情")

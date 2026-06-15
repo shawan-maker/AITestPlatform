@@ -250,6 +250,20 @@ class DbConnectionService:
         await conn.delete()
 
     @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.connection_ids:
+            try:
+                await cls.delete(user, item_id)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'connection_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'connection_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}
+
+    @classmethod
     async def bind_to_environment(
         cls, user: User, environment_id: int, data: EnvironmentDbBindRequest
     ) -> list[int]:

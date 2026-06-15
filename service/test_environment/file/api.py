@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from service.core.deps import get_current_active_user, require_project_editor, require_project_viewer
 from service.core.response import success
+from service.test_environment.file.schemas import UploadedFileBatchDeleteRequest
 from service.test_environment.file.service import UploadedFileService
 from service.user.models import User
 
@@ -47,6 +48,15 @@ async def upload_file(
         mime_type=file.content_type,
     )
     return success(data=result, message="文件上传成功")
+
+
+@router.post("/batch-delete", summary="批量删除上传文件")
+async def batch_delete(
+    data: UploadedFileBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await UploadedFileService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.delete("/{file_id}", summary="软删除文件")

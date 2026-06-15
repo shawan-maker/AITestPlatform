@@ -6,6 +6,7 @@ from service.user.models import User
 from service.user.schemas import (
     AdminResetPasswordRequest,
     ChangeOwnPasswordRequest,
+    UserBatchDeleteRequest,
     UserCreateByAdminRequest,
     UserListQuery,
     UserStatusUpdateRequest,
@@ -63,6 +64,15 @@ async def lookup_users(
 ):
     data = await UserService.lookup_users(q, page, page_size)
     return success(data=data)
+
+
+@router.post("/batch-delete", summary="批量删除用户")
+async def batch_delete(
+    data: UserBatchDeleteRequest,
+    user: User = Depends(get_current_super_admin),
+):
+    result = await UserService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.get("/{user_id}", summary="用户详情")

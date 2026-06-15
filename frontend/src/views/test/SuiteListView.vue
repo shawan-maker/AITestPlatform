@@ -6,10 +6,12 @@
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+          <el-button v-if="canEdit && selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
         </template>
         <el-input v-model="filters.keyword" :placeholder="t('common.keyword')" clearable />
       </FilterBar>
-      <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" @page-change="load">
+      <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" row-key="id" @page-change="load" @selection-change="onSelectionChange">
+        <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
         <AppTableColumn prop="name" variant="content" :label="t('common.name')" />
         <AppTableColumn variant="fixed" :label="t('page.test.lastRun')" :width="120">
           <template #default="{ row }"><StatusTag :status="row.last_run_status" :map="RUN_STATUS_MAP" /></template>
@@ -41,8 +43,8 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { createSuite, deleteSuite, listSuites } from '@/api/testManagement'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { batchDeleteSuites, createSuite, deleteSuite, listSuites } from '@/api/testManagement'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
@@ -66,6 +68,11 @@ const items = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
 const createForm = reactive({ name: '', environment_id: null })
+const selectedIds = ref([])
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
 
 async function load() {
   const params = withProjectParams({ page: page.value, page_size: pageSize.value, keyword: filters.keyword || undefined })
@@ -94,6 +101,29 @@ async function remove(row) {
   await deleteSuite(row.id)
   ElMessage.success(t('common.deleted'))
   load()
+}
+
+async function batchRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var res = await batchDeleteSuites(selectedIds.value)
+    var data = res.data.data
+    selectedIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else if (data && data.deleted_ids && data.deleted_ids.length) {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
+    }
+    load()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
 }
 
 onMounted(load)

@@ -4,6 +4,7 @@ from service.core.deps import get_current_active_user, require_environment_edito
 from service.core.response import success
 from service.test_environment.database.service import DbConnectionService
 from service.test_environment.database.schemas import (
+    DbConnectionBatchDeleteRequest,
     DbConnectionCreateRequest,
     DbConnectionUpdateRequest,
     EnvironmentDbBindRequest,
@@ -41,6 +42,15 @@ async def create_db_connection(
 ):
     result = await DbConnectionService.create(user, data, project_id=project_id)
     return success(data=result, message="数据库连接创建成功")
+
+
+@router.post("/batch-delete", summary="批量删除数据库连接")
+async def batch_delete(
+    data: DbConnectionBatchDeleteRequest,
+    user: User = Depends(get_current_active_user),
+):
+    result = await DbConnectionService.batch_delete(user, data)
+    return success(data=result)
 
 
 @router.get("/{connection_id}", summary="数据库连接详情")

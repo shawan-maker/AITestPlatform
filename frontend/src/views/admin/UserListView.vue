@@ -5,6 +5,7 @@
     <FilterBar @search="load" @reset="resetFilters">
       <template #primary>
         <el-button type="primary" @click="showCreate = true">{{ t('page.admin.users.create') }}</el-button>
+        <el-button v-if="selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
       </template>
       <el-input v-model="filters.username" :placeholder="t('page.login.username')" clearable />
       <el-input v-model="filters.email" :placeholder="t('page.register.email')" clearable />
@@ -25,9 +26,12 @@
       :data="items"
       :loading="loading"
       :total="total"
+      row-key="id"
       @page-change="load"
       @size-change="load"
+      @selection-change="onSelectionChange"
     >
+      <AppTableColumn type="selection" variant="fixed" :width="50" />
       <AppTableColumn prop="username" variant="content" :label="t('page.login.username')" />
       <AppTableColumn prop="email" variant="content" :label="t('page.register.email')" />
       <AppTableColumn variant="fixed" :label="t('page.admin.users.status')" :width="100">
@@ -63,7 +67,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { createUser, deleteUser, listUsers, resetUserPassword, updateUserStatus } from '@/api/users'
+import { batchDeleteUsers, createUser, deleteUser, listUsers, resetUserPassword, updateUserStatus } from '@/api/users'
 import { usePagination } from '@/composables/usePagination'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
@@ -78,6 +82,7 @@ const router = useRouter()
 const { page, pageSize, total } = usePagination()
 
 const filters = reactive({ username: '', email: '', project_id: null, is_active: null, is_super_admin: null })
+const selectedIds = ref([])
 const items = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
@@ -141,6 +146,33 @@ async function remove(row) {
   await deleteUser(row.id)
   ElMessage.success(t('common.deleted'))
   load()
+}
+
+function onSelectionChange(rows) {
+  selectedIds.value = rows.map(function (r) { return r.id })
+}
+
+async function batchRemove() {
+  try {
+    await ElMessageBox.confirm(
+      t('common.batchDeleteConfirm', { count: selectedIds.value.length }),
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    var res = await batchDeleteUsers(selectedIds.value)
+    var data = res.data.data
+    selectedIds.value = []
+    if (data && data.failures && data.failures.length) {
+      ElMessage.warning(t('common.batchDeletePartial'))
+    } else if (data && data.deleted_ids && data.deleted_ids.length) {
+      ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
+    }
+    load()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e.message)
+    }
+  }
 }
 
 onMounted(load)

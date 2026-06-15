@@ -46,6 +46,10 @@ export function deleteInterface(id) {
   return request.delete(`/api-test/interfaces/${id}`)
 }
 
+export function batchDeleteInterfaces(ids) {
+  return request.post('/api-test/interfaces/batch-delete', { interface_ids: ids })
+}
+
 export function copyInterface(id) {
   return request.post(`/api-test/interfaces/${id}/copy`)
 }

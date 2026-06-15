@@ -246,6 +246,20 @@ class InterfaceService:
         await cls._hard_delete_interfaces([iface.id])
 
     @classmethod
+    async def batch_delete(cls, user: User, data) -> dict:
+        deleted_ids = []
+        failures = []
+        for item_id in data.interface_ids:
+            try:
+                await cls.delete(user, item_id)
+                deleted_ids.append(item_id)
+            except AppException as e:
+                failures.append({'interface_id': item_id, 'message': e.message})
+            except Exception as e:
+                failures.append({'interface_id': item_id, 'message': str(e)})
+        return {'deleted_ids': deleted_ids, 'failures': failures}
+
+    @classmethod
     async def delete_by_catalog_ids(
         cls, project_id: int, catalog_ids: list[int]
     ) -> None:

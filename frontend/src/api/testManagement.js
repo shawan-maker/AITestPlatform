@@ -21,6 +21,10 @@ export function deleteSuite(id) {
   return request.delete(`/test-management/suites/${id}`)
 }
 
+export function batchDeleteSuites(ids) {
+  return request.post('/test-management/suites/batch-delete', { suite_ids: ids })
+}
+
 export function listSuiteCases(suiteId) {
   return request.get(`/test-management/suites/${suiteId}/cases`)
 }
@@ -64,6 +68,10 @@ export function updateTask(id, data) {
 
 export function deleteTask(id) {
   return request.delete(`/test-management/tasks/${id}`)
+}
+
+export function batchDeleteTasks(ids) {
+  return request.post('/test-management/tasks/batch-delete', { task_ids: ids })
 }
 
 export function listTaskSuites(taskId) {
@@ -138,4 +146,12 @@ export function transitionDefect(id, data) {
 
 export function addDefectComment(id, data) {
   return request.post(`/test-management/defects/${id}/comments`, data)
+}
+
+export function deleteDefect(id) {
+  return request.delete(`/test-management/defects/${id}`)
+}
+
+export function batchDeleteDefects(ids) {
+  return request.post('/test-management/defects/batch-delete', { defect_ids: ids })
 }

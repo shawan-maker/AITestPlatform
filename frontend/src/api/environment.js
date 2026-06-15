@@ -121,6 +121,10 @@ export function deleteDbConnection(id) {
   return request.delete(`/env/db-connections/${id}`)
 }
 
+export function batchDeleteDbConnections(ids) {
+  return request.post('/env/db-connections/batch-delete', { connection_ids: ids })
+}
+
 export function bindDbConnections(environmentId, data) {
   return request.put(`/env/environments/${environmentId}/db-connections`, data)
 }
@@ -158,6 +162,10 @@ export function deleteFunctionFile(id) {
   return request.delete(`/env/function-files/${id}`)
 }
 
+export function batchDeleteFunctionFiles(ids) {
+  return request.post('/env/function-files/batch-delete', { file_ids: ids })
+}
+
 export function bindFunctionFiles(environmentId, data) {
   return request.put(`/env/environments/${environmentId}/function-files`, data)
 }
@@ -184,6 +192,10 @@ export function uploadFile(formData, params = {}) {
 
 export function deleteUploadedFile(id) {
   return request.delete(`/env/uploaded-files/${id}`)
+}
+
+export function batchDeleteUploadedFiles(ids) {
+  return request.post('/env/uploaded-files/batch-delete', { file_ids: ids })
 }
 
 export function downloadUploadedFile(id) {

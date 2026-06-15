@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from service.core.pagination import Paginated
 
@@ -27,3 +27,17 @@ class UploadedFilePathResolved(BaseModel):
 
 # case_payload.request.files 存储引用，执行前由 FileResolver 解析为 path/filename：
 # {"avatar": {"uploaded_file_id": 12}}
+
+
+class UploadedFileBatchDeleteRequest(BaseModel):
+    file_ids: list[int] = Field(..., min_length=1, max_length=50)
+
+
+class UploadedFileBatchDeleteFailure(BaseModel):
+    file_id: int
+    message: str
+
+
+class UploadedFileBatchDeleteResult(BaseModel):
+    deleted_ids: list[int]
+    failures: list[UploadedFileBatchDeleteFailure]
