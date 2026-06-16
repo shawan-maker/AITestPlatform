@@ -18,7 +18,7 @@
       </AppTableColumn>
     </AppTable>
 
-    <el-dialog v-model="dialogVisible" :title="editRow ? t('common.edit') : t('page.projectSettings.addModule')" width="400px">
+    <el-dialog :close-on-click-modal="false" v-model="dialogVisible" :title="editRow ? t('common.edit') : t('page.projectSettings.addModule')" width="400px">
       <el-form label-width="80px">
         <el-form-item :label="t('page.projectSettings.moduleName')">
           <el-input v-model="formName" />

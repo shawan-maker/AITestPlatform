@@ -1,11 +1,11 @@
 <template>
   <!-- v2-Q2/Q3: 移除user_prompt输入框，直接生成preview；confirm后5s轮询进度 -->
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     :model-value="modelValue"
     :title="t('page.apiCases.generateCases')"
-    :width="dialogWidth"
-    :top="dialogTop"
-    :class="dialogClass"
+    width="75vw"
+    top="8vh"
+    class="case-generate-dialog"
     destroy-on-close
     @update:model-value="$emit('update:modelValue', $event)"
     @closed="reset"
@@ -20,29 +20,79 @@
       </p>
     </div>
 
-    <div v-else-if="step === 'preview'" v-loading="previewLoading" class="case-preview-body" :style="{ maxHeight: `${bodyMaxHeight}px` }">
-      <el-alert v-if="sessionError" type="error" :title="sessionError" show-icon :closable="false" />
+    <div v-else-if="step === 'preview'" class="case-preview-body">
+      <!-- 生成中状态 -->
+      <div v-if="previewLoading" class="generating-status">
+        <el-icon class="generating-icon is-loading" :size="32" color="#409eff"><Loading /></el-icon>
+        <div class="generating-text">正在分析接口文档，智能生成测试用例...</div>
+        <div class="generating-hint">AI 正在理解接口参数、业务场景和边界条件，预计需要 30-120 秒，请耐心等待</div>
+      </div>
+      <el-alert v-else-if="sessionError" type="error" :title="sessionError" show-icon :closable="false" />
       <template v-else>
         <!-- v2-Q3: 轮询中显示进度 -->
         <div v-if="pollingStatus === 'running'" class="polling-status">
-          <el-progress :percentage="pollingProgress" :stroke-width="8" />
-          <span style="font-size: 12px; color: var(--el-text-color-secondary)">
+          <el-progress :percentage="pollingProgress" :stroke-width="10" :color="'var(--el-color-primary)'" />
+          <span class="polling-status-text">
             正在执行预验证... ({{ pollingCompleted }}/{{ pollingTotal }})
           </span>
-        </div>
-        <el-checkbox-group v-model="selectedIndexes">
-          <div v-for="(item, index) in baseCases" :key="index" class="case-row">
-            <el-checkbox :label="index">{{ item.name || `Case ${index + 1}` }}</el-checkbox>
-            <ul v-if="item.steps?.length">
-              <li v-for="(step, si) in item.steps" :key="si">{{ step }}</li>
-            </ul>
+          <div v-if="pollingItems.length" class="polling-items">
+            <div v-for="item in pollingItems" :key="item.index" class="polling-item" :class="item.status">
+              <span class="polling-item-name">{{ item.name || `用例 ${item.index + 1}` }}</span>
+              <el-tag v-if="item.status === 'success'" type="success" size="small">通过</el-tag>
+              <el-tag v-else-if="item.status === 'warning'" type="warning" size="small">警告</el-tag>
+              <el-tag v-else-if="item.status === 'error'" type="danger" size="small">失败</el-tag>
+              <el-tag v-else type="info" size="small">等待中</el-tag>
+              <span v-if="item.error" class="polling-item-error">{{ item.error }}</span>
+            </div>
           </div>
-        </el-checkbox-group>
-        <el-empty v-if="!previewLoading && !baseCases.length && !sessionError" :description="t('page.agent.noPreview')" />
+        </div>
+        <el-table
+          v-if="baseCases.length"
+          :data="baseCases"
+          border
+          size="small"
+          row-key="index"
+          @selection-change="onTableSelectionChange"
+          class="case-preview-table"
+        >
+          <el-table-column type="selection" width="40" />
+          <el-table-column label="编号" width="55" align="center">
+            <template #default="{ $index }">{{ $index + 1 }}</template>
+          </el-table-column>
+          <el-table-column prop="name" label="名称" min-width="140" align="left">
+            <template #default="{ row }">{{ row.name || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="依赖" min-width="120" align="left">
+            <template #default="{ row }">
+              <template v-if="row.dependencies && row.dependencies.length">
+                <el-tag v-for="(dep, di) in row.dependencies" :key="di" size="small" style="margin: 1px 2px">{{ dep }}</el-tag>
+              </template>
+              <span v-else style="color: #999">无</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="步骤" min-width="220" align="left">
+            <template #default="{ row }">
+              <ol v-if="row.steps && row.steps.length" class="steps-list">
+                <li v-for="(s, si) in row.steps" :key="si">{{ s }}</li>
+              </ol>
+              <span v-else style="color: #999">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="预期结果" min-width="200" align="left">
+            <template #default="{ row }">
+              <ul v-if="row.expected && row.expected.length" class="expected-list">
+                <li v-for="(e, ei) in row.expected" :key="ei">{{ e }}</li>
+              </ul>
+              <span v-else style="color: #999">-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!baseCases.length && !sessionError" :description="t('page.agent.noPreview')" />
       </template>
-      <el-form-item v-if="baseCases.length && step === 'preview'" :label="t('page.apiCases.selectEnv')" style="margin-top: 16px">
+      <div v-if="baseCases.length && !previewLoading && pollingStatus !== 'running'" class="confirm-env-row">
+        <span class="env-label">{{ t('page.apiCases.selectEnv') }}：</span>
         <EnvironmentSelect v-model="confirmEnvId" />
-      </el-form-item>
+      </div>
     </div>
 
     <template #footer>
@@ -50,11 +100,10 @@
       <el-button v-if="step === 'form'" type="primary" :loading="previewLoading" @click="runPreview">
         {{ t('page.agent.generate') }}
       </el-button>
-      <template v-else>
-        <el-button @click="step = 'form'">{{ t('common.back') }}</el-button>
+      <template v-else-if="pollingStatus !== 'running'">
         <el-button
           type="primary"
-          :loading="confirming || pollingStatus === 'running'"
+          :loading="confirming"
           :disabled="!canConfirm"
           @click="runConfirm"
         >
@@ -69,6 +118,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import {
   confirmCaseGeneration,
   generateCasePreview,
@@ -85,7 +135,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'confirmed'])
 
 const { t } = useI18n()
-const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(220)
+const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(120)
 
 // v2-Q2: 移除 userPrompt，仅保留环境选择
 const step = ref('form')
@@ -103,22 +153,52 @@ const pollingStatus = ref('')
 const pollingProgress = ref(0)
 const pollingCompleted = ref(0)
 const pollingTotal = ref(0)
+const pollingItems = ref([])
 let pollTimer = null
+let previewPollTimer = null
 
 const canConfirm = computed(() => {
   if (pollingStatus.value === 'running') return false
-  return Boolean(confirmEnvId.value && selectedIndexes.value.length && sessionId.value)
+  return Boolean(selectedIndexes.value.length && sessionId.value)
 })
+
+function onTableSelectionChange(rows) {
+  selectedIndexes.value = rows.map(function (r) { return r.index })
+}
 
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) reset()
+    if (open) {
+      reset()
+      // 打开弹窗时直接开始生成预览，跳过手动点击"生成"步骤
+      autoRunPreview()
+    }
   },
 )
 
+async function autoRunPreview() {
+  step.value = 'preview'
+  previewLoading.value = true
+  sessionError.value = ''
+  try {
+    const res = await generateCasePreview(props.interfaceId, {
+      environment_id: environmentId.value || undefined,
+    })
+    const data = res.data.data
+    sessionId.value = data.session_id
+    // v3: preview 现在是异步的，需要轮询等待结果
+    startPreviewPolling()
+  } catch (err) {
+    sessionError.value = err.message || t('common.requestFailed')
+    step.value = 'form'
+    previewLoading.value = false
+  }
+}
+
 function reset() {
   stopPolling()
+  stopPreviewPolling()
   step.value = 'form'
   environmentId.value = null
   confirmEnvId.value = null
@@ -132,28 +212,23 @@ function reset() {
   pollingProgress.value = 0
   pollingCompleted.value = 0
   pollingTotal.value = 0
+  pollingItems.value = []
 }
 
 async function runPreview() {
   previewLoading.value = true
   sessionError.value = ''
   try {
-    // v2-Q2: 不再传user_prompt参数
     const res = await generateCasePreview(props.interfaceId, {
       environment_id: environmentId.value || undefined,
     })
     const data = res.data.data
     sessionId.value = data.session_id
-    baseCases.value = data.base_cases ?? []
-    selectedIndexes.value = baseCases.value.map((_, i) => i)
-    confirmEnvId.value = environmentId.value
     step.value = 'preview'
-    if (!baseCases.value.length) {
-      sessionError.value = t('page.agent.noPreview')
-    }
+    // v3: preview 现在是异步的，需要轮询等待结果
+    startPreviewPolling()
   } catch (err) {
     sessionError.value = err.message || t('common.requestFailed')
-  } finally {
     previewLoading.value = false
   }
 }
@@ -179,7 +254,7 @@ async function runConfirm() {
 function startPolling() {
   pollingStatus.value = 'running'
   pollingCompleted.value = 0
-  pollingTotal.value = baseCases.value.length
+  pollingTotal.value = selectedIndexes.value.length || baseCases.value.length
 
   pollTimer = setInterval(async () => {
     try {
@@ -193,7 +268,21 @@ function startPolling() {
         if (status === 'success') {
           pollingProgress.value = 100
           pollingCompleted.value = pollingTotal.value
-          ElMessage.success(t('page.agent.saved'))
+          // 检查预执行是否有错误
+          const confirmResult = statusData.confirm_result
+          const runErrors = confirmResult?.run_errors || []
+          const savedCount = confirmResult?.created_case_ids?.length || pollingTotal.value
+          if (runErrors.length) {
+            const errorDetail = runErrors.map(function (e, i) { return (i + 1) + '. ' + e }).join('\n')
+            ElMessage({
+              type: 'warning',
+              message: `已保存 ${savedCount} 条用例，${runErrors.length} 条预验证未通过`,
+              duration: 5000,
+            })
+            console.warn('[预验证未通过详情]', errorDetail)
+          } else {
+            ElMessage.success(t('page.agent.saved'))
+          }
           emit('confirmed')
           emit('update:modelValue', false)
         } else if (status === 'failed') {
@@ -207,11 +296,12 @@ function startPolling() {
         const progress = statusData.progress
         if (progress) {
           pollingCompleted.value = progress.completed || 0
-          pollingTotal.value = progress.total || baseCases.value.length
+          pollingTotal.value = progress.total || selectedIndexes.value.length
           pollingProgress.value =
             pollingTotal.value > 0
               ? Math.round((pollingCompleted.value / pollingTotal.value) * 100)
               : 0
+          pollingItems.value = progress.items || []
         }
       }
     } catch {
@@ -227,8 +317,49 @@ function stopPolling() {
   }
 }
 
+// ==================== v3: 预览生成轮询 ====================
+
+function startPreviewPolling() {
+  previewPollTimer = setInterval(async () => {
+    try {
+      const res = await getGenerationStatus(props.interfaceId, sessionId.value)
+      const statusData = res.data.data
+      const status = statusData.status
+
+      if (status === 'success') {
+        stopPreviewPolling()
+        previewLoading.value = false
+        const cases = statusData.base_cases || []
+        baseCases.value = cases.map(function (c, i) {
+          return Object.assign({}, c, { index: i })
+        })
+        selectedIndexes.value = baseCases.value.map(function (c) { return c.index })
+        confirmEnvId.value = environmentId.value
+        if (!baseCases.value.length) {
+          sessionError.value = t('page.agent.noPreview')
+        }
+      } else if (status === 'failed') {
+        stopPreviewPolling()
+        previewLoading.value = false
+        sessionError.value = statusData.error_message || '预览生成失败'
+      }
+      // status === 'running' 则继续轮询
+    } catch {
+      // 网络错误继续轮询
+    }
+  }, 5000)
+}
+
+function stopPreviewPolling() {
+  if (previewPollTimer) {
+    clearInterval(previewPollTimer)
+    previewPollTimer = null
+  }
+}
+
 onUnmounted(() => {
   stopPolling()
+  stopPreviewPolling()
 })
 </script>
 
@@ -237,28 +368,196 @@ onUnmounted(() => {
   padding: 10px 0;
 }
 
+.generating-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.generating-icon {
+  margin-bottom: 16px;
+}
+
+.generating-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+  margin-bottom: 8px;
+}
+
+.generating-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+}
+
 .case-preview-body {
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .polling-status {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-color-primary-light-7) 100%);
+  border: 1px solid var(--el-color-primary-light-5);
   margin-bottom: 8px;
+
+  :deep(.el-progress-bar__inner) {
+    background: linear-gradient(90deg, var(--el-color-primary) 0%, var(--el-color-primary-light-3) 100%);
+    transition: width 0.6s ease;
+  }
 }
 
-.case-row {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+.polling-status-text {
   font-size: 13px;
+  font-weight: 500;
+  color: var(--el-color-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 
-  ul {
-    margin: 4px 0 0;
-    padding-left: 24px;
-    color: var(--el-text-color-secondary);
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--el-color-primary);
+    animation: polling-pulse 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes polling-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.polling-items {
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: 6px;
+  background: var(--el-bg-color);
+  padding: 8px;
+}
+
+.polling-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  transition: background-color 0.3s ease;
+
+  &.success { background-color: var(--el-color-success-light-9); }
+  &.warning { background-color: var(--el-color-warning-light-9); }
+  &.error { background-color: var(--el-color-danger-light-9); }
+
+  .polling-item-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .polling-item-error {
+    color: var(--el-color-danger);
+    font-size: 11px;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.confirm-env-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+
+  .env-label {
+    font-size: 13px;
+    color: var(--el-text-color-regular);
+    white-space: nowrap;
+  }
+}
+
+.case-preview-table {
+  :deep(.el-table__cell) {
+    vertical-align: top;
+  }
+
+  :deep(.cell) {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.5;
+    text-align: left;
+    padding: 8px 10px;
+  }
+
+  .steps-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    counter-reset: step-counter;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--el-text-color-regular);
+
+    li {
+      margin-bottom: 2px;
+      counter-increment: step-counter;
+
+      &::before {
+        content: counter(step-counter) ". ";
+        font-weight: 500;
+      }
+    }
+  }
+
+  .expected-list {
+    margin: 0;
+    padding-left: 0;
+    list-style: none;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--el-text-color-regular);
+
+    li {
+      margin-bottom: 2px;
+    }
+  }
+}
+</style>
+
+<style lang="scss">
+.case-generate-dialog {
+  max-width: calc(100vw - 32px);
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+
+  .el-dialog__body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding-bottom: 8px;
+  }
+
+  .el-dialog__footer {
+    flex-shrink: 0;
+    padding-top: 8px;
   }
 }
 </style>

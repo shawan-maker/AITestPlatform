@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.defects.createFromRun')" width="480px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.defects.createFromRun')" width="480px">
     <el-form label-width="100px">
       <el-form-item :label="t('page.defects.title')"><el-input v-model="form.title" /></el-form-item>
       <el-form-item :label="t('page.defects.category')">

@@ -228,7 +228,7 @@ class APIRuncaseGeneratorWorkflow:
         # 执行次数
         generator_count = state.get("generator_count", 0) + 1
         # 是否可执行
-        review_status = result.get("status","init")
+        review_status = result.get("state") or result.get("status", "init")
         writer(f"执行的结果为：{result},可执行状态：{review_status},已执行次数：{generator_count}")
         # 2、返回执行结果
         writer("【执行节点完成】 3、执行生成的结构化接口用例")

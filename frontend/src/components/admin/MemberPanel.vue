@@ -40,7 +40,7 @@
       </AppTableColumn>
     </AppTable>
 
-    <el-dialog v-model="showAdd" :title="t('page.projectSettings.addMember')" width="480px">
+    <el-dialog :close-on-click-modal="false" v-model="showAdd" :title="t('page.projectSettings.addMember')" width="480px">
       <el-form label-width="100px">
         <el-form-item :label="t('page.login.username')">
           <UserSearchPicker v-model="addForm.user_id" />

@@ -119,6 +119,7 @@
                 <el-button :icon="Filter" circle size="default" />
               </div>
               <div class="case-toolbar-right">
+                <el-button :icon="Refresh" :loading="casesLoading" @click="loadCases">刷新</el-button>
                 <el-dropdown trigger="click" popper-class="var-file-dropdown">
                   <el-button>
                     <el-icon><Document /></el-icon> {{ t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
@@ -162,6 +163,9 @@
                 </template>
                 <el-table :data="filteredPreconditionCases" border size="small" row-key="id" empty_text="-" @selection-change="onCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
                   <el-table-column type="selection" width="50" />
+                  <el-table-column label="#" width="55" align="center">
+                    <template #default="{ $index }">{{ $index + 1 }}</template>
+                  </el-table-column>
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
                   </el-table-column>
@@ -175,11 +179,6 @@
                     <template #default="{ row }">
                       <el-tag v-if="row.exec_status" size="small" :type="execStatusTag(row.exec_status)">{{ execStatusLabel(row.exec_status) }}</el-tag>
                       <span v-else>-</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('page.apiCases.syncStatus')" width="80" align="center">
-                    <template #default>
-                      <el-tag size="small" type="warning">未同步</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column :label="t('common.actions')" width="200" fixed="right">
@@ -203,6 +202,9 @@
                 </template>
                 <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
                   <el-table-column type="selection" width="50" />
+                  <el-table-column label="#" width="55" align="center">
+                    <template #default="{ $index }">{{ $index + 1 }}</template>
+                  </el-table-column>
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
                   </el-table-column>
@@ -216,11 +218,6 @@
                     <template #default="{ row }">
                       <el-tag v-if="row.exec_status" size="small" :type="execStatusTag(row.exec_status)">{{ execStatusLabel(row.exec_status) }}</el-tag>
                       <span v-else>-</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('page.apiCases.syncStatus')" width="80" align="center">
-                    <template #default>
-                      <el-tag size="small" type="warning">未同步</el-tag>
                     </template>
                   </el-table-column>
                   <el-table-column :label="t('common.actions')" width="200" fixed="right">
@@ -896,6 +893,7 @@ import {
   EditPen,
   Filter,
   MagicStick,
+  Refresh,
   Search,
   View,
   CircleCheckFilled,
@@ -1677,19 +1675,21 @@ function methodTagType(method) {
 
 function execStatusTag(status) {
   var s = String(status).toLowerCase()
-  if (s.indexOf('success') >= 0 || s.indexOf('pass') >= 0) return 'success'
-  if (s.indexOf('fail') >= 0 || s.indexOf('error') >= 0) return 'danger'
-  if (s.indexOf('running') >= 0 || s.indexOf('pending') >= 0) return 'warning'
+  if (s === 'success') return 'success'
+  if (s === 'fail') return 'warning'
+  if (s === 'error') return 'danger'
+  if (s === 'running') return 'primary'
+  if (s === 'pending') return 'info'
   return 'info'
 }
 
 function execStatusLabel(status) {
   var s = String(status).toLowerCase()
-  if (s === 'success' || s === 'pass') return '成功'
-  if (s === 'fail' || s === 'error') return '失败'
+  if (s === 'success') return '成功'
+  if (s === 'fail') return '失败'
+  if (s === 'error') return '错误'
   if (s === 'running') return '运行中'
   if (s === 'pending') return '待执行'
-  if (s === 'ready') return '就绪'
   return status
 }
 

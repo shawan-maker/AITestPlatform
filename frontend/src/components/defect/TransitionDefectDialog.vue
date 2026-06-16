@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.defects.transition')" width="420px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.defects.transition')" width="420px">
     <el-form label-width="100px">
       <el-form-item :label="t('common.status')">
         <el-select v-model="form.status">

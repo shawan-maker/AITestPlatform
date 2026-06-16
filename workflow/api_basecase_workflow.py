@@ -181,7 +181,7 @@ class ApiBaseCaseGeneratorWorkflow:
         builder.add_edge("complete_basecase","verify_coverage")
         builder.add_edge("output_basecase",END)
         # 4、编译为可执行图并返回
-        graph = builder.compile(checkpointer=checkpointer)
+        graph = builder.compile()
         return graph
 
 if __name__ == '__main__':

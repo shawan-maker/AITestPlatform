@@ -141,9 +141,11 @@ class ReviewStatus(str, Enum):
 
 
 class ExecStatus(str, Enum):
-    pending = "pending"
-    ready = "ready"
-    disabled = "disabled"
+    pending = "pending"      # 待执行
+    running = "running"      # 运行中
+    success = "success"      # 成功
+    fail = "fail"            # 失败
+    error = "error"          # 错误
 
 
 class TaskSuiteType(str, Enum):

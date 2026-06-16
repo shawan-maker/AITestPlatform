@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('execution.batchLink')" width="520px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('execution.batchLink')" width="520px">
     <el-alert :title="t('execution.batchLinkHint', { count: caseRunIds.length })" type="info" show-icon :closable="false" />
     <el-form label-width="120px" style="margin-top: 16px">
       <el-form-item :label="t('execution.linkMode')">

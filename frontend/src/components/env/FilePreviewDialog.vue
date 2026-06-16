@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     v-model="visible"
     :title="fileName || t('page.env.files.preview')"
     :width="dialogWidth"

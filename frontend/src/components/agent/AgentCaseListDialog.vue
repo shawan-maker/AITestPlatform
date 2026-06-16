@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     v-model="visible"
     :title="t('page.agent.caseListTitle')"
     width="95%"
@@ -141,7 +141,7 @@
     </el-drawer>
 
     <!-- ===== Save to Catalog Dialog ===== -->
-    <el-dialog
+    <el-dialog :close-on-click-modal="false"
       v-model="showSaveDialog"
       :title="t('page.agent.saveToCatalog')"
       width="500px"

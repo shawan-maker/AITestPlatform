@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.env.variables.copy')" width="420px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.env.variables.copy')" width="420px">
     <el-form label-width="100px">
       <el-form-item :label="t('common.name')">
         <el-input v-model="name" :placeholder="t('page.env.variables.copyNameHint')" />

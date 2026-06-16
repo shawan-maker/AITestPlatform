@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     v-model="visible"
     :title="isEdit ? t('page.env.db.edit') : t('page.env.db.create')"
     width="560px"

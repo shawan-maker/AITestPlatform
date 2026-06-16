@@ -6,7 +6,7 @@
     clearable
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <el-option v-for="e in environments" :key="e.id" :label="e.name" :value="e.id" />
+    <el-option v-for="e in environments" :key="e.id" :label="e.env_name || e.name" :value="e.id" />
   </el-select>
 </template>
 

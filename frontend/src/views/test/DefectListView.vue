@@ -31,7 +31,7 @@
       </PaginatedTable>
     </template>
 
-    <el-dialog v-model="showCreate" :title="t('page.defects.create')" width="480px">
+    <el-dialog :close-on-click-modal="false" v-model="showCreate" :title="t('page.defects.create')" width="480px">
       <el-form label-width="100px">
         <el-form-item :label="t('page.defects.title')"><el-input v-model="createForm.title" /></el-form-item>
         <el-form-item :label="t('page.defects.severity')">

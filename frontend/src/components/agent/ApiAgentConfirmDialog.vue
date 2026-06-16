@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="modelValue" :title="t('page.agent.confirmPreRun')" width="520px" @update:model-value="$emit('update:modelValue', $event)">
+  <el-dialog :close-on-click-modal="false" :model-value="modelValue" :title="t('page.agent.confirmPreRun')" width="520px" @update:model-value="$emit('update:modelValue', $event)">
     <el-form label-width="120px">
       <el-form-item v-if="!interfaceId" :label="t('page.functional.catalog')" required>
         <el-select v-model="catalogId" filterable style="width: 100%">

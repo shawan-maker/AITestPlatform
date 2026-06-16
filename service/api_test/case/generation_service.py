@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -51,6 +52,8 @@ from service.core.exceptions import AppException
 from service.test_environment.models import TestEnvironment
 from service.user.models import User
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class _PreRunResult:
@@ -61,6 +64,9 @@ class _PreRunResult:
 
 
 class ApiCaseGenerationService:
+    # 防止后台任务被 GC 回收
+    _background_tasks: set = set()
+
     @classmethod
     async def _get_api_session_or_404(cls, session_id: int) -> AIGenerationSession:
         session = await AIGenerationSession.get_or_none(id=session_id)
@@ -81,15 +87,13 @@ class ApiCaseGenerationService:
         interface_id: int,
         data: GeneratePreviewRequest,
     ) -> GeneratePreviewResult:
-        """v2修订: 移除user_prompt参数，直接AI生成"""
+        """v3: 异步预览 — 立即返回 session_id，AI 生成在后台进行，前端通过轮询 generation-status 获取结果。"""
         iface = await InterfaceService._get_current_or_404(interface_id)
         await ensure_api_viewer(iface.project_id, user)
         resolved = await DependencyResolverService.resolve(iface.id)
         api_doc = interface_to_doc_json(iface)
         precoditions = resolved.precoditions_summaries
 
-        # v2-Q2: 不再传入user_prompt
-        user_prompt = None
         session = await AIGenerationSession.create(
             project_id=iface.project_id,
             module_id=iface.module_id,
@@ -103,9 +107,36 @@ class ApiCaseGenerationService:
             created_by_id=user.id,
         )
 
+        # 存储后台任务所需输入
+        session.output_payload = {
+            "api_doc": api_doc,
+            "precoditions": precoditions,
+            "precoditions_api_doc": resolved.precoditions_api_doc,
+            "environment_id": data.environment_id,
+        }
+        await session.save(update_fields=["output_payload"])
+
+        # 启动后台 AI 生成任务
+        task = asyncio.create_task(cls._run_preview_background(session))
+        cls._background_tasks.add(task)
+        task.add_done_callback(cls._background_tasks.discard)
+
+        # 立即返回，base_cases 为空，前端通过轮询获取结果
+        return GeneratePreviewResult(session_id=session.id, base_cases=[])
+
+    @classmethod
+    async def _run_preview_background(cls, session: "AIGenerationSession") -> None:
+        """后台执行 AI 用例生成，结果写入 session.output_payload。"""
         try:
+            session = await AIGenerationSession.get(id=session.id)
+            payload = session.output_payload or {}
+            api_doc = payload.get("api_doc", "")
+            precoditions = payload.get("precoditions", [])
+            precoditions_api_doc = payload.get("precoditions_api_doc", [])
+            environment_id = payload.get("environment_id")
+
             if api_test_gen_use_mock():
-                base_cases = cls._mock_base_cases(iface.summary or iface.path)
+                base_cases = cls._mock_base_cases("preview")
             elif not is_llm_configured():
                 session.status = SessionStatus.failed
                 session.error_message = LLM_NOT_CONFIGURED_MSG
@@ -113,46 +144,37 @@ class ApiCaseGenerationService:
                 await session.save(
                     update_fields=["status", "error_message", "finished_at"]
                 )
-                raise AppException(LLM_NOT_CONFIGURED_MSG, 503)
+                return
             else:
-                # v2-Q2: 不传user_prompt
                 base_cases = await asyncio.to_thread(
                     cls._invoke_basecase_workflow,
                     api_doc,
                     precoditions,
                     None,
                 )
+
             session.status = SessionStatus.success
             session.output_payload = {
                 "base_cases": base_cases,
                 "api_doc": api_doc,
-                "precoditions_api_doc": resolved.precoditions_api_doc,
-                "environment_id": data.environment_id,
+                "precoditions_api_doc": precoditions_api_doc,
+                "environment_id": environment_id,
             }
             session.finished_at = datetime.now(timezone.utc)
             await session.save(
                 update_fields=["status", "output_payload", "finished_at"]
             )
         except Exception as exc:
+            logger.exception("后台预览生成失败 session=%s", session.id)
             session.status = SessionStatus.failed
             session.error_message = str(exc) or repr(exc)
             session.finished_at = datetime.now(timezone.utc)
-            await session.save(
-                update_fields=["status", "error_message", "finished_at"]
-            )
-            raise AppException(f"生成预览失败: {session.error_message}", 500)
-
-        items = [
-            BaseCasePreviewItem(
-                index=i,
-                name=str(c.get("name") or f"用例-{i + 1}"),
-                steps=list(c.get("steps") or []),
-                dependencies=list(c.get("dependencies") or []),
-                expected=list(c.get("expected") or []),
-            )
-            for i, c in enumerate(base_cases)
-        ]
-        return GeneratePreviewResult(session_id=session.id, base_cases=items)
+            try:
+                await session.save(
+                    update_fields=["status", "error_message", "finished_at"]
+                )
+            except Exception:
+                logger.error("保存失败状态也出错 session=%s", session.id)
 
     @classmethod
     async def preview_from_doc(
@@ -277,115 +299,286 @@ class ApiCaseGenerationService:
         user: User,
         data: ApiConfirmRequest,
     ) -> ApiConfirmResult:
+        """v3: 异步确认 — 立即返回 session_id，预执行在后台进行，前端通过轮询获取进度。"""
         session = await cls._get_api_session_or_404(data.session_id)
         await ensure_api_editor(session.project_id, user)
         if session.status != SessionStatus.success or not session.output_payload:
             raise AppException("生成会话未完成", 400)
 
-        env = await TestEnvironment.get_or_none(
-            id=data.environment_id, project_id=session.project_id
-        )
-        if env is None:
-            raise AppException("测试环境不存在", 404)
-
-        created_interface_id: int | None = None
-        if session.input_ref_type == InputRefType.interface:
-            interface_id = data.interface_id or session.input_ref_id
-            if interface_id is None:
-                raise AppException("interface_id 必填", 400)
-            iface = await InterfaceService._get_current_or_404(interface_id)
-            if session.input_ref_id != iface.id:
-                raise AppException("生成会话不存在", 404)
-            resolved = await DependencyResolverService.resolve(iface.id)
-            precoditions_api_doc = resolved.precoditions_api_doc
-        elif session.input_ref_type == InputRefType.api_doc:
-            if data.catalog_id is None:
-                raise AppException("catalog_id 必填", 400)
-            module_id = session.module_id
-            iface = await cls._create_interface_from_doc(
-                user,
-                project_id=session.project_id,
-                catalog_id=data.catalog_id,
-                api_doc_text=session.output_payload.get("api_doc") or "",
-                module_id=module_id,
+        # 环境可选：未选择时跳过预执行，直接保存为"待执行"
+        if data.environment_id:
+            env = await TestEnvironment.get_or_none(
+                id=data.environment_id, project_id=session.project_id
             )
-            created_interface_id = iface.id
-            precoditions_api_doc = []
-        else:
-            raise AppException("不支持的生成会话类型", 400)
+            if env is None:
+                raise AppException("测试环境不存在", 404)
 
         base_cases = session.output_payload.get("base_cases") or []
-        api_doc = session.output_payload.get("api_doc") or interface_to_doc_json(iface)
 
-        selected_items: list[tuple[int, dict]] = []
+        # 验证 selected_indexes
         for idx in data.selected_indexes:
             if idx < 0 or idx >= len(base_cases):
                 raise AppException(f"无效的 selected_index: {idx}", 400)
+
+        # 设置 session 为 running 状态，初始化进度信息
+        session.status = SessionStatus.running
+        progress_items = []
+        for idx in data.selected_indexes:
             base = base_cases[idx]
-            if not isinstance(base, dict):
-                raise AppException("基础用例格式错误", 400)
-            selected_items.append((idx, base))
+            progress_items.append({
+                "index": idx,
+                "name": base.get("name", "") if isinstance(base, dict) else "",
+                "status": "pending",
+                "error": None,
+            })
+        session.output_payload["confirm_progress"] = {
+            "total": len(data.selected_indexes),
+            "completed": 0,
+            "items": progress_items,
+        }
+        session.output_payload["confirm_request"] = {
+            "selected_indexes": data.selected_indexes,
+            "environment_id": data.environment_id,
+            "interface_id": data.interface_id,
+            "catalog_id": data.catalog_id,
+            "user_id": user.id,
+        }
+        await session.save(update_fields=["status", "output_payload"])
 
-        pre_run_results = await cls._pre_run_selected_base_cases(
-            selected_items=selected_items,
-            api_doc=api_doc,
-            precoditions_api_doc=precoditions_api_doc,
-            environment_id=data.environment_id,
-            project_id=iface.project_id,
-        )
-
-        created_base_ids: list[int] = []
-        created_case_ids: list[int] = []
-        run_errors: list[str] = []
-
-        async with in_transaction():
-            sort_base = await cls._next_case_sort_order(iface.id, ApiCaseKind.main)
-            for order, pre_result in enumerate(pre_run_results):
-                idx = pre_result.index
-                base = base_cases[idx]
-                if pre_result.error:
-                    run_errors.append(pre_result.error)
-
-                base_row = await ApiBaseCase.create(
-                    project_id=iface.project_id,
-                    interface_id=iface.id,
-                    name=str(base.get("name") or f"基础用例-{idx}"),
-                    steps=base.get("steps") or [],
-                    dependencies=base.get("dependencies"),
-                    expected=base.get("expected") or [],
-                    status=ApiBaseCaseStatus.draft,
-                    source=SourceType.ai,
-                    generation_session_id=session.id,
-                    created_by_id=user.id,
-                )
-                created_base_ids.append(base_row.id)
-
-                case_row = await ApiTestCase.create(
-                    project_id=iface.project_id,
-                    module_id=iface.module_id,
-                    base_case_id=base_row.id,
-                    interface_id=iface.id,
-                    title=str(pre_result.api_case.get("title") or base_row.name),
-                    case_kind=ApiCaseKind.main,
-                    sort_order=sort_base + order,
-                    case_payload=pre_result.api_case,
-                    review_status=pre_result.review_status,
-                    exec_status=ExecStatus.ready
-                    if pre_result.review_status == ReviewStatus.success
-                    else ExecStatus.pending,
-                    environment_id=data.environment_id,
-                    generation_session_id=session.id,
-                    created_by_id=user.id,
-                    updated_by_id=user.id,
-                )
-                created_case_ids.append(case_row.id)
+        # 启动后台预执行任务
+        task = asyncio.create_task(cls._run_confirm_background(session))
+        cls._background_tasks.add(task)
+        task.add_done_callback(cls._background_tasks.discard)
 
         return ApiConfirmResult(
-            created_base_case_ids=created_base_ids,
-            created_case_ids=created_case_ids,
-            run_errors=run_errors,
-            created_interface_id=created_interface_id,
+            created_base_case_ids=[],
+            created_case_ids=[],
+            run_errors=[],
+            created_interface_id=None,
         )
+
+    @classmethod
+    async def _run_confirm_background(cls, session: "AIGenerationSession") -> None:
+        """后台执行预执行 + 创建DB记录，更新 session 进度。"""
+        try:
+            # 重新加载 session 以获取最新数据
+            session = await AIGenerationSession.get(id=session.id)
+            confirm_req = session.output_payload.get("confirm_request", {})
+            selected_indexes = confirm_req.get("selected_indexes", [])
+            environment_id = confirm_req.get("environment_id")
+            interface_id = confirm_req.get("interface_id") or session.input_ref_id
+            catalog_id = confirm_req.get("catalog_id")
+            user_id = confirm_req.get("user_id")
+
+            logger.info(
+                "[预执行] session=%s 开始, selected=%d, env_id=%s",
+                session.id, len(selected_indexes), environment_id,
+            )
+
+            user = await User.get_or_none(id=user_id)
+            if user is None:
+                raise AppException("用户不存在", 404)
+
+            base_cases = session.output_payload.get("base_cases") or []
+
+            created_interface_id = None
+            if session.input_ref_type == InputRefType.interface:
+                iface = await InterfaceService._get_current_or_404(interface_id)
+                resolved = await DependencyResolverService.resolve(iface.id)
+                precoditions_api_doc = resolved.precoditions_api_doc
+            elif session.input_ref_type == InputRefType.api_doc:
+                iface = await cls._create_interface_from_doc(
+                    user,
+                    project_id=session.project_id,
+                    catalog_id=catalog_id,
+                    api_doc_text=session.output_payload.get("api_doc") or "",
+                    module_id=session.module_id,
+                )
+                created_interface_id = iface.id
+                precoditions_api_doc = []
+            else:
+                raise AppException("不支持的生成会话类型", 400)
+
+            api_doc = session.output_payload.get("api_doc") or interface_to_doc_json(iface)
+
+            selected_items: list[tuple[int, dict]] = []
+            for idx in selected_indexes:
+                base = base_cases[idx]
+                if not isinstance(base, dict):
+                    continue
+                selected_items.append((idx, base))
+
+            created_base_ids: list[int] = []
+            created_case_ids: list[int] = []
+            run_errors: list[str] = []
+
+            # 未选择环境：跳过预执行，直接创建 DB 记录，状态为 pending
+            if not environment_id:
+                logger.info("[预执行] session=%s 未选择环境，跳过预执行，直接保存", session.id)
+                async with in_transaction():
+                    sort_base = await cls._next_case_sort_order(iface.id, ApiCaseKind.main)
+                    for order, (idx, base) in enumerate(selected_items):
+                        base_row = await ApiBaseCase.create(
+                            project_id=iface.project_id,
+                            interface_id=iface.id,
+                            name=str(base.get("name") or f"基础用例-{idx}"),
+                            steps=base.get("steps") or [],
+                            dependencies=base.get("dependencies"),
+                            expected=base.get("expected") or [],
+                            status=ApiBaseCaseStatus.draft,
+                            source=SourceType.ai,
+                            generation_session_id=session.id,
+                            created_by_id=user.id,
+                        )
+                        created_base_ids.append(base_row.id)
+                        case_row = await ApiTestCase.create(
+                            project_id=iface.project_id,
+                            module_id=iface.module_id,
+                            base_case_id=base_row.id,
+                            interface_id=iface.id,
+                            title=str(base.get("name") or base_row.name),
+                            case_kind=ApiCaseKind.main,
+                            sort_order=sort_base + order,
+                            case_payload={"base_case": base},
+                            review_status=ReviewStatus.init,
+                            exec_status=ExecStatus.pending,
+                            environment_id=None,
+                            generation_session_id=session.id,
+                            created_by_id=user.id,
+                            updated_by_id=user.id,
+                        )
+                        created_case_ids.append(case_row.id)
+
+                session.output_payload["confirm_result"] = {
+                    "created_base_case_ids": created_base_ids,
+                    "created_case_ids": created_case_ids,
+                    "run_errors": [],
+                    "created_interface_id": created_interface_id,
+                }
+                session.output_payload["confirm_progress"]["completed"] = len(selected_items)
+                session.status = SessionStatus.success
+                session.finished_at = datetime.now(timezone.utc)
+                await session.save(update_fields=["status", "output_payload", "finished_at"])
+                logger.info("[预执行] session=%s 直接保存完成, cases=%d", session.id, len(created_case_ids))
+                return
+
+            # 选择了环境：执行预执行流程
+            from service.test_execution.env_loader import load_test_env_data
+            test_env_data = await load_test_env_data(environment_id)
+            logger.info("[预执行] session=%s 环境数据加载完成", session.id)
+
+            # 定义进度回调 — 在线程中执行，通过 run_coroutine_threadsafe 持久化到 DB
+            loop = asyncio.get_running_loop()
+
+            def on_progress(completed, total, item):
+                progress = session.output_payload.get("confirm_progress", {})
+                progress["completed"] = completed
+                for pi in progress.get("items", []):
+                    if pi.get("index") == item.get("index"):
+                        pi["status"] = item.get("status", "pending")
+                        pi["error"] = item.get("error")
+                session.output_payload["confirm_progress"] = progress
+                # 异步持久化进度到 DB（不阻塞线程）
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        session.save(update_fields=["output_payload"]),
+                        loop,
+                    )
+                except Exception:
+                    pass  # 持久化失败不影响执行
+
+            pre_run_results = await cls._pre_run_selected_base_cases(
+                selected_items=selected_items,
+                api_doc=api_doc,
+                precoditions_api_doc=precoditions_api_doc,
+                environment_id=environment_id,
+                project_id=iface.project_id,
+                test_env_data=test_env_data,
+                progress_callback=on_progress,
+            )
+
+            logger.info(
+                "[预执行] session=%s 预执行完成, results=%d",
+                session.id, len(pre_run_results),
+            )
+            for r in pre_run_results:
+                logger.info(
+                    "[预执行]   case[%d] review=%s error=%s",
+                    r.index, r.review_status, r.error,
+                )
+
+            # 创建 DB 记录
+            async with in_transaction():
+                sort_base = await cls._next_case_sort_order(iface.id, ApiCaseKind.main)
+                for order, pre_result in enumerate(pre_run_results):
+                    idx = pre_result.index
+                    base = base_cases[idx]
+                    if pre_result.error:
+                        run_errors.append(pre_result.error)
+
+                    base_row = await ApiBaseCase.create(
+                        project_id=iface.project_id,
+                        interface_id=iface.id,
+                        name=str(base.get("name") or f"基础用例-{idx}"),
+                        steps=base.get("steps") or [],
+                        dependencies=base.get("dependencies"),
+                        expected=base.get("expected") or [],
+                        status=ApiBaseCaseStatus.draft,
+                        source=SourceType.ai,
+                        generation_session_id=session.id,
+                        created_by_id=user.id,
+                    )
+                    created_base_ids.append(base_row.id)
+
+                    case_row = await ApiTestCase.create(
+                        project_id=iface.project_id,
+                        module_id=iface.module_id,
+                        base_case_id=base_row.id,
+                        interface_id=iface.id,
+                        title=str(pre_result.api_case.get("title") or base_row.name),
+                        case_kind=ApiCaseKind.main,
+                        sort_order=sort_base + order,
+                        case_payload=pre_result.api_case,
+                        review_status=pre_result.review_status,
+                        exec_status=ExecStatus.success
+                        if pre_result.review_status == ReviewStatus.success
+                        else ExecStatus.fail
+                        if pre_result.review_status == ReviewStatus.fail
+                        else ExecStatus.error
+                        if pre_result.review_status == ReviewStatus.error
+                        else ExecStatus.pending,
+                        environment_id=environment_id,
+                        generation_session_id=session.id,
+                        created_by_id=user.id,
+                        updated_by_id=user.id,
+                    )
+                    created_case_ids.append(case_row.id)
+
+            # 更新 session 为完成状态
+            session.output_payload["confirm_result"] = {
+                "created_base_case_ids": created_base_ids,
+                "created_case_ids": created_case_ids,
+                "run_errors": run_errors,
+                "created_interface_id": created_interface_id,
+            }
+            session.output_payload["confirm_progress"]["completed"] = len(selected_items)
+            session.status = SessionStatus.success
+            session.finished_at = datetime.now(timezone.utc)
+            await session.save(update_fields=["status", "output_payload", "finished_at"])
+            logger.info(
+                "[预执行] session=%s 完成, created_cases=%d, errors=%d",
+                session.id, len(created_case_ids), len(run_errors),
+            )
+
+        except Exception as exc:
+            logger.exception("后台预执行失败 session=%s", session.id)
+            session.status = SessionStatus.failed
+            session.error_message = str(exc)
+            session.finished_at = datetime.now(timezone.utc)
+            try:
+                await session.save(update_fields=["status", "error_message", "finished_at"])
+            except Exception:
+                logger.error("保存失败状态也出错 session=%s", session.id)
 
     @classmethod
     async def _create_interface_from_doc(
@@ -501,6 +694,8 @@ class ApiCaseGenerationService:
         precoditions_api_doc: list,
         environment_id: int,
         project_id: int,
+        test_env_data: dict | None = None,
+        progress_callback=None,
     ):
         if api_test_gen_use_mock():
             return [
@@ -532,7 +727,9 @@ class ApiCaseGenerationService:
             precoditions_api_doc=precoditions_api_doc,
             environment_id=environment_id,
             project_id=project_id,
+            test_env_data=test_env_data,
             additional_info=build_default_additional_info(),
+            progress_callback=progress_callback,
         )
 
     # ==================== v2-Q3: generation-status 轮询 ====================
@@ -544,7 +741,7 @@ class ApiCaseGenerationService:
         interface_id: int,
         session_id: int,
     ) -> GenerationStatusOut:
-        """v2: 查询AI预执行进度，供前端5s轮询"""
+        """v3: 查询AI预执行进度，供前端5s轮询。读取 session.output_payload 中的真实进度。"""
         session = await cls._get_api_session_or_404(session_id)
         # 验证session归属
         if (
@@ -555,16 +752,26 @@ class ApiCaseGenerationService:
         await ensure_api_viewer(session.project_id, user)
 
         output = session.output_payload or {}
-        base_cases_raw = output.get("base_cases") or []
 
-        progress = None
-        if session.status == SessionStatus.running and base_cases_raw:
-            # 构建进度信息（从session的output_payload或progress字段获取）
-            progress = {
-                "total": len(base_cases_raw),
-                "completed": 0,  # TODO: 从实际执行进度中获取
-                "items": [],
-            }
+        # 从 output_payload 中读取真实进度（由后台 _run_confirm_background 更新）
+        progress = output.get("confirm_progress")
+        # 如果预执行已完成，附上最终结果
+        confirm_result = output.get("confirm_result")
+
+        # 如果预览生成已完成，附上 base_cases
+        base_cases_out = None
+        if session.status == SessionStatus.success and "base_cases" in output:
+            raw_cases = output["base_cases"]
+            base_cases_out = [
+                BaseCasePreviewItem(
+                    index=i,
+                    name=str(c.get("name") or f"用例-{i + 1}"),
+                    steps=list(c.get("steps") or []),
+                    dependencies=list(c.get("dependencies") or []),
+                    expected=list(c.get("expected") or []),
+                )
+                for i, c in enumerate(raw_cases)
+            ]
 
         return GenerationStatusOut(
             session_id=session.id,
@@ -573,4 +780,6 @@ class ApiCaseGenerationService:
             completed_at=session.finished_at,
             progress=progress,
             error_message=session.error_message,
+            confirm_result=confirm_result,
+            base_cases=base_cases_out,
         )

@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.knowledge.upload')" width="520px" @closed="reset">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.knowledge.upload')" width="520px" @closed="reset">
     <el-form label-width="100px">
       <el-form-item :label="t('page.knowledge.file')" required>
         <input ref="fileInput" type="file" @change="onFileChange" />

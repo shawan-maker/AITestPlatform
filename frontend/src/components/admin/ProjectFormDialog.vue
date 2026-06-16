@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="isEdit ? t('page.admin.projects.edit') : t('page.admin.projects.create')" width="480px" @closed="reset">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="isEdit ? t('page.admin.projects.edit') : t('page.admin.projects.create')" width="480px" @closed="reset">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item :label="t('page.admin.projects.name')" prop="name">
         <el-input v-model="form.name" maxlength="100" show-word-limit />

@@ -1,5 +1,5 @@
 <template>
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     :model-value="modelValue"
     :title="t('page.agent.newSession')"
     :width="dialogWidth"

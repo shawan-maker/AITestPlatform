@@ -206,10 +206,14 @@ def safe_structure_parser(prompt, llm, parser, input_data):
             logging.warning("容错解析失败，进行最后一次重试")
             try:
                 from langchain_core.prompts import PromptTemplate
-                retry_prompt = PromptTemplate.from_template(
-                    "请重新输出，确保只输出纯JSON数组，不要包含任何其他文字、注释或markdown标记。\n"
-                    "原始输入：{input_text}\n"
-                    "请直接输出JSON："
+                # 使用原始 prompt 的 input_variables 构建重试提示
+                retry_template = "请重新输出，确保只输出纯JSON数组，不要包含任何其他文字、注释或markdown标记。请直接输出JSON："
+                # 复用原始 prompt 的模板变量，在末尾追加重试指令
+                original_template = prompt.template if hasattr(prompt, 'template') else str(prompt)
+                retry_full_template = original_template + "\n\n[重要] " + retry_template
+                retry_prompt = PromptTemplate(
+                    input_variables=prompt.input_variables if hasattr(prompt, 'input_variables') else [],
+                    template=retry_full_template,
                 )
                 retry_chain = retry_prompt | llm
                 retry_resp = retry_chain.invoke(input_data)

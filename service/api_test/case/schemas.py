@@ -22,11 +22,13 @@ class GenerationStatusOut(BaseModel):
     completed_at: datetime | None = None
     progress: dict | None = None  # {total, completed, items[]}
     error_message: str | None = None
+    confirm_result: dict | None = None  # {created_base_case_ids, created_case_ids, run_errors, created_interface_id}
+    base_cases: list["BaseCasePreviewItem"] | None = None  # 预览完成时返回的用例列表
 
 
 class GeneratePreviewRequest(BaseModel):
     """v2修订: 移除user_prompt参数，直接AI生成（请求体可为空）"""
-    pass
+    environment_id: int | None = Field(default=None, ge=1)
 
 
 class BaseCasePreviewItem(BaseModel):
@@ -45,7 +47,7 @@ class GeneratePreviewResult(BaseModel):
 class GenerateConfirmRequest(BaseModel):
     session_id: int = Field(..., ge=1)
     selected_indexes: list[int] = Field(..., min_length=1)
-    environment_id: int = Field(..., ge=1)
+    environment_id: int | None = Field(default=None, ge=1)
 
 
 class GenerateConfirmResult(BaseModel):
@@ -68,7 +70,7 @@ class ApiSessionPreviewUpdateRequest(BaseModel):
 class ApiConfirmRequest(BaseModel):
     session_id: int = Field(..., ge=1)
     selected_indexes: list[int] = Field(..., min_length=1)
-    environment_id: int = Field(..., ge=1)
+    environment_id: int | None = Field(default=None, ge=1)
     catalog_id: int | None = Field(default=None, ge=1)
     interface_id: int | None = Field(default=None, ge=1)
 

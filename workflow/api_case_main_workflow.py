@@ -65,8 +65,13 @@ def concurrent_pre_run_base_cases(
     generator_count: int = 0,
     config: dict[str, Any] | RunnableConfig | None = None,
     max_workers: int | None = None,
+    progress_callback=None,
 ) -> list[BaseCasePreRunResult]:
-    """ThreadPoolExecutor 并发预执行基础用例（共享入口，供主工作流与 api_test confirm 复用）。"""
+    """ThreadPoolExecutor 并发预执行基础用例（共享入口，供主工作流与 api_test confirm 复用）。
+
+    progress_callback: 可选回调，签名 callback(completed: int, total: int, item: dict)
+        item 包含 {index, name, status, error}，每完成一个用例调用一次。
+    """
     if not base_cases:
         return []
 
@@ -116,6 +121,7 @@ def concurrent_pre_run_base_cases(
                 future_list.append(future)
 
             results: list[BaseCasePreRunResult] = []
+            total = len(future_list)
             for pos, future in enumerate(future_list, start=1):
                 buf, orig_idx, base_case = task_outputs[future]
                 try:
@@ -128,6 +134,13 @@ def concurrent_pre_run_base_cases(
                             review_status=review,
                         )
                     )
+                    if progress_callback:
+                        progress_callback(pos, total, {
+                            "index": orig_idx,
+                            "name": base_case.get("name", ""),
+                            "status": "success" if review == ReviewStatus.success else "warning",
+                            "error": None,
+                        })
                 except Exception as exc:
                     results.append(
                         BaseCasePreRunResult(
@@ -140,6 +153,13 @@ def concurrent_pre_run_base_cases(
                             error=str(exc),
                         )
                     )
+                    if progress_callback:
+                        progress_callback(pos, total, {
+                            "index": orig_idx,
+                            "name": base_case.get("name", ""),
+                            "status": "error",
+                            "error": str(exc),
+                        })
 
                 task_log = buf.getvalue()
                 if task_log.strip():

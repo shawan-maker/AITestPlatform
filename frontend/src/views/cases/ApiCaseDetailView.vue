@@ -132,7 +132,8 @@
           </el-select>
           <el-input v-model="debugForm.base_url" placeholder="${base_url}" size="default" style="flex: 1" />
           <el-input v-model="debugForm.path" placeholder="/path" size="default" style="flex: 2" />
-          <el-button type="primary" :loading="running" @click="runDebug">{{ t('page.apiCases.debugRun') }}</el-button>
+          <el-button v-if="!running" type="primary" @click="runDebug">{{ t('page.apiCases.debugRun') }}</el-button>
+          <el-button v-else type="warning" @click="cancelDebug">{{ t('common.cancel') }}</el-button>
           <el-button @click="saveDebug">{{ t('page.apiCases.debugSave') }}</el-button>
         </div>
 
@@ -228,12 +229,51 @@
 
           <!-- 前置操作 Tab -->
           <div v-show="activeSubTab === 'preOps'" class="tab-pane">
-            <el-empty :description="t('page.apiCases.subTabPreOps')" :image-size="60" />
+            <div v-if="preOpsData.length" class="pre-ops-list">
+              <div v-for="(op, idx) in preOpsData" :key="idx" class="pre-op-item">
+                <div class="pre-op-header">
+                  <el-tag size="small" :type="methodTagType(op.method)">{{ (op.method || 'GET').toUpperCase() }}</el-tag>
+                  <span class="pre-op-title">{{ op.title || op.path || `前置操作 ${idx + 1}` }}</span>
+                </div>
+                <div class="pre-op-detail" v-if="op.path">
+                  <span class="detail-label">路径:</span> {{ op.path }}
+                </div>
+                <div class="pre-op-detail" v-if="op.headers && Object.keys(op.headers).length">
+                  <span class="detail-label">Headers:</span> {{ JSON.stringify(op.headers) }}
+                </div>
+                <div class="pre-op-detail" v-if="op.query && Object.keys(op.query).length">
+                  <span class="detail-label">Query:</span> {{ JSON.stringify(op.query) }}
+                </div>
+                <div class="pre-op-detail" v-if="op.body">
+                  <span class="detail-label">Body:</span>
+                  <pre class="pre-op-body">{{ typeof op.body === 'string' ? op.body : JSON.stringify(op.body, null, 2) }}</pre>
+                </div>
+                <div class="pre-op-detail" v-if="op.extracts && op.extracts.length">
+                  <span class="detail-label">提取:</span>
+                  <span v-for="(ext, ei) in op.extracts" :key="ei" class="extract-tag">{{ ext.var_name || ext.name }}: {{ ext.extract_expr || ext.expression }}</span>
+                </div>
+                <div class="pre-op-detail" v-if="op.assertions && op.assertions.length">
+                  <span class="detail-label">断言:</span>
+                  <span v-for="(ast, ai) in op.assertions" :key="ai" class="assert-tag">{{ ast.field || ast.target }} {{ ast.type || 'eq' }} {{ ast.expected }}</span>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="暂无前置操作" :image-size="60" />
           </div>
 
           <!-- 后置操作 Tab -->
           <div v-show="activeSubTab === 'postOps'" class="tab-pane">
-            <el-empty :description="t('page.apiCases.subTabPostOps')" :image-size="60" />
+            <div v-if="setupScriptText || teardownScriptText" class="scripts-container">
+              <div v-if="setupScriptText" class="script-block">
+                <h4>Setup Script (前置脚本)</h4>
+                <pre class="script-content">{{ setupScriptText }}</pre>
+              </div>
+              <div v-if="teardownScriptText" class="script-block">
+                <h4>Teardown Script (后置脚本)</h4>
+                <pre class="script-content">{{ teardownScriptText }}</pre>
+              </div>
+            </div>
+            <el-empty v-else description="暂无后置操作" :image-size="60" />
           </div>
         </div>
 
@@ -417,6 +457,18 @@ const pathParamsData = ref([])
 const extractData = ref([])
 const assertionsData = ref([])
 const bodyContent = ref('{\n\n}')
+const preOpsData = ref([])
+const setupScriptText = ref('')
+const teardownScriptText = ref('')
+
+function methodTagType(method) {
+  var m = (method || '').toUpperCase()
+  if (m === 'GET') return 'success'
+  if (m === 'POST') return 'primary'
+  if (m === 'PUT' || m === 'PATCH') return 'warning'
+  if (m === 'DELETE') return 'danger'
+  return 'info'
+}
 
 /* ---- 响应区 ---- */
 var respTabs = [
@@ -479,6 +531,10 @@ async function loadCaseDetail() {
     if (payload.path_params) pathParamsData.value = Array.isArray(payload.path_params) ? payload.path_params : []
     if (payload.extracts) extractData.value = Array.isArray(payload.extracts) ? payload.extracts : []
     if (payload.assertions) assertionsData.value = Array.isArray(payload.assertions) ? payload.assertions : []
+    // 前置操作和后置脚本
+    preOpsData.value = Array.isArray(payload.preconditions) ? payload.preconditions : []
+    setupScriptText.value = payload.setup_script || ''
+    teardownScriptText.value = payload.teardown_script || ''
 
     /* 加载前置依赖 + 测试用例 */
     if (caseDetail.value && caseDetail.value.interface_id) {
@@ -533,10 +589,24 @@ async function runDebug() {
     extractInfoJson.value = JSON.stringify(data.extract_info || [], null, 2)
     assertInfoJson.value = JSON.stringify(data.assert_info || [], null, 2)
   } catch (err) {
-    if (err.name !== 'AbortError') throw err
+    if (err.name === 'AbortError') {
+      execResult.value = { success: false, operator: '-', time: formatTime(new Date().toISOString()), cancelled: true }
+      responseResultText.value = '调试已取消'
+    } else if (err?.response?.status === 404) {
+      ElMessage.warning(err?.response?.data?.message || '用例已被删除，请返回列表')
+      router.push({ path: '/cases/api', query: route.query })
+    } else {
+      throw err
+    }
   } finally {
     running.value = false
     debugAbortController.value = null
+  }
+}
+
+function cancelDebug() {
+  if (debugAbortController.value) {
+    debugAbortController.value.abort()
   }
 }
 
@@ -870,5 +940,88 @@ onMounted(loadCaseDetail)
   color: var(--el-color-primary);
   cursor: pointer;
   font-size: 12px;
+}
+/* 前置操作 */
+.pre-ops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pre-op-item {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.pre-op-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.pre-op-detail {
+  color: var(--el-text-color-regular);
+  line-height: 1.6;
+  word-break: break-all;
+
+  .detail-label {
+    color: var(--el-text-color-secondary);
+    margin-right: 4px;
+  }
+}
+
+.pre-op-body {
+  background: #f5f7fa;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  max-height: 120px;
+  overflow: auto;
+  margin: 2px 0;
+}
+
+.extract-tag, .assert-tag {
+  display: inline-block;
+  background: #f0f9eb;
+  color: #67c23a;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin: 2px 4px 2px 0;
+  font-size: 11px;
+}
+
+.assert-tag {
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+
+/* 后置脚本 */
+.scripts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.script-block h4 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+}
+
+.script-content {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: 'Fira Code', Consolas, monospace;
+  font-size: 12px;
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 </style>

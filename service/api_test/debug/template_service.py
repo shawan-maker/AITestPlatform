@@ -88,10 +88,17 @@ class DebugTemplateService:
         if file_id is not None:
             payload = dict(payload or {})
             payload["file_id"] = file_id
-        record = await RunnerGateway.run_interface_debug(
-            interface=iface,
-            environment_id=environment_id,
-            payload=payload,
-            triggered_by_id=user.id,
-        )
+        try:
+            record = await RunnerGateway.run_interface_debug(
+                interface=iface,
+                environment_id=environment_id,
+                payload=payload,
+                triggered_by_id=user.id,
+            )
+        except Exception as exc:
+            # 接口/用例在执行期间被删除时，返回友好的 404 错误
+            from tortoise.exceptions import DoesNotExist
+            if isinstance(exc, DoesNotExist):
+                raise AppException("接口已被删除，请刷新页面", 404)
+            raise
         return record

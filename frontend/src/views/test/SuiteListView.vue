@@ -26,7 +26,7 @@
         </AppTableColumn>
       </PaginatedTable>
     </template>
-    <el-dialog v-model="showCreate" :title="t('page.test.suites.create')" width="480px">
+    <el-dialog :close-on-click-modal="false" v-model="showCreate" :title="t('page.test.suites.create')" width="480px">
       <el-form label-width="100px">
         <el-form-item :label="t('common.name')"><el-input v-model="createForm.name" /></el-form-item>
         <el-form-item :label="t('page.apiCases.selectEnv')"><EnvironmentSelect v-model="createForm.environment_id" /></el-form-item>

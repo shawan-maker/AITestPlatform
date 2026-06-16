@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :model-value="modelValue" :title="t('page.agent.saveDialog')" width="480px" @update:model-value="$emit('update:modelValue', $event)">
+  <el-dialog :close-on-click-modal="false" :model-value="modelValue" :title="t('page.agent.saveDialog')" width="480px" @update:model-value="$emit('update:modelValue', $event)">
     <el-form label-width="100px">
       <el-form-item :label="t('page.functional.catalog')" required>
         <el-select v-model="catalogId" filterable style="width: 100%">

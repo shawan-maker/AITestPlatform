@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.functional.batchEdit')" width="560px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.functional.batchEdit')" width="560px">
     <el-alert :title="t('page.functional.batchEditHint', { count: caseIds.length })" type="info" show-icon :closable="false" />
     <el-form label-width="120px" style="margin-top: 16px">
       <div class="form-row">

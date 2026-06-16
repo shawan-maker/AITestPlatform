@@ -99,6 +99,26 @@ class DependencyMergeService:
         user_id: int | None = None,
         manual: bool = False,
     ) -> ApiDependencyGroup:
+        # 环检测：检查新边是否会形成循环依赖
+        if edges:
+            from service.api_test.models import ApiDependency as _Dep
+            existing_edges_raw = await _Dep.all().values("from_api_id", "to_api_id")
+            all_edges = [
+                {"from_api_id": e["from_api_id"], "to_api_id": e["to_api_id"]}
+                for e in existing_edges_raw
+                # 排除当前 target 的旧边（即将被替换）
+                if e["from_api_id"] != target_interface_id
+            ]
+            all_edges.extend([
+                {"from_api_id": target_interface_id, "to_api_id": to_id}
+                for to_id, _ in edges
+            ])
+            if RuleInferencer.detect_cycle(target_interface_id, all_edges):
+                raise AppException(
+                    "检测到循环依赖，无法保存。请检查依赖链是否存在 A→B→A 的循环",
+                    400,
+                )
+
         target = await ApiInterface.get(id=target_interface_id)
         group, _ = await ApiDependencyGroup.get_or_create(
             target_api_id=target.id,

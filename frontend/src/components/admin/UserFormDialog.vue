@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.admin.users.create')" width="480px" @closed="reset">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.admin.users.create')" width="480px" @closed="reset">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
       <el-form-item :label="t('page.login.username')" prop="username">
         <el-input v-model="form.username" />

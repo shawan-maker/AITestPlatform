@@ -1,6 +1,6 @@
 <template>
   <!-- v2-L4: 强制选择新目录，移除mode选项，冲突高亮并禁用confirm -->
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     v-model="visible"
     :title="t('page.apiCases.importInterfaces')"
     :width="dialogWidth"

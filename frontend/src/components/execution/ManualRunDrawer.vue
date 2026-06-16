@@ -6,7 +6,7 @@
         <AppTableColumn prop="result" variant="fixed" :label="t('common.status')" :width="100" />
       </AppTable>
     </div>
-    <el-dialog v-model="caseVisible" :title="currentCase?.name" width="480px">
+    <el-dialog :close-on-click-modal="false" v-model="caseVisible" :title="currentCase?.name" width="480px">
       <el-radio-group v-model="caseResult">
         <el-radio label="pass">pass</el-radio>
         <el-radio label="fail">fail</el-radio>

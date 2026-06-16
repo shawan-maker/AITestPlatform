@@ -40,7 +40,7 @@
   </div>
 
   <!-- SIT-F7: Detail Dialog (clicking the card opens this) -->
-  <el-dialog
+  <el-dialog :close-on-click-modal="false"
     v-model="dialogVisible"
     :title="cardTitle"
     width="720px"

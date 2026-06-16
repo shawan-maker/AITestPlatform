@@ -93,12 +93,15 @@ export function batchDeleteApiCases(data) {
 }
 
 export function generateCasePreview(interfaceId, data) {
-  // v2-Q2: 不再传user_prompt参数
+  // v3: 异步预览，接口立即返回 session_id，前端轮询 generation-status 获取结果
   return request.post(`/api-test/interfaces/${interfaceId}/cases/generate-preview`, data)
 }
 
 export function confirmCaseGeneration(interfaceId, data) {
-  return request.post(`/api-test/interfaces/${interfaceId}/cases/confirm`, data)
+  // 预执行可能耗时较长，超时设为 5 分钟
+  return request.post(`/api-test/interfaces/${interfaceId}/cases/confirm`, data, {
+    timeout: 300000,
+  })
 }
 
 // v2-Q3: AI预执行进度轮询

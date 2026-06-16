@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" :title="t('page.env.variables.importExport')" width="520px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.env.variables.importExport')" width="520px">
     <el-tabs v-model="tab">
       <el-tab-pane :label="t('common.export')" name="export">
         <el-button @click="doExport">{{ t('common.export') }} JSON</el-button>
