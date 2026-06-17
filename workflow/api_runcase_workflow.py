@@ -52,6 +52,7 @@ class APIState(TypedDict):
     function_list: list  # 前后置脚本中可以引用的工具函数列表
     api_case: dict  # 生成的可执行的用例
     api_case_run_result: dict  # 执行用例的结果
+    exec_result: dict  # 执行结果（传递给 output_runcase 输出）
     review_status: str # 生成的用例是否可执行
     generator_count: int # 生成用例的次数
 
@@ -266,11 +267,16 @@ class APIRuncaseGeneratorWorkflow:
         writer("【开始执行节点】 5、输出生成的接口用例")
         api_case = state.get("api_case")
         review_status = state.get("review_status")
+        exec_result = state.get("api_case_run_result") or {}
         # 2、返回用例结果
         api_case.setdefault("review_status", review_status)
         writer(f"最终生成的接口用例为：{api_case},可执行状态：{review_status}")
         writer("【执行节点完成】 5、输出生成的接口用例")
-        return {"api_case": _convert_to_serializable(api_case),"review_status": review_status}
+        return {
+            "api_case": _convert_to_serializable(api_case),
+            "review_status": review_status,
+            "exec_result": _convert_to_serializable(exec_result),
+        }
 
     # 5、检查生成次数（默认最大重试次数为3次)
     def check_generator_count(self,state:APIState):

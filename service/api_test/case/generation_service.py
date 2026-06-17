@@ -285,6 +285,7 @@ class ApiCaseGenerationService:
                 selected_indexes=data.selected_indexes,
                 environment_id=data.environment_id,
                 interface_id=interface_id,
+                edited_base_cases=data.edited_base_cases,
             ),
         )
         return GenerateConfirmResult(
@@ -334,6 +335,7 @@ class ApiCaseGenerationService:
         session.output_payload["confirm_progress"] = {
             "total": len(data.selected_indexes),
             "completed": 0,
+            "stage": "structuring",
             "items": progress_items,
         }
         session.output_payload["confirm_request"] = {
@@ -342,6 +344,7 @@ class ApiCaseGenerationService:
             "interface_id": data.interface_id,
             "catalog_id": data.catalog_id,
             "user_id": user.id,
+            "edited_base_cases": data.edited_base_cases,
         }
         await session.save(update_fields=["status", "output_payload"])
 
@@ -380,6 +383,13 @@ class ApiCaseGenerationService:
                 raise AppException("用户不存在", 404)
 
             base_cases = session.output_payload.get("base_cases") or []
+
+            # 合并用户编辑的基础用例（edited_base_cases 优先于原始 base_cases）
+            edited = confirm_req.get("edited_base_cases")
+            if edited and isinstance(edited, list):
+                for i, edit_case in enumerate(edited):
+                    if i < len(base_cases) and isinstance(edit_case, dict):
+                        base_cases[i] = {**base_cases[i], **edit_case}
 
             created_interface_id = None
             if session.input_ref_type == InputRefType.interface:
@@ -439,7 +449,20 @@ class ApiCaseGenerationService:
                             title=str(base.get("name") or base_row.name),
                             case_kind=ApiCaseKind.main,
                             sort_order=sort_base + order,
-                            case_payload={"base_case": base},
+                            case_payload={
+                                "title": base.get("name", ""),
+                                "method": getattr(iface, "method", "GET"),
+                                "path": getattr(iface, "path", ""),
+                                "headers": {},
+                                "query": {},
+                                "body": None,
+                                "assertions": [
+                                    {"target": exp, "method": "contains", "expected": ""}
+                                    for exp in (base.get("expected") or [])
+                                ],
+                                "steps": base.get("steps") or [],
+                                "expected": base.get("expected") or [],
+                            },
                             review_status=ReviewStatus.init,
                             exec_status=ExecStatus.pending,
                             environment_id=None,
@@ -473,6 +496,7 @@ class ApiCaseGenerationService:
             def on_progress(completed, total, item):
                 progress = session.output_payload.get("confirm_progress", {})
                 progress["completed"] = completed
+                progress["stage"] = "executing"
                 for pi in progress.get("items", []):
                     if pi.get("index") == item.get("index"):
                         pi["status"] = item.get("status", "pending")
@@ -506,6 +530,10 @@ class ApiCaseGenerationService:
                     "[预执行]   case[%d] review=%s error=%s",
                     r.index, r.review_status, r.error,
                 )
+                logger.info(
+                    "[预执行]   case[%d] api_case keys=%s",
+                    r.index, list(r.api_case.keys()) if isinstance(r.api_case, dict) else type(r.api_case),
+                )
 
             # 创建 DB 记录
             async with in_transaction():
@@ -538,7 +566,10 @@ class ApiCaseGenerationService:
                         title=str(pre_result.api_case.get("title") or base_row.name),
                         case_kind=ApiCaseKind.main,
                         sort_order=sort_base + order,
-                        case_payload=pre_result.api_case,
+                        case_payload={
+                            **pre_result.api_case,
+                            "_exec_result": pre_result.exec_result or {},
+                        },
                         review_status=pre_result.review_status,
                         exec_status=ExecStatus.success
                         if pre_result.review_status == ReviewStatus.success

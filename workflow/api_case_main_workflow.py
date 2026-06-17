@@ -35,9 +35,10 @@ class BaseCasePreRunResult:
     api_case: dict
     review_status: ReviewStatus
     error: str | None = None
+    exec_result: dict | None = None
 
 
-def _normalize_pre_run_output(result: dict, base_case: dict) -> tuple[dict, ReviewStatus]:
+def _normalize_pre_run_output(result: dict, base_case: dict) -> tuple[dict, ReviewStatus, dict]:
     review_raw = result.get("review_status") or ReviewStatus.init.value
     try:
         review = ReviewStatus(review_raw)
@@ -49,7 +50,9 @@ def _normalize_pre_run_output(result: dict, base_case: dict) -> tuple[dict, Revi
         api_case = api_case[0]
     if not isinstance(api_case, dict):
         api_case = {"title": base_case.get("name"), "steps": base_case.get("steps")}
-    return api_case, review
+
+    exec_result = result.get("exec_result") or {}
+    return api_case, review, exec_result
 
 
 def concurrent_pre_run_base_cases(
@@ -126,12 +129,13 @@ def concurrent_pre_run_base_cases(
                 buf, orig_idx, base_case = task_outputs[future]
                 try:
                     raw = future.result()
-                    api_case, review = _normalize_pre_run_output(raw, base_case)
+                    api_case, review, exec_result = _normalize_pre_run_output(raw, base_case)
                     results.append(
                         BaseCasePreRunResult(
                             index=orig_idx,
                             api_case=api_case,
                             review_status=review,
+                            exec_result=exec_result,
                         )
                     )
                     if progress_callback:

@@ -473,7 +473,7 @@
       "sortByUpdatedAt": "按更新时间排序"
     },
     "apiCases": {
-      "title": "API 用例工作区",
+      "title": "接口用例",
       "tabDocPreview": "文档预览",
       "tabTestCases": "测试用例",
       "tabInterfaceDebug": "接口调试",
@@ -498,6 +498,8 @@
       "noInterface": "当前目录下暂无接口",
       "interface": "接口 ID",
       "selectCatalog": "请先选择目录",
+      "interfaceName": "接口名称",
+      "interfaceCatalog": "接口目录",
       "createInterface": "新建接口",
       "editInterface": "编辑接口",
       "method": "方法",
@@ -519,7 +521,7 @@
       "catalogDeleteConfirm": "确定删除目录「{name}」？将同时删除其下所有接口。",
       "catalogName": "目录名称",
       "interfaceCount": "{count} 个接口",
-      "searchInterfaces": "搜索路径或摘要",
+      "searchInterfaces": "搜索路径或名称",
       "searchCases": "搜索用例（名称）",
       "loadMore": "加载更多",
       "catalogSection": "接口目录",
@@ -678,7 +680,7 @@
     "no": "否",
     "error": "错误",
     "success": "成功",
-    "failed": "解析失败",
+    "failed": "失败",
     "message": "消息",
     "time": "时间",
     "warning": "警告"
@@ -701,7 +703,7 @@
   },
   "execution": {
     "passed": "通过",
-    "failed": "解析失败",
+    "failed": "失败",
     "other": "其他",
     "noDefects": "无缺陷",
     "envSnapshot": "环境快照",

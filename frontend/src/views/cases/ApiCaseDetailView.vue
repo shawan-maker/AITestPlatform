@@ -5,54 +5,15 @@
     <div class="detail-header">
       <div class="header-left">
         <el-button text @click="goBack">
-          <el-icon><ArrowLeft /></el-icon>
+          <el-icon><ArrowLeft /></el-icon> 返回
         </el-button>
-        <span class="header-title">{{ t('page.apiCases.caseDetail') }}</span>
-        <span v-if="caseDetail?.title || caseDetail?.name" class="case-name">
-          {{ caseDetail.title || caseDetail.name }}
-        </span>
-        <el-dropdown trigger="click">
-          <el-button size="small">
-            {{ t('page.apiCases.batchOps') }}
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item>{{ t('page.apiCases.actionCreate') }}</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-      <div class="header-right">
-        <el-input
-          v-model="searchKeyword"
-          :placeholder="t('page.apiCases.searchCases')"
-          clearable
-          size="small"
-          style="width: 260px"
-        >
-          <template #prefix><el-icon><Search /></el-icon></template>
-        </el-input>
-        <el-button text size="small"><el-icon><Setting /></el-icon></el-button>
-        <el-dropdown trigger="click">
-          <el-button size="small">
-            {{ t('page.apiCases.globalVars') }}
-            <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item>var_a</el-dropdown-item>
-              <el-dropdown-item>var_b</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
       </div>
     </div>
 
     <!-- 主内容区：左右分栏 -->
-    <div class="detail-body">
-      <!-- 左侧：前置依赖 + 测试用例列表 -->
-      <div class="left-panel">
+    <SplitView :initial-width="380" :min-width="300" :max-width="560" drawer-title="用例列表">
+      <template #left>
+        <div class="left-panel">
         <div class="panel-search">
           <el-input
             v-model="searchKeyword"
@@ -109,265 +70,82 @@
             >
               <span class="item-status-dot" :class="dotClass(item.exec_status)"></span>
               <span class="item-name">{{ item.title || item.name }}</span>
-              <span class="item-time">{{ formatTime(item.updated_at) }}</span>
             </div>
             <el-empty v-if="!filteredMainCases.length" description="" :image-size="40" />
           </div>
         </div>
-      </div>
-
-      <!-- 分隔线 -->
-      <div class="panel-divider"></div>
-
+        </div>
+      </template>
+      <template #right>
       <!-- 右侧：调试面板 -->
       <div class="right-panel">
-        <!-- 请求配置行 -->
-        <div class="request-config-bar">
-          <el-select v-model="debugForm.method" size="default" style="width: 100px">
-            <el-option label="GET" value="GET" />
-            <el-option label="POST" value="POST" />
-            <el-option label="PUT" value="PUT" />
-            <el-option label="DELETE" value="DELETE" />
-            <el-option label="PATCH" value="PATCH" />
-          </el-select>
-          <el-input v-model="debugForm.base_url" placeholder="${base_url}" size="default" style="flex: 1" />
-          <el-input v-model="debugForm.path" placeholder="/path" size="default" style="flex: 2" />
-          <el-button v-if="!running" type="primary" @click="runDebug">{{ t('page.apiCases.debugRun') }}</el-button>
-          <el-button v-else type="warning" @click="cancelDebug">{{ t('common.cancel') }}</el-button>
-          <el-button @click="saveDebug">{{ t('page.apiCases.debugSave') }}</el-button>
-        </div>
-
-        <!-- 子Tab导航 -->
-        <div class="sub-tabs-nav">
-          <div
-            v-for="tab in subTabs"
-            :key="tab.key"
-            class="sub-tab-item"
-            :class="{ active: activeSubTab === tab.key }"
-            @click="activeSubTab = tab.key"
-          >{{ t(tab.label) }}</div>
-        </div>
-
-        <!-- 子Tab内容 -->
-        <div class="sub-tab-content">
-          <!-- Headers Tab -->
-          <div v-show="activeSubTab === 'headers'" class="tab-pane">
-            <AppTable :data="headersData" size="small" border>
-              <AppTableColumn prop="name" :label="t('page.apiCases.paramName')" min-width="140" />
-              <AppTableColumn prop="value" :label="t('page.apiCases.paramValue')" min-width="200" />
-              <AppTableColumn prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="160" />
-              <AppTableColumn label="" width="60" align="center">
-                <template #default>
-                  <el-button text type="danger" size="small"><el-icon><Delete /></el-icon></el-button>
-                </template>
-              </AppTableColumn>
-            </AppTable>
-            <el-button text size="small" class="add-row-btn" @click="addRow('headers')">+ {{ t('page.apiCases.addParam') }}</el-button>
-          </div>
-
-          <!-- Params Tab -->
-          <div v-show="activeSubTab === 'params'" class="tab-pane">
-            <div class="param-type-label">QUERY参数</div>
-            <AppTable :data="queryParamsData" size="small" border>
-              <AppTableColumn prop="name" :label="t('page.apiCases.paramName')" min-width="140" />
-              <AppTableColumn prop="value" :label="t('page.apiCases.paramValue')" min-width="200" />
-              <AppTableColumn prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="160" />
-              <AppTableColumn label="" width="80" align="center">
-                <template #default><span class="op-link">{{ t('common.action') }}</span></template>
-              </AppTableColumn>
-            </AppTable>
-            <el-button text size="small" class="add-row-btn" @click="addRow('query')">+ {{ t('page.apiCases.addParam') }}</el-button>
-          </div>
-
-          <!-- Path Tab -->
-          <div v-show="activeSubTab === 'path'" class="tab-pane">
-            <AppTable :data="pathParamsData" size="small" border>
-              <AppTableColumn prop="name" :label="t('page.apiCases.paramName')" min-width="140" />
-              <AppTableColumn prop="value" :label="t('page.apiCases.paramValue')" min-width="200" />
-              <AppTableColumn prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="160" />
-              <AppTableColumn label="" width="80" align="center">
-                <template #default><span class="op-link">{{ t('common.action') }}</span></template>
-              </AppTableColumn>
-            </AppTable>
-            <el-button text size="small" class="add-row-btn" @click="addRow('path')">+ {{ t('page.apiCases.addParam') }}</el-button>
-          </div>
-
-          <!-- Body Tab -->
-          <div v-show="activeSubTab === 'body'" class="tab-pane body-tab">
-            <MonacoJsonEditor v-model="bodyContent" :height="280" lang="json" />
-          </div>
-
-          <!-- 抽取 Tab -->
-          <div v-show="activeSubTab === 'extract'" class="tab-pane">
-            <AppTable :data="extractData" size="small" border>
-              <AppTableColumn prop="name" :label="t('page.apiCases.paramName')" min-width="140" />
-              <AppTableColumn prop="expression" :label="t('page.apiCases.fieldPath')" min-width="220" />
-              <AppTableColumn prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="160" />
-              <AppTableColumn label="" width="60" align="center">
-                <template #default>
-                  <el-button text type="danger" size="small"><el-icon><Delete /></el-icon></el-button>
-                </template>
-              </AppTableColumn>
-            </AppTable>
-            <el-button text size="small" class="add-row-btn" @click="addRow('extract')">+ {{ t('page.apiCases.addParam') }}</el-button>
-          </div>
-
-          <!-- 断言 Tab -->
-          <div v-show="activeSubTab === 'assert'" class="tab-pane">
-            <AppTable :data="assertionsData" size="small" border>
-              <AppTableColumn prop="name" :label="t('page.apiCases.paramName')" min-width="140" />
-              <AppTableColumn prop="expression" :label="t('page.apiCases.fieldPath')" min-width="220" />
-              <AppTableColumn prop="expected" label="Expected" min-width="120" />
-              <AppTableColumn label="" width="60" align="center">
-                <template #default>
-                  <el-button text type="danger" size="small"><el-icon><Delete /></el-icon></el-button>
-                </template>
-              </AppTableColumn>
-            </AppTable>
-            <el-button text size="small" class="add-row-btn" @click="addRow('assert')">+ {{ t('page.apiCases.addParam') }}</el-button>
-          </div>
-
-          <!-- 前置操作 Tab -->
-          <div v-show="activeSubTab === 'preOps'" class="tab-pane">
-            <div v-if="preOpsData.length" class="pre-ops-list">
-              <div v-for="(op, idx) in preOpsData" :key="idx" class="pre-op-item">
-                <div class="pre-op-header">
-                  <el-tag size="small" :type="methodTagType(op.method)">{{ (op.method || 'GET').toUpperCase() }}</el-tag>
-                  <span class="pre-op-title">{{ op.title || op.path || `前置操作 ${idx + 1}` }}</span>
-                </div>
-                <div class="pre-op-detail" v-if="op.path">
-                  <span class="detail-label">路径:</span> {{ op.path }}
-                </div>
-                <div class="pre-op-detail" v-if="op.headers && Object.keys(op.headers).length">
-                  <span class="detail-label">Headers:</span> {{ JSON.stringify(op.headers) }}
-                </div>
-                <div class="pre-op-detail" v-if="op.query && Object.keys(op.query).length">
-                  <span class="detail-label">Query:</span> {{ JSON.stringify(op.query) }}
-                </div>
-                <div class="pre-op-detail" v-if="op.body">
-                  <span class="detail-label">Body:</span>
-                  <pre class="pre-op-body">{{ typeof op.body === 'string' ? op.body : JSON.stringify(op.body, null, 2) }}</pre>
-                </div>
-                <div class="pre-op-detail" v-if="op.extracts && op.extracts.length">
-                  <span class="detail-label">提取:</span>
-                  <span v-for="(ext, ei) in op.extracts" :key="ei" class="extract-tag">{{ ext.var_name || ext.name }}: {{ ext.extract_expr || ext.expression }}</span>
-                </div>
-                <div class="pre-op-detail" v-if="op.assertions && op.assertions.length">
-                  <span class="detail-label">断言:</span>
-                  <span v-for="(ast, ai) in op.assertions" :key="ai" class="assert-tag">{{ ast.field || ast.target }} {{ ast.type || 'eq' }} {{ ast.expected }}</span>
-                </div>
-              </div>
-            </div>
-            <el-empty v-else description="暂无前置操作" :image-size="60" />
-          </div>
-
-          <!-- 后置操作 Tab -->
-          <div v-show="activeSubTab === 'postOps'" class="tab-pane">
-            <div v-if="setupScriptText || teardownScriptText" class="scripts-container">
-              <div v-if="setupScriptText" class="script-block">
-                <h4>Setup Script (前置脚本)</h4>
-                <pre class="script-content">{{ setupScriptText }}</pre>
-              </div>
-              <div v-if="teardownScriptText" class="script-block">
-                <h4>Teardown Script (后置脚本)</h4>
-                <pre class="script-content">{{ teardownScriptText }}</pre>
-              </div>
-            </div>
-            <el-empty v-else description="暂无后置操作" :image-size="60" />
-          </div>
-        </div>
-
-        <!-- 底部响应区 -->
-        <div class="response-section">
-          <!-- 响应Tab导航 -->
-          <div class="resp-tabs-nav">
-            <div
-              v-for="rtab in respTabs"
-              :key="rtab.key"
-              class="resp-tab-item"
-              :class="{ active: activeRespTab === rtab.key }"
-              @click="activeRespTab = rtab.key"
-            >{{ t(rtab.label) }}</div>
-            <div class="resp-tab-spacer"></div>
-            <el-button text size="small" @click="showTestRecords = !showTestRecords">
-              <el-icon><Timer /></el-icon> {{ t('page.apiCases.testRecord') }}
+        <!-- 标题 + 变量文件 -->
+        <div class="debug-header-row">
+          <h3 class="debug-title">{{ caseDetail?.title || caseDetail?.name || '-' }}</h3>
+          <el-dropdown trigger="click" popper-class="var-file-dropdown">
+            <el-button size="default">
+              <el-icon><Document /></el-icon> {{ currentEnvName || t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
             </el-button>
-          </div>
-
-          <!-- 响应内容 -->
-          <div class="resp-content">
-            <!-- 返回结果 -->
-            <div v-show="activeRespTab === 'result'" class="resp-pane">
-              <div v-if="execResult" class="result-bar">
-                <span class="status-badge" :class="execResult.success ? 'success' : 'failed'">
-                  {{ execResult.success ? t('common.success') : t('common.failed') }}
-                </span>
-                <span class="result-meta">
-                  {{ t('page.apiCases.resultInfo') }}:
-                  <span class="meta-user">{{ execResult.operator || '-' }}</span>
-                  {{ t('page.apiCases.updateTime') }}: {{ execResult.time || '-' }}
-                </span>
-              </div>
-              <MonacoJsonEditor
-                v-if="activeRespTab === 'result'"
-                :model-value="responseResultText"
-                read-only
-                :height="180"
-                lang="plaintext"
-              />
-            </div>
-            <!-- 返回信息 -->
-            <div v-show="activeRespTab === 'responseInfo'" class="resp-pane">
-              <MonacoJsonEditor
-                :model-value="responseInfoJson"
-                read-only
-                :height="200"
-                lang="json"
-              />
-            </div>
-            <!-- 请求信息 -->
-            <div v-show="activeRespTab === 'requestInfo'" class="resp-pane">
-              <MonacoJsonEditor
-                :model-value="requestInfoJson"
-                read-only
-                :height="200"
-                lang="json"
-              />
-            </div>
-            <!-- 抽取信息 -->
-            <div v-show="activeRespTab === 'extractInfo'" class="resp-pane">
-              <MonacoJsonEditor
-                :model-value="extractInfoJson"
-                read-only
-                :height="200"
-                lang="json"
-              />
-            </div>
-            <!-- 断言信息 -->
-            <div v-show="activeRespTab === 'assertInfo'" class="resp-pane">
-              <MonacoJsonEditor
-                :model-value="assertInfoJson"
-                read-only
-                :height="200"
-                lang="json"
-              />
-            </div>
-            <!-- 测试记录 -->
-            <div v-if="showTestRecords && runRecords.length" class="test-records-panel">
-              <AppTable :data="runRecords" size="small" border max-height="200">
-                <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')" />
-                <AppTableColumn prop="status" variant="fixed" :label="t('common.status')" :width="100" />
-              </AppTable>
-            </div>
-          </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="env in environmentList"
+                  :key="env.id"
+                  :class="{ 'is-active': caseEnvId === env.id }"
+                  @click="caseEnvId = env.id; currentEnvName = env.env_name"
+                >{{ env.env_name }}</el-dropdown-item>
+                <el-dropdown-item v-if="!environmentList.length" disabled>暂无变量文件</el-dropdown-item>
+                <el-dropdown-item divided @click="loadEnvironments">刷新</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
+
+        <!-- 请求面板 -->
+        <ApiRequestPanel
+          v-model:method="debugForm.method"
+          v-model:base-url="debugForm.base_url"
+          v-model:path="debugForm.path"
+          v-model:headers="headersData"
+          v-model:query="queryParamsData"
+          v-model:body="bodyContent"
+          v-model:body-type="bodyType"
+          v-model:body-form="bodyForm"
+          v-model:urlencoded-rows="urlencodedRows"
+          v-model:form-data-rows="formDataRows"
+          v-model:extracts="extractData"
+          v-model:assertions="assertionsData"
+          v-model:pre-ops-script="setupScriptText"
+          v-model:post-ops-script="teardownScriptText"
+          :running="running"
+          default-tab="params"
+          @run="runDebug"
+          @cancel="cancelDebug"
+          @save="saveDebug"
+        />
+
+        <!-- 响应面板 -->
+        <ApiResponsePanel
+          :result="execResult"
+          :response-headers="responseHeaders"
+          :request-headers="requestHeaders"
+          :extract-info="extractResultData"
+          :assert-info="assertResultData"
+          :log-data="logData"
+          :show-records="showTestRecords"
+          @toggle-records="showTestRecords = !showTestRecords"
+        />
       </div>
-    </div>
+      </template>
+    </SplitView>
+
+    <!-- 执行记录抽屉 -->
+    <ExecRecordsDrawer v-model="showTestRecords" :records="runRecords" :loading="false" name-mode="case" />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -381,13 +159,21 @@ import {
   CopyDocument,
   Delete as DeleteIcon,
   Timer,
+  Document,
+  Close,
 } from '@element-plus/icons-vue'
+import ApiRequestPanel from '@/components/api-test/ApiRequestPanel.vue'
+import ApiResponsePanel from '@/components/api-test/ApiResponsePanel.vue'
+import SplitView from '@/components/common/SplitView.vue'
+import ExecRecordsDrawer from '@/components/api-test/ExecRecordsDrawer.vue'
 import {
   debugRunApiCase,
   getApiCase,
   getApiCaseRunRecords,
   listApiCases,
+  updateApiCase,
 } from '@/api/apiTest'
+import { listEnvironments } from '@/api/environment'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
@@ -399,6 +185,9 @@ const caseId = computed(function () { return Number(route.params.caseId) })
 
 const loading = ref(false)
 const caseDetail = ref(null)
+const environmentList = ref([])
+const caseEnvId = ref(null)
+const currentEnvName = ref('')
 const searchKeyword = ref('')
 const selectedCaseId = ref(null)
 
@@ -457,6 +246,10 @@ const pathParamsData = ref([])
 const extractData = ref([])
 const assertionsData = ref([])
 const bodyContent = ref('{\n\n}')
+const bodyType = ref('json')
+const bodyForm = ref([])
+const urlencodedRows = ref([])
+const formDataRows = ref([])
 const preOpsData = ref([])
 const setupScriptText = ref('')
 const teardownScriptText = ref('')
@@ -487,6 +280,11 @@ const extractInfoJson = ref('{}')
 const assertInfoJson = ref('[]')
 const execResult = ref(null)
 const runRecords = ref([])
+const responseHeaders = ref({})
+const requestHeaders = ref({})
+const extractResultData = ref([])
+const assertResultData = ref([])
+const logData = ref([])
 
 /* ---- 方法 ---- */
 function dotClass(status) {
@@ -515,28 +313,168 @@ function selectCase(item) {
 
 async function loadCaseDetail() {
   loading.value = true
+  // 重置响应面板，避免切换用例时残留上一个用例的响应数据
+  execResult.value = null
+  responseHeaders.value = {}
+  requestHeaders.value = {}
+  extractResultData.value = []
+  assertResultData.value = []
+  logData.value = []
   try {
     var res = await getApiCase(caseId.value)
     caseDetail.value = res.data.data
     selectedCaseId.value = caseId.value
 
     var payload = caseDetail.value ? (caseDetail.value.case_payload || {}) : {}
-    /* 填充调试表单 */
-    if (payload.method) debugForm.method = payload.method
+    /* 填充调试表单 — 兼容 AI 嵌套格式和扁平格式 */
+    var method = payload.method || (payload.interface && payload.interface.method)
+    if (method) debugForm.method = method.toUpperCase()
     if (payload.base_url) debugForm.base_url = payload.base_url
-    if (payload.path) debugForm.path = payload.path
-    if (payload.body) bodyContent.value = typeof payload.body === 'string' ? payload.body : JSON.stringify(payload.body, null, 2)
-    if (payload.headers) headersData.value = Array.isArray(payload.headers) ? payload.headers : []
-    if (payload.query_params) queryParamsData.value = Array.isArray(payload.query_params) ? payload.query_params : []
-    if (payload.path_params) pathParamsData.value = Array.isArray(payload.path_params) ? payload.path_params : []
-    if (payload.extracts) extractData.value = Array.isArray(payload.extracts) ? payload.extracts : []
-    if (payload.assertions) assertionsData.value = Array.isArray(payload.assertions) ? payload.assertions : []
-    // 前置操作和后置脚本
+    var pathVal = payload.path || (payload.interface && payload.interface.url)
+    if (pathVal) debugForm.path = pathVal
+    // body: 根据 Content-Type 决定 body 类型
+    if (payload.body) {
+      bodyContent.value = typeof payload.body === 'string' ? payload.body : JSON.stringify(payload.body, null, 2)
+    } else if (payload.request) {
+      var rb = payload.request.data || payload.request.json
+      // 检测 Content-Type 决定 bodyType
+      var ct = ''
+      if (payload.headers && typeof payload.headers === 'object' && !Array.isArray(payload.headers)) {
+        ct = (payload.headers['Content-Type'] || payload.headers['content-type'] || '').toLowerCase()
+      }
+      if (ct.indexOf('form-urlencoded') >= 0 && payload.request.data && Object.keys(payload.request.data).length) {
+        bodyType.value = 'urlencoded'
+        urlencodedRows.value = Object.entries(payload.request.data).map(function(e) {
+          return { name: e[0], value: String(e[1]), desc: '' }
+        })
+      } else if (ct.indexOf('multipart') >= 0 && payload.request.files && Object.keys(payload.request.files).length) {
+        bodyType.value = 'form-data'
+        formDataRows.value = Object.entries(payload.request.files).map(function(e) {
+          return { name: e[0], value: String(e[1]), type: 'file', desc: '' }
+        })
+      } else if (rb && Object.keys(rb).length) {
+        bodyType.value = 'json'
+        bodyContent.value = JSON.stringify(rb, null, 2)
+      }
+    }
+    if (payload.headers) {
+      if (Array.isArray(payload.headers)) headersData.value = payload.headers
+      else if (typeof payload.headers === 'object') headersData.value = Object.entries(payload.headers).map(function(e){return{name:e[0],value:String(e[1]),desc:''}})
+    }
+    var qRaw = payload.query_params || payload.query || (payload.request && payload.request.params)
+    if (qRaw) {
+      if (Array.isArray(qRaw)) queryParamsData.value = qRaw
+      else if (typeof qRaw === 'object' && Object.keys(qRaw).length) queryParamsData.value = Object.entries(qRaw).map(function(e){return{name:e[0],value:String(e[1]),desc:''}})
+    }
+    var extRaw = payload.extracts || payload.extract
+    if (extRaw && Array.isArray(extRaw)) extractData.value = extRaw
+    if (payload.assertions && Array.isArray(payload.assertions)) {
+      assertionsData.value = payload.assertions.map(function(a) {
+        if (typeof a === 'string') return { target: a, method: 'eq', expected: '' }
+        return { target: a.field || a.target || a.name || '', method: a.type || a.method || 'eq', expected: a.expected !== undefined ? String(a.expected) : '' }
+      })
+    }
     preOpsData.value = Array.isArray(payload.preconditions) ? payload.preconditions : []
     setupScriptText.value = payload.setup_script || ''
     teardownScriptText.value = payload.teardown_script || ''
 
+    /* 解析预执行结果（_exec_result） */
+    var er = payload._exec_result
+    console.log('[DEBUG] _exec_result:', er ? JSON.stringify(er).substring(0, 500) : 'null/undefined')
+    if (er && typeof er === 'object' && Object.keys(er).length > 0) {
+      // 兼容两种格式：扁平结构 {status, response_body, ...} 和嵌套结构 {state, cases: [{...}]}
+      var firstCase = null
+      var isSuccess = false
+      if (er.cases && Array.isArray(er.cases) && er.cases.length) {
+        // 嵌套格式
+        firstCase = er.cases[0]
+        isSuccess = er.state === 'success'
+      } else if (er.status || er.response_body || er.response_code) {
+        // 扁平格式：_exec_result 本身就是 case 结果
+        firstCase = er
+        isSuccess = er.status === 'success'
+      }
+
+      if (firstCase) {
+        // 解析 response_body（可能是 JSON 字符串或普通字符串）
+        var respBody = firstCase.response_body
+        if (typeof respBody === 'string') {
+          try { respBody = JSON.parse(respBody) } catch (e) { /* 保持原始字符串 */ }
+        }
+
+        execResult.value = {
+          success: isSuccess,
+          status_code: firstCase.response_code || '',
+          duration_ms: firstCase.run_time || firstCase.duration_ms || 0,
+          method: firstCase.method || debugForm.method,
+          url: firstCase.url || (debugForm.base_url + debugForm.path),
+          error_message: firstCase.status === 'error' ? (typeof firstCase.log_data === 'string' ? firstCase.log_data : '') : '',
+          response_body: respBody,
+          request_body: firstCase.request_body || null,
+        }
+
+        // 响应头
+        var rh = firstCase.response_headers
+        if (rh) {
+          if (typeof rh === 'string') {
+            try { responseHeaders.value = JSON.parse(rh) } catch (e) { responseHeaders.value = {} }
+          } else {
+            responseHeaders.value = rh
+          }
+        }
+
+        // 请求头
+        var rqh = firstCase.request_headers
+        if (rqh) {
+          if (typeof rqh === 'string') {
+            try { requestHeaders.value = JSON.parse(rqh) } catch (e) { requestHeaders.value = {} }
+          } else {
+            requestHeaders.value = rqh
+          }
+        }
+
+        // 断言结果
+        var assertRaw = firstCase.assert_info || firstCase.assertions
+        if (assertRaw && Array.isArray(assertRaw)) {
+          assertResultData.value = assertRaw.map(function (a) {
+            return {
+              field: a.field || a.target || '',
+              method: a.type || a.method || 'eq',
+              expected: a.expected !== undefined ? String(a.expected) : '',
+              actual: a.actual !== undefined ? String(a.actual) : '',
+              passed: a.passed !== undefined ? a.passed : (String(a.actual) === String(a.expected)),
+            }
+          })
+        }
+
+        // 提取结果
+        var extRaw = firstCase.extract_info || firstCase.extracts
+        if (extRaw && Array.isArray(extRaw)) {
+          extractResultData.value = extRaw
+        }
+
+        // 日志：兼容 [["INFO", "msg"], ...] 和 [{level, message}, ...] 两种格式
+        var logRaw = firstCase.log_data
+        if (logRaw) {
+          if (Array.isArray(logRaw)) {
+            logData.value = logRaw.map(function (item) {
+              if (Array.isArray(item)) {
+                return { level: item[0] || 'INFO', message: item.slice(1).join(' ') }
+              }
+              return { level: item.level || 'INFO', message: item.message || String(item) }
+            })
+          } else if (typeof logRaw === 'string') {
+            logData.value = logRaw.split('\n').filter(Boolean).map(function (line) {
+              var match = line.match(/^\[(\w+)\]/)
+              return { level: match ? match[1] : 'INFO', message: line }
+            })
+          }
+        }
+      }
+    }
+
     /* 加载前置依赖 + 测试用例 */
+    console.log('[DEBUG] caseDetail:', caseDetail.value ? { id: caseDetail.value.id, interface_id: caseDetail.value.interface_id } : null)
     if (caseDetail.value && caseDetail.value.interface_id) {
       var iid = caseDetail.value.interface_id
       var results = await Promise.all([
@@ -545,10 +483,55 @@ async function loadCaseDetail() {
       ])
       preconditionCases.value = results[0].data.data ? (results[0].data.data.items || results[0].data.data) : []
       mainCases.value = results[1].data.data ? (results[1].data.data.items || results[1].data.data) : []
+      console.log('[DEBUG] precondition:', preconditionCases.value.length, 'main:', mainCases.value.length)
+    } else {
+      console.log('[DEBUG] interface_id is null, skipping case list load')
+      preconditionCases.value = []
+      mainCases.value = []
     }
 
     var recRes = await getApiCaseRunRecords(caseId.value)
     runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
+
+    // 如果 payload 中没有执行结果，从最新的执行记录中加载
+    if (!execResult.value && runRecords.value.length > 0) {
+      var latestRecord = runRecords.value[0]
+      if (latestRecord.api_requests_info) {
+        var recData = latestRecord.api_requests_info
+        var recDetail = recData._debug_detail || recData
+        var recRespInfo = recDetail.response_info || recData.response_info || {}
+        var recReqInfo = recDetail.request_info || recData.request_info || {}
+        execResult.value = {
+          success: latestRecord.status === 'success',
+          status_code: recRespInfo.status_code || '',
+          duration_ms: latestRecord.duration_ms || recRespInfo.elapsed_ms || 0,
+          method: recReqInfo.method || debugForm.method,
+          url: recReqInfo.url || '',
+          error_message: latestRecord.error_message || '',
+          response_body: recRespInfo.body || null,
+          request_body: recReqInfo.body || null,
+        }
+        responseHeaders.value = recRespInfo.headers || {}
+        requestHeaders.value = recReqInfo.headers || {}
+        extractResultData.value = recDetail.extract_info || recData.extract_info || []
+        assertResultData.value = (recDetail.assert_info || recData.assert_info || []).map(function (a) {
+          return {
+            field: a.field || a.target || '',
+            method: a.type || a.method || 'eq',
+            expected: a.expected !== undefined ? String(a.expected) : '',
+            actual: a.actual !== undefined ? String(a.actual) : '',
+            passed: a.passed !== undefined ? a.passed : true,
+          }
+        })
+        var recLogRaw = recDetail.log_data || recData.log_data || []
+        logData.value = recLogRaw.map(function (item) {
+          if (Array.isArray(item)) return { level: item[0] || 'INFO', message: item.slice(1).join(' ') }
+          return { level: item.level || 'INFO', message: item.message || String(item) }
+        })
+      }
+    }
+
+    loadEnvironments()
   } finally {
     loading.value = false
   }
@@ -572,25 +555,68 @@ function deleteCase(item) {
 }
 
 async function runDebug() {
+  if (!caseEnvId.value) {
+    ElMessage.warning('请先选择测试环境')
+    return
+  }
+  // 先保存修改后的内容，再调试
+  try {
+    var payload = buildCasePayload()
+    await updateApiCase(caseId.value, { case_payload: payload })
+  } catch (err) {
+    ElMessage.error('保存失败: ' + (err.message || ''))
+    return
+  }
   running.value = true
   var controller = new AbortController()
   debugAbortController.value = controller
   try {
     var res = await debugRunApiCase(
       caseId.value,
-      { environment_id: null },
+      { environment_id: caseEnvId.value },
       { signal: controller.signal }
     )
     var data = res.data.data
-    execResult.value = { success: true, operator: data.executor || '-', time: formatTime(new Date().toISOString()) }
-    responseResultText.value = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
-    responseInfoJson.value = JSON.stringify(data.response_info || {}, null, 2)
-    requestInfoJson.value = JSON.stringify(data.request_info || {}, null, 2)
-    extractInfoJson.value = JSON.stringify(data.extract_info || [], null, 2)
-    assertInfoJson.value = JSON.stringify(data.assert_info || [], null, 2)
+    var detail = data.api_requests_info || {}
+    var respInfo = detail.response_info || {}
+    var reqInfo = detail.request_info || {}
+    // 更新 ApiResponsePanel 的 props
+    execResult.value = {
+      success: data.status === 'success',
+      status_code: respInfo.status_code || '',
+      duration_ms: data.duration_ms || 0,
+      method: reqInfo.method || debugForm.method,
+      url: reqInfo.url || '',
+      error_message: data.error_message || '',
+      response_body: respInfo.body || null,
+      request_body: reqInfo.body || null,
+    }
+    responseHeaders.value = respInfo.headers || {}
+    requestHeaders.value = reqInfo.headers || {}
+    extractResultData.value = detail.extract_info || []
+    assertResultData.value = (detail.assert_info || []).map(function (a) {
+      return {
+        field: a.field || a.target || '',
+        method: a.type || a.method || 'eq',
+        expected: a.expected !== undefined ? String(a.expected) : '',
+        actual: a.actual !== undefined ? String(a.actual) : '',
+        passed: a.passed !== undefined ? a.passed : true,
+      }
+    })
+    // 日志
+    var logRaw = detail.log_data || []
+    logData.value = logRaw.map(function (item) {
+      if (Array.isArray(item)) return { level: item[0] || 'INFO', message: item.slice(1).join(' ') }
+      return { level: item.level || 'INFO', message: item.message || String(item) }
+    })
+    // 刷新执行记录列表
+    try {
+      var recRes = await getApiCaseRunRecords(caseId.value)
+      runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
+    } catch (e) { /* 忽略记录刷新失败 */ }
   } catch (err) {
     if (err.name === 'AbortError') {
-      execResult.value = { success: false, operator: '-', time: formatTime(new Date().toISOString()), cancelled: true }
+      execResult.value = { success: false, status_code: '', duration_ms: 0, method: '', url: '', error_message: '调试已取消' }
       responseResultText.value = '调试已取消'
     } else if (err?.response?.status === 404) {
       ElMessage.warning(err?.response?.data?.message || '用例已被删除，请返回列表')
@@ -610,15 +636,84 @@ function cancelDebug() {
   }
 }
 
-function saveDebug() {
-  ElMessage.success(t('common.saved'))
+function buildCasePayload() {
+  // 从当前表单状态构建 case_payload
+  var headers = {}
+  headersData.value.forEach(function (h) {
+    if (h.name && h.value) headers[h.name] = h.value
+  })
+  var params = {}
+  queryParamsData.value.forEach(function (q) {
+    if (q.name && q.value) params[q.name] = q.value
+  })
+  var body = null
+  if (bodyType.value === 'json' && bodyContent.value) {
+    try { body = JSON.parse(bodyContent.value) } catch { body = bodyContent.value }
+  }
+  var request = { params: params }
+  if (bodyType.value === 'json') {
+    request.json = body || {}
+    request.data = {}
+  } else if (bodyType.value === 'urlencoded') {
+    request.data = {}
+    urlencodedRows.value.forEach(function (r) {
+      if (r.name) request.data[r.name] = r.value || ''
+    })
+    request.json = {}
+  } else {
+    request.data = {}
+    request.json = {}
+  }
+  return {
+    title: caseDetail.value ? caseDetail.value.title : '',
+    method: debugForm.method,
+    interface: { url: debugForm.path, method: debugForm.method },
+    headers: headers,
+    request: request,
+    extract: extractData.value.filter(function (e) { return e.name }).map(function (e) {
+      return { var_name: e.name, extract_expr: e.expression, type: 'jsonpath' }
+    }),
+    assertions: assertionsData.value.filter(function (a) { return a.target || a.name }).map(function (a) {
+      return { field: a.target || a.name, type: a.method || 'eq', expected: a.expected }
+    }),
+    setup_script: setupScriptText.value || '',
+    teardown_script: teardownScriptText.value || '',
+  }
+}
+
+async function saveDebug() {
+  try {
+    var payload = buildCasePayload()
+    await updateApiCase(caseId.value, { case_payload: payload })
+    ElMessage.success(t('common.saved'))
+  } catch (err) {
+    ElMessage.error(err.message || '保存失败')
+  }
 }
 
 function goBack() {
-  router.push({ path: '/cases/api', query: route.query })
+  var query = { tab: 'test-cases' }
+  if (caseDetail.value && caseDetail.value.interface_id) {
+    query.interfaceId = caseDetail.value.interface_id
+  }
+  router.push({ path: '/cases/api', query: query })
 }
 
-onMounted(loadCaseDetail)
+async function loadEnvironments() {
+  if (!caseDetail.value || !caseDetail.value.project_id) return
+  try {
+    var res = await listEnvironments({ project_id: caseDetail.value.project_id, page: 1, page_size: 100 })
+    environmentList.value = res.data.data ? (res.data.data.items || res.data.data) : []
+  } catch {}
+}
+
+onMounted(function () {
+  loadCaseDetail()
+})
+
+watch(caseId, function (newId) {
+  if (newId) loadCaseDetail()
+})
 </script>
 
 <style scoped lang="scss">
@@ -672,12 +767,9 @@ onMounted(loadCaseDetail)
 
 /* ====== 左侧用例列表 ====== */
 .left-panel {
-  width: 300px;
-  min-width: 260px;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--el-border-color-lighter);
-  overflow-y: auto;
 
   .panel-search {
     padding: 12px;
@@ -735,7 +827,7 @@ onMounted(loadCaseDetail)
     gap: 8px;
     padding: 7px 14px 7px 22px;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     transition: background 0.15s;
 
     &:hover {
@@ -791,6 +883,25 @@ onMounted(loadCaseDetail)
 }
 
 /* ====== 右侧调试面板 ====== */
+.debug-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0 16px;
+  flex-shrink: 0;
+
+  .debug-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .right-panel {
   flex: 1;
   display: flex;

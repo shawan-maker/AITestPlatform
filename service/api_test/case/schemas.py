@@ -48,6 +48,7 @@ class GenerateConfirmRequest(BaseModel):
     session_id: int = Field(..., ge=1)
     selected_indexes: list[int] = Field(..., min_length=1)
     environment_id: int | None = Field(default=None, ge=1)
+    edited_base_cases: list[dict] | None = Field(default=None, description="编辑后的基础用例（可选）")
 
 
 class GenerateConfirmResult(BaseModel):
@@ -73,6 +74,7 @@ class ApiConfirmRequest(BaseModel):
     environment_id: int | None = Field(default=None, ge=1)
     catalog_id: int | None = Field(default=None, ge=1)
     interface_id: int | None = Field(default=None, ge=1)
+    edited_base_cases: list[dict] | None = Field(default=None)
 
 
 class ApiConfirmResult(BaseModel):
@@ -99,6 +101,7 @@ class CaseOut(BaseModel):
     exec_status: ExecStatus
     generation_count: int
     default_file_id: int | None
+    updated_by_name: str | None = None
     last_run_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -115,11 +118,14 @@ class CaseDebugRunRequest(BaseModel):
 class RunRecordOut(BaseModel):
     id: int
     case_name: str
+    interface_name: str | None = None
     status: str
     run_type: str
     duration_ms: int | None
     error_message: str | None
     created_at: datetime
+    triggered_by_username: str | None = None
+    api_requests_info: dict[str, Any] | None = None  # 调试执行的详细结果
 
 
 PaginatedCases = Paginated[CaseOut]

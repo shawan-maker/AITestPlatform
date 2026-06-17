@@ -473,7 +473,7 @@
       "sortByUpdatedAt": "Sort by updated time"
     },
     "apiCases": {
-      "title": "API Case Workspace",
+      "title": "Interface Cases",
       "tabDocPreview": "Document Preview",
       "tabTestCases": "Test Cases",
       "tabInterfaceDebug": "Debug",
@@ -498,6 +498,8 @@
       "noInterface": "No interfaces in current catalog",
       "interface": "Interface ID",
       "selectCatalog": "Please select catalog first",
+      "interfaceName": "Interface Name",
+      "interfaceCatalog": "Interface Catalog",
       "createInterface": "New Interface",
       "editInterface": "Edit Interface",
       "method": "Method",
@@ -519,7 +521,7 @@
       "catalogDeleteConfirm": "Delete catalog \"{name}\"? Will also delete all interfaces under it.",
       "catalogName": "Catalog Name",
       "interfaceCount": "{count} interfaces",
-      "searchInterfaces": "Search path or summary",
+      "searchInterfaces": "Search path or name",
       "searchCases": "Search cases (name)",
       "loadMore": "Load more",
       "catalogSection": "Interface Catalog",

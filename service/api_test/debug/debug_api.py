@@ -90,6 +90,11 @@ async def list_debug_records(
     page_size: int = Query(default=20, ge=1, le=100),
     user: User = Depends(get_current_active_user),
 ):
+    # 获取接口名称
+    from service.api_test.models import ApiInterface
+    iface = await ApiInterface.get_or_none(id=interface_id)
+    iface_name = (iface.summary or iface.name) if iface else None
+
     qs = (
         ApiCaseRunRecord.filter(interface_id=interface_id, run_type="debug")
         .order_by("-created_at")
@@ -103,6 +108,8 @@ async def list_debug_records(
             triggered_by_name = r.triggered_by.username if hasattr(r.triggered_by, 'username') else ""
         records.append({
             "id": r.id,
+            "case_name": r.case_name or "",
+            "interface_name": iface_name,
             "status": r.status.value if hasattr(r.status, 'value') else str(r.status),
             "duration_ms": r.duration_ms,
             "error_message": r.error_message,

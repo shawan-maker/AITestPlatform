@@ -127,6 +127,8 @@ onBeforeUnmount(onMouseUp)
   border-right: 1px solid var(--el-border-color-lighter);
   padding: 8px 12px;
   box-sizing: border-box;
+  align-self: stretch;
+  min-height: 0;
 }
 
 .split-view__resizer {

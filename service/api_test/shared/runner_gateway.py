@@ -254,5 +254,7 @@ class RunnerGateway:
             temp_vars=temp_vars,
         )
         case.last_run_at = record.end_time
-        await case.save(update_fields=["last_run_at", "updated_at"])
+        case.exec_status = record.status.value
+        case.updated_by_id = triggered_by_id
+        await case.save(update_fields=["last_run_at", "exec_status", "updated_by_id", "updated_at"])
         return record

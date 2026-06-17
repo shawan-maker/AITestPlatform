@@ -33,8 +33,13 @@
         <div v-if="pollingStatus === 'running'" class="polling-status">
           <el-progress :percentage="pollingProgress" :stroke-width="10" :color="'var(--el-color-primary)'" />
           <span class="polling-status-text">
-            正在执行预验证... ({{ pollingCompleted }}/{{ pollingTotal }})
+            {{ pollingStage === 'structuring' ? '正在生成结构化接口用例...' : '正在预执行接口用例...' }}
+            ({{ pollingCompleted }}/{{ pollingTotal }})
           </span>
+          <div v-if="pollingStage === 'structuring'" class="polling-stage-hint">
+            <el-icon class="is-loading" color="var(--el-color-primary)"><Loading /></el-icon>
+            AI 正在将基础用例转换为可执行的 HTTP 请求参数，请稍候...
+          </div>
           <div v-if="pollingItems.length" class="polling-items">
             <div v-for="item in pollingItems" :key="item.index" class="polling-item" :class="item.status">
               <span class="polling-item-name">{{ item.name || `用例 ${item.index + 1}` }}</span>
@@ -44,6 +49,13 @@
               <el-tag v-else type="info" size="small">等待中</el-tag>
               <span v-if="item.error" class="polling-item-error">{{ item.error }}</span>
             </div>
+          </div>
+        </div>
+        <div v-if="baseCases.length" class="table-toolbar">
+          <div class="table-toolbar-left"></div>
+          <div class="table-toolbar-right">
+            <span class="env-label">{{ t('page.apiCases.selectEnv') }}：</span>
+            <EnvironmentSelect v-model="confirmEnvId" style="width: 220px" />
           </div>
         </div>
         <el-table
@@ -59,40 +71,46 @@
           <el-table-column label="编号" width="55" align="center">
             <template #default="{ $index }">{{ $index + 1 }}</template>
           </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="140" align="left">
-            <template #default="{ row }">{{ row.name || '-' }}</template>
-          </el-table-column>
-          <el-table-column label="依赖" min-width="120" align="left">
+          <el-table-column prop="name" label="名称" min-width="160" align="left">
             <template #default="{ row }">
-              <template v-if="row.dependencies && row.dependencies.length">
-                <el-tag v-for="(dep, di) in row.dependencies" :key="di" size="small" style="margin: 1px 2px">{{ dep }}</el-tag>
-              </template>
-              <span v-else style="color: #999">无</span>
+              <el-input v-model="row.name" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="步骤" min-width="220" align="left">
+          <el-table-column label="依赖" min-width="140" align="left">
             <template #default="{ row }">
-              <ol v-if="row.steps && row.steps.length" class="steps-list">
-                <li v-for="(s, si) in row.steps" :key="si">{{ s }}</li>
-              </ol>
-              <span v-else style="color: #999">-</span>
+              <el-input
+                v-model="row._depsText"
+                size="small"
+                placeholder="逗号分隔"
+                @blur="syncDepsFromText(row)"
+              />
             </template>
           </el-table-column>
-          <el-table-column label="预期结果" min-width="200" align="left">
+          <el-table-column label="步骤" min-width="260" align="left">
             <template #default="{ row }">
-              <ul v-if="row.expected && row.expected.length" class="expected-list">
-                <li v-for="(e, ei) in row.expected" :key="ei">{{ e }}</li>
-              </ul>
-              <span v-else style="color: #999">-</span>
+              <el-input
+                v-model="row._stepsText"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 8 }"
+                size="small"
+                @blur="syncStepsFromText(row)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="预期结果" min-width="240" align="left">
+            <template #default="{ row }">
+              <el-input
+                v-model="row._expectedText"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 8 }"
+                size="small"
+                @blur="syncExpectedFromText(row)"
+              />
             </template>
           </el-table-column>
         </el-table>
         <el-empty v-if="!baseCases.length && !sessionError" :description="t('page.agent.noPreview')" />
       </template>
-      <div v-if="baseCases.length && !previewLoading && pollingStatus !== 'running'" class="confirm-env-row">
-        <span class="env-label">{{ t('page.apiCases.selectEnv') }}：</span>
-        <EnvironmentSelect v-model="confirmEnvId" />
-      </div>
     </div>
 
     <template #footer>
@@ -154,6 +172,7 @@ const pollingProgress = ref(0)
 const pollingCompleted = ref(0)
 const pollingTotal = ref(0)
 const pollingItems = ref([])
+const pollingStage = ref('structuring')
 let pollTimer = null
 let previewPollTimer = null
 
@@ -161,6 +180,18 @@ const canConfirm = computed(() => {
   if (pollingStatus.value === 'running') return false
   return Boolean(selectedIndexes.value.length && sessionId.value)
 })
+
+function syncStepsFromText(row) {
+  row.steps = (row._stepsText || '').split('\n').map(function (s) { return s.trim() }).filter(Boolean)
+}
+
+function syncExpectedFromText(row) {
+  row.expected = (row._expectedText || '').split('\n').map(function (s) { return s.trim() }).filter(Boolean)
+}
+
+function syncDepsFromText(row) {
+  row.dependencies = (row._depsText || '').split(/[,，]/).map(function (s) { return s.trim() }).filter(Boolean)
+}
 
 function onTableSelectionChange(rows) {
   selectedIndexes.value = rows.map(function (r) { return r.index })
@@ -235,11 +266,22 @@ async function runPreview() {
 
 async function runConfirm() {
   confirming.value = true
+  // 同步编辑中的文本到数组
+  baseCases.value.forEach(function (row) {
+    syncStepsFromText(row)
+    syncExpectedFromText(row)
+    syncDepsFromText(row)
+  })
+  // 构建编辑后的 base cases（只发送选中行的编辑数据）
+  var editedCases = baseCases.value.map(function (c) {
+    return { name: c.name, steps: c.steps, expected: c.expected, dependencies: c.dependencies }
+  })
   try {
     await confirmCaseGeneration(props.interfaceId, {
       session_id: sessionId.value,
       selected_indexes: selectedIndexes.value,
       environment_id: confirmEnvId.value,
+      edited_base_cases: editedCases,
     })
     // v2-Q3: confirm后开始轮询generation-status
     startPolling()
@@ -253,6 +295,7 @@ async function runConfirm() {
 
 function startPolling() {
   pollingStatus.value = 'running'
+  pollingStage.value = 'structuring'
   pollingCompleted.value = 0
   pollingTotal.value = selectedIndexes.value.length || baseCases.value.length
 
@@ -302,6 +345,7 @@ function startPolling() {
               ? Math.round((pollingCompleted.value / pollingTotal.value) * 100)
               : 0
           pollingItems.value = progress.items || []
+          if (progress.stage) pollingStage.value = progress.stage
         }
       }
     } catch {
@@ -331,7 +375,12 @@ function startPreviewPolling() {
         previewLoading.value = false
         const cases = statusData.base_cases || []
         baseCases.value = cases.map(function (c, i) {
-          return Object.assign({}, c, { index: i })
+          return Object.assign({}, c, {
+            index: i,
+            _stepsText: (c.steps || []).join('\n'),
+            _expectedText: (c.expected || []).join('\n'),
+            _depsText: (c.dependencies || []).join(', '),
+          })
         })
         selectedIndexes.value = baseCases.value.map(function (c) { return c.index })
         confirmEnvId.value = environmentId.value
@@ -406,12 +455,12 @@ onUnmounted(() => {
   gap: 10px;
   padding: 16px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--el-color-primary-light-9) 0%, var(--el-color-primary-light-7) 100%);
+  background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-5);
   margin-bottom: 8px;
 
   :deep(.el-progress-bar__inner) {
-    background: linear-gradient(90deg, var(--el-color-primary) 0%, var(--el-color-primary-light-3) 100%);
+    background: linear-gradient(90deg, var(--el-color-primary) 0%, var(--el-color-success) 100%);
     transition: width 0.6s ease;
   }
 }
@@ -419,7 +468,7 @@ onUnmounted(() => {
 .polling-status-text {
   font-size: 13px;
   font-weight: 500;
-  color: var(--el-color-primary);
+  color: var(--el-text-color-primary);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -433,6 +482,15 @@ onUnmounted(() => {
     background: var(--el-color-primary);
     animation: polling-pulse 1.5s ease-in-out infinite;
   }
+}
+
+.polling-stage-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  padding: 4px 0;
 }
 
 @keyframes polling-pulse {
@@ -480,11 +538,17 @@ onUnmounted(() => {
   }
 }
 
-.confirm-env-row {
+.table-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-top: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+
+  .table-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
   .env-label {
     font-size: 13px;

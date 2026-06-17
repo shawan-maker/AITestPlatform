@@ -272,10 +272,15 @@ class InterfaceService:
     async def _hard_delete_interfaces(cls, interface_ids: list[int]) -> None:
         if not interface_ids:
             return
+        from service.test_execution.models import ApiCaseRunRecord
         case_ids = await ApiTestCase.filter(
             interface_id__in=interface_ids
         ).values_list("id", flat=True)
         await remove_suite_relations_for_cases(list(case_ids))
+        # 删除关联的执行记录
+        if case_ids:
+            await ApiCaseRunRecord.filter(api_case_id__in=list(case_ids)).delete()
+        await ApiCaseRunRecord.filter(interface_id__in=interface_ids).delete()
         await ApiTestCase.filter(interface_id__in=interface_ids).delete()
         await ApiBaseCase.filter(interface_id__in=interface_ids).delete()
         group_ids = await ApiDependencyGroup.filter(

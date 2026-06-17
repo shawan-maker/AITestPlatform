@@ -2,6 +2,7 @@
   <!-- v2-Q5: 严格12列顺序 + 接口目录完整路径 -->
   <div class="interface-list-panel">
     <div class="toolbar-row">
+      <el-button v-if="canEdit" type="primary" @click="$emit('create')">{{ t('page.apiCases.createInterface') }}</el-button>
       <el-button v-if="canEdit && selectedIds.length" type="danger" @click="$emit('batch-delete', selectedIds)">
         {{ t('common.batchDelete') }} ({{ selectedIds.length }})
       </el-button>
@@ -12,7 +13,11 @@
         class="search-input"
         @update:model-value="$emit('update:searchQuery', $event)"
         @keyup.enter="$emit('search')"
-      />
+      >
+        <template #append>
+          <el-button @click="$emit('search')"><el-icon><Search /></el-icon></el-button>
+        </template>
+      </el-input>
     </div>
 
     <PaginatedTable
@@ -81,6 +86,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Search } from '@element-plus/icons-vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -99,6 +105,7 @@ defineProps({
 const emit = defineEmits([
   'update:searchQuery',
   'search',
+  'create',
   'select',
   'edit',
   'copy',

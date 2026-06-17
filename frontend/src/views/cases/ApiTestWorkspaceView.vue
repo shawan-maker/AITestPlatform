@@ -2,8 +2,6 @@
   <div class="api-workspace app-card">
     <PageHeader :title="t('page.apiCases.title')">
       <template #actions>
-        <el-button v-if="projectId && selectedCatalogId" @click="showImport = true">{{ t('page.apiCases.importInterfaces') }}</el-button>
-        <el-button v-if="canEdit && selectedCatalogId" type="primary" @click="openCreateInterface">{{ t('page.apiCases.createInterface') }}</el-button>
       </template>
     </PageHeader>
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
@@ -42,6 +40,7 @@
             :selected-interface-id="selectedInterfaceId"
             :can-edit="canEdit"
             @search="onListSearch"
+            @create="openCreateInterface"
             @select="selectInterfaceFromList"
             @edit="openEditInterface"
             @copy="copyInterfaceItem"
@@ -106,6 +105,7 @@
 
           <!-- ====== Tab 2: 测试用例 ====== -->
           <div v-show="activeTab === 'test-cases'" class="detail-panel">
+            <h3 class="detail-title">{{ currentIfaceSummary || '-' }}</h3>
             <div class="case-toolbar-row">
               <div class="case-toolbar-left">
                 <el-input
@@ -122,7 +122,7 @@
                 <el-button :icon="Refresh" :loading="casesLoading" @click="loadCases">刷新</el-button>
                 <el-dropdown trigger="click" popper-class="var-file-dropdown">
                   <el-button>
-                    <el-icon><Document /></el-icon> {{ t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
+                    <el-icon><Document /></el-icon> {{ caseEnvName || t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
                   </el-button>
                   <template #dropdown>
                     <el-dropdown-menu>
@@ -137,18 +137,7 @@
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
-                <el-dropdown trigger="click" @command="onBatchCaseCommand">
-                  <el-button :disabled="!selectedCaseIds.length">
-                    {{ t('page.apiCases.batchOps') }} ({{ selectedCaseIds.length }})<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-                  </el-button>
-                  <template #dropdown>
-                    <el-dropdown-menu>
-                      <el-dropdown-item command="run" :disabled="!selectedCaseIds.length">批量运行</el-dropdown-item>
-                      <el-dropdown-item command="delete" :disabled="!selectedCaseIds.length">批量删除</el-dropdown-item>
-                      <el-dropdown-item command="export" :disabled="!selectedCaseIds.length">批量导出</el-dropdown-item>
-                    </el-dropdown-menu>
-                  </template>
-                </el-dropdown>
+                <el-button type="success" :disabled="!selectedCaseIds.length" @click="batchRunCases">批量运行 ({{ selectedCaseIds.length }})</el-button>
                 <el-button v-if="canEdit && selectedCaseIds.length" type="danger" @click="batchDeleteCases">{{ t('common.batchDelete') }} ({{ selectedCaseIds.length }})</el-button>
                 <el-button v-if="canEdit" type="primary" :icon="MagicStick" @click="showGenerate = true">{{ t('page.apiCases.generateCases') }}</el-button>
               </div>
@@ -173,7 +162,7 @@
                     <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
                   </el-table-column>
                   <el-table-column :label="t('page.apiCases.updateUser')" width="100">
-                    <template #default>-</template>
+                    <template #default="{ row }">{{ row.updated_by_name || '-' }}</template>
                   </el-table-column>
                   <el-table-column :label="t('page.apiCases.runStatus')" width="90" align="center">
                     <template #default="{ row }">
@@ -181,12 +170,11 @@
                       <span v-else>-</span>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('common.actions')" width="200" fixed="right">
+                  <el-table-column :label="t('common.actions')" width="160" fixed="right">
                     <template #default="{ row }">
                       <el-button link type="primary" size="small" :icon="View" @click.stop="router.push('/cases/api/cases/' + row.id)" />
-                      <el-button link type="primary" size="small" :icon="EditPen" @click.stop="router.push('/cases/api/cases/' + row.id)" />
                       <el-button link type="primary" size="small" :icon="CopyDocument" @click.stop="" />
-                      <el-button link type="danger" size="small" :icon="Delete" @click.stop="" />
+                      <el-button link type="danger" size="small" :icon="Delete" @click.stop="deleteSingleCase(row)" />
                     </template>
                   </el-table-column>
                 </el-table>
@@ -212,7 +200,7 @@
                     <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
                   </el-table-column>
                   <el-table-column :label="t('page.apiCases.updateUser')" width="100">
-                    <template #default>-</template>
+                    <template #default="{ row }">{{ row.updated_by_name || '-' }}</template>
                   </el-table-column>
                   <el-table-column :label="t('page.apiCases.runStatus')" width="90" align="center">
                     <template #default="{ row }">
@@ -220,12 +208,11 @@
                       <span v-else>-</span>
                     </template>
                   </el-table-column>
-                  <el-table-column :label="t('common.actions')" width="200" fixed="right">
+                  <el-table-column :label="t('common.actions')" width="160" fixed="right">
                     <template #default="{ row }">
                       <el-button link type="primary" size="small" :icon="View" @click.stop="router.push('/cases/api/cases/' + row.id)" />
-                      <el-button link type="primary" size="small" :icon="EditPen" @click.stop="router.push('/cases/api/cases/' + row.id)" />
                       <el-button link type="primary" size="small" :icon="CopyDocument" @click.stop="" />
-                      <el-button link type="danger" size="small" :icon="Delete" @click.stop="" />
+                      <el-button link type="danger" size="small" :icon="Delete" @click.stop="deleteSingleCase(row)" />
                     </template>
                   </el-table-column>
                 </el-table>
@@ -255,460 +242,37 @@
                 </template>
               </el-dropdown>
             </div>
-            <div class="debug-toolbar">
-              <el-select v-model="debugMethod" size="default" style="width: 110px">
-                <el-option v-for="m in httpMethods" :key="m" :value="m" :label="m" />
-              </el-select>
-              <el-input v-model="debugBaseUrl" placeholder="$(base_url)" size="default" style="width: 220px" />
-              <el-input v-model="debugPath" size="default" style="flex: 1; min-width: 0" />
-              <el-button v-if="!debugging" class="btn-debug-run" @click="runDebug">{{ t('page.apiCases.debugRun') }}</el-button>
-              <el-button v-else type="warning" size="default" @click="cancelDebug">{{ t('common.cancel') }}</el-button>
-              <el-button size="default" @click="saveTemplate">{{ t('page.apiCases.debugSave') }}</el-button>
-            </div>
+            <ApiRequestPanel
+              v-model:method="debugMethod"
+              v-model:base-url="debugBaseUrl"
+              v-model:path="debugPath"
+              v-model:headers="headerRows"
+              v-model:query="queryParamRows"
+              v-model:body="requestJson"
+              v-model:body-type="bodyType"
+              v-model:urlencoded-rows="urlencodedRows"
+              v-model:form-data-rows="formDataRows"
+              v-model:extracts="extractRows"
+              v-model:assertions="assertRows"
+              v-model:pre-ops-script="preOpsCode"
+              v-model:post-ops-script="postOpsCode"
+              :running="debugging"
+              default-tab="params"
+              @run="runDebug"
+              @cancel="cancelDebug"
+              @save="saveTemplate"
+            />
 
-            <el-tabs v-model="debugSubTab" class="debug-sub-tabs">
-              <!-- Headers -->
-              <el-tab-pane :label="t('page.apiCases.subTabHeaders')" name="headers">
-                <div class="sub-tab-content">
-                  <el-table :data="headerRows" border size="small" empty_text="">
-                    <el-table-column prop="name" :label="t('page.apiCases.paramName')" min-width="150">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < headerRows.length - 1" v-model="row.name" size="small" placeholder="" />
-                        <span v-else class="add-param-link" @click="addHeaderRow">{{ t('page.apiCases.addParam') }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="value" :label="t('page.apiCases.paramValue')" min-width="200">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < headerRows.length - 1" v-model="row.value" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="140">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < headerRows.length - 1" v-model="row.desc" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('page.apiCases.operation')" width="60" align="center">
-                      <template #default="{ $index }">
-                        <el-button v-if="$index < headerRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeHeaderRow($index)" />
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </el-tab-pane>
-              <!-- Params -->
-              <el-tab-pane :label="t('page.apiCases.subTabParams')" name="params">
-                <div class="sub-tab-content">
-                  <h4>QUERY参数</h4>
-                  <el-table :data="queryParamRows" border size="small" empty_text="">
-                    <el-table-column prop="name" :label="t('page.apiCases.paramName')" min-width="150">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < queryParamRows.length - 1" v-model="row.name" size="small" placeholder="" />
-                        <span v-else class="add-param-link" @click="addQueryParam">{{ t('page.apiCases.addParam') }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="value" :label="t('page.apiCases.paramValue')" min-width="200">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < queryParamRows.length - 1" v-model="row.value" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="180">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < queryParamRows.length - 1" v-model="row.desc" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('page.apiCases.operation')" width="60" align="center">
-                      <template #default="{ $index }">
-                        <el-button v-if="$index < queryParamRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeQueryParam($index)" />
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </el-tab-pane>
-              <!-- Body -->
-              <el-tab-pane :label="t('page.apiCases.subTabBody')" name="body">
-                <div class="sub-tab-content body-editor">
-                  <div class="body-type-selector">
-                    <el-radio-group v-model="bodyType" size="small">
-                      <el-radio value="json">JSON</el-radio>
-                      <el-radio value="urlencoded">x-www-form-urlencoded</el-radio>
-                      <el-radio value="form-data">multipart/form-data</el-radio>
-                    </el-radio-group>
-                  </div>
-                  <div v-if="bodyType === 'json'" class="body-json-section">
-                    <MonacoJsonEditor v-model="requestJson" :height="260" language="json" />
-                  </div>
-                  <div v-else-if="bodyType === 'urlencoded'" class="body-urlencoded-section">
-                    <el-table :data="urlencodedRows" border size="small" empty_text="">
-                      <el-table-column prop="name" label="参数名" min-width="140">
-                        <template #default="{ row, $index }">
-                          <el-input v-if="$index < urlencodedRows.length - 1" v-model="row.name" size="small" placeholder="" />
-                          <span v-else class="add-param-link" @click="addUrlencodedRow">添加参数</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="value" label="参数值" min-width="180">
-                        <template #default="{ row, $index }">
-                          <el-input v-if="$index < urlencodedRows.length - 1" v-model="row.value" size="small" placeholder="" />
-                          <span v-else></span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="desc" label="说明" min-width="120">
-                        <template #default="{ row, $index }">
-                          <el-input v-if="$index < urlencodedRows.length - 1" v-model="row.desc" size="small" placeholder="" />
-                          <span v-else></span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="操作" width="60" align="center">
-                        <template #default="{ $index }">
-                          <el-button v-if="$index < urlencodedRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeUrlencodedRow($index)" />
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </div>
-                  <div v-else class="body-formdata-section">
-                    <el-table :data="formDataRows" border size="small" empty_text="">
-                      <el-table-column prop="name" label="参数名" min-width="130">
-                        <template #default="{ row, $index }">
-                          <el-input v-if="$index < formDataRows.length - 1" v-model="row.name" size="small" placeholder="" />
-                          <span v-else class="add-param-link" @click="addFormDataRow">添加参数</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="type" label="类型" width="110">
-                        <template #default="{ row, $index }">
-                          <el-select v-if="$index < formDataRows.length - 1" v-model="row.type" size="small" style="width: 100%">
-                            <el-option label="string" value="string" />
-                            <el-option label="file" value="file" />
-                          </el-select>
-                          <span v-else></span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="value" label="参数值" min-width="180">
-                        <template #default="{ row, $index }">
-                          <template v-if="$index < formDataRows.length - 1">
-                            <el-select v-if="row.type === 'file'" v-model="row.fileId" filterable clearable size="small" style="width: 100%" placeholder="选择已上传的文件">
-                              <el-option v-for="item in uploadFileOptions" :key="item.id" :label="displayFileLabel(item)" :value="item.id" />
-                            </el-select>
-                            <el-input v-else v-model="row.value" size="small" placeholder="" />
-                          </template>
-                          <span v-else></span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column prop="desc" label="说明" min-width="100">
-                        <template #default="{ row, $index }">
-                          <el-input v-if="$index < formDataRows.length - 1" v-model="row.desc" size="small" placeholder="" />
-                          <span v-else></span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="操作" width="60" align="center">
-                        <template #default="{ $index }">
-                          <el-button v-if="$index < formDataRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeFormDataRow($index)" />
-                        </template>
-                      </el-table-column>
-                    </el-table>
-                  </div>
-                </div>
-              </el-tab-pane>
-              <!-- Extract (提取) -->
-              <el-tab-pane :label="t('page.apiCases.extractTabLabel')" name="extract">
-                <div class="sub-tab-content">
-                  <el-table :data="extractRows" border size="small" empty_text="">
-                    <el-table-column prop="name" :label="t('page.apiCases.varName')" min-width="150">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < extractRows.length - 1" v-model="row.name" size="small" placeholder="" />
-                        <span v-else class="add-param-link" @click="addExtractRow">{{ t('page.apiCases.addParam') }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="expression" :label="t('page.apiCases.jsonPathExpr')" min-width="220">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < extractRows.length - 1" v-model="row.expression" size="small" placeholder="$.data.token" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="140">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < extractRows.length - 1" v-model="row.desc" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('page.apiCases.operation')" width="60" align="center">
-                      <template #default="{ $index }">
-                        <el-button v-if="$index < extractRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeExtractRow($index)" />
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </el-tab-pane>
-              <!-- Assert -->
-              <el-tab-pane :label="t('page.apiCases.subTabAssert')" name="assert">
-                <div class="sub-tab-content">
-                  <el-table :data="assertRows" border size="small" empty_text="">
-                    <el-table-column prop="target" :label="t('page.apiCases.assertTarget')" min-width="160">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < assertRows.length - 1" v-model="row.target" size="small" placeholder="$.status_code" />
-                        <span v-else class="add-param-link" @click="addAssertRow">{{ t('page.apiCases.addParam') }}</span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="method" :label="t('page.apiCases.compareMethod')" min-width="130">
-                      <template #default="{ row, $index }">
-                        <el-select v-if="$index < assertRows.length - 1" v-model="row.method" size="small" style="width:100%">
-                          <el-option v-for="m in assertMethods" :key="m.value" :label="m.label" :value="m.value" />
-                        </el-select>
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="expected" :label="t('page.apiCases.expectedValue')" min-width="140">
-                      <template #default="{ row, $index }">
-                        <el-input v-if="$index < assertRows.length - 1" v-model="row.expected" size="small" placeholder="" />
-                        <span v-else></span>
-                      </template>
-                    </el-table-column>
-                    <el-table-column :label="t('page.apiCases.operation')" width="60" align="center">
-                      <template #default="{ $index }">
-                        <el-button v-if="$index < assertRows.length - 1" link type="danger" size="small" :icon="Close" @click="removeAssertRow($index)" />
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-              </el-tab-pane>
-              <!-- PreOps (Python) -->
-              <el-tab-pane :label="t('page.apiCases.subTabPreOps')" name="preops">
-                <div class="sub-tab-content prepost-editor">
-                  <div class="prepost-container">
-                    <div class="prepost-code">
-                      <MonacoJsonEditor v-model="preOpsCode" :height="260" language="python" />
-                    </div>
-                    <div class="prepost-template">
-                      <div class="template-header">前置操作模板</div>
-                      <div class="template-list">
-                        <div class="template-item" @click="insertPreTemplate('env')">
-                          <span class="template-name">设置临时变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('global')">
-                          <span class="template-name">设置环境变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('sql')">
-                          <span class="template-name">执行SQL</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('get_env')">
-                          <span class="template-name">获取临时变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('get_global')">
-                          <span class="template-name">获取环境变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('request')">
-                          <span class="template-name">发送请求</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('sleep')">
-                          <span class="template-name">等待</span>
-                        </div>
-                        <div class="template-item" @click="insertPreTemplate('call_func')">
-                          <span class="template-name">执行自定义函数</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </el-tab-pane>
-              <!-- PostOps (Python) -->
-              <el-tab-pane :label="t('page.apiCases.subTabPostOps')" name="postops">
-                <div class="sub-tab-content prepost-editor">
-                  <div class="prepost-container">
-                    <div class="prepost-code">
-                      <MonacoJsonEditor v-model="postOpsCode" :height="260" language="python" />
-                    </div>
-                    <div class="prepost-template">
-                      <div class="template-header">后置操作模板</div>
-                      <div class="template-list">
-                        <div class="template-item" @click="insertPostTemplate('body')">
-                          <span class="template-name">获取响应体</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('json')">
-                          <span class="template-name">获取JSON响应</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('json_res')">
-                          <span class="template-name">JSONPath提取单个</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('json_all')">
-                          <span class="template-name">JSONPath提取列表</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('re_res')">
-                          <span class="template-name">正则提取单个</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('re_all')">
-                          <span class="template-name">正则提取列表</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('assert')">
-                          <span class="template-name">断言结果</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('env')">
-                          <span class="template-name">设置临时变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('global')">
-                          <span class="template-name">设置环境变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('delete_global')">
-                          <span class="template-name">删除全局变量</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('sql')">
-                          <span class="template-name">执行SQL</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('save_file')">
-                          <span class="template-name">保存到文件</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('log')">
-                          <span class="template-name">记录日志</span>
-                        </div>
-                        <div class="template-item" @click="insertPostTemplate('call_func')">
-                          <span class="template-name">执行自定义函数</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </el-tab-pane>
-            </el-tabs>
-
-            <div class="response-area">
-              <div class="response-area-toolbar">
-                <el-tabs v-model="responseSubTab" class="response-sub-tabs">
-                  <el-tab-pane name="result">
-                    <template #label>
-                      <span>{{ t('page.apiCases.resultInfo') }}</span>
-                      <el-tag
-                        v-if="responseDataInfo && responseDataInfo.status_code"
-                        :type="getStatusCodeType(responseDataInfo.status_code)"
-                        size="small"
-                        style="margin-left: 4px; font-size: 11px;"
-                      >{{ responseDataInfo.status_code }}</el-tag>
-                    </template>
-                  </el-tab-pane>
-                  <el-tab-pane :label="t('page.apiCases.responseInfo')" name="response-info" />
-                  <el-tab-pane :label="t('page.apiCases.requestInfo')" name="request-info" />
-                  <el-tab-pane :label="t('page.apiCases.requestHeadersInfo')" name="request-headers-info" />
-                  <el-tab-pane v-if="hasConfiguredExtracts" :label="t('page.apiCases.extractInfo')" name="extract-info" />
-                  <el-tab-pane v-if="hasConfiguredAsserts" :label="t('page.apiCases.assertInfo')" name="assert-info" />
-                  <el-tab-pane label="日志信息" name="log-info" />
-                </el-tabs>
-                <el-button link type="primary" :icon="Clock" @click="showTestRecords = true">{{ t('page.apiCases.testRecord') }}</el-button>
-              </div>
-              <div class="response-body">
-                <!-- 响应数据 -->
-                <template v-if="responseSubTab === 'result' && responseResult">
-                  <div class="run-result-block" :class="responseResult.status || ''">
-                    <el-icon :color="getStatusColor(responseResult.status)"><CircleCheckFilled /></el-icon>
-                    <span class="result-label">{{ getStatusLabel(responseResult.status) }}</span>
-                    <el-tag
-                      v-if="responseDataInfo && responseDataInfo.status_code"
-                      :type="getStatusCodeType(responseDataInfo.status_code)"
-                      size="small"
-                      style="margin-left: 8px;"
-                    >{{ responseDataInfo.status_code }}</el-tag>
-                    <span class="result-meta">耗时: {{ (responseResult.duration_ms || 0) }}ms &nbsp;&nbsp; 操作人: {{ responseResult.executor || '-' }}</span>
-                  </div>
-                  <div v-if="responseResult.error_message" class="error-message">
-                    <strong>错误信息:</strong> {{ responseResult.error_message }}
-                  </div>
-                  <pre v-if="responseDataInfo && responseDataInfo.body" class="response-pre">{{ formatResponseBody(responseDataInfo.body) }}</pre>
-                  <el-empty v-else-if="!responseResult.error_message" description="暂无响应体" :image-size="48" />
-                </template>
-                <!-- 响应头信息 -->
-                <template v-else-if="responseSubTab === 'response-info' && responseDataInfo">
-                  <div class="structured-response">
-                    <table v-if="responseDataInfo.headers && Object.keys(responseDataInfo.headers).length" class="info-table">
-                      <thead><tr><th>Header</th><th>Value</th></tr></thead>
-                      <tbody>
-                        <tr v-for="(value, key) in responseDataInfo.headers" :key="key">
-                          <td style="font-weight: 500;">{{ key }}</td>
-                          <td>{{ value }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <el-empty v-else description="暂无响应头信息" :image-size="48" />
-                  </div>
-                </template>
-                <!-- 请求数据 -->
-                <template v-else-if="responseSubTab === 'request-info' && requestInfo">
-                  <div class="structured-response">
-                    <div class="info-row"><strong>请求方法:</strong> <el-tag size="small" :class="'method-tag-' + (requestInfo.method || 'GET').toLowerCase()">{{ (requestInfo.method || '-').toUpperCase() }}</el-tag></div>
-                    <div class="info-row"><strong>请求URL:</strong> <code>{{ requestInfo.url || '-' }}</code></div>
-                    <div class="info-row" v-if="requestInfo.params && Object.keys(requestInfo.params).length"><strong>Query参数:</strong></div>
-                    <table v-if="requestInfo.params && Object.keys(requestInfo.params).length" class="info-table">
-                      <tr v-for="(value, key) in requestInfo.params" :key="key">
-                        <td>{{ key }}</td>
-                        <td>{{ value }}</td>
-                      </tr>
-                    </table>
-                    <div class="info-row" v-if="requestInfo.body !== undefined && requestInfo.body !== null"><strong>请求体:</strong></div>
-                    <pre class="response-pre" v-if="requestInfo.body !== undefined && requestInfo.body !== null">{{ typeof requestInfo.body === 'string' ? requestInfo.body : JSON.stringify(requestInfo.body, null, 2) }}</pre>
-                  </div>
-                </template>
-                <!-- 请求头信息 -->
-                <template v-else-if="responseSubTab === 'request-headers-info' && requestInfo">
-                  <div class="structured-response">
-                    <table v-if="requestInfo.headers && Object.keys(requestInfo.headers).length" class="info-table">
-                      <thead><tr><th>Header</th><th>Value</th></tr></thead>
-                      <tbody>
-                        <tr v-for="(value, key) in requestInfo.headers" :key="key">
-                          <td style="font-weight: 500;">{{ key }}</td>
-                          <td>{{ value }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <el-empty v-else description="暂无请求头信息" :image-size="48" />
-                  </div>
-                </template>
-                <!-- 提取信息 -->
-                <template v-else-if="responseSubTab === 'extract-info' && extractInfo">
-                  <table class="info-table extract-table" v-if="extractInfo.length">
-                    <thead><tr><th>变量名</th><th>表达式</th><th>值</th></tr></thead>
-                    <tbody>
-                      <tr v-for="(item, idx) in extractInfo" :key="idx">
-                        <td>{{ item.var_name || item.name }}</td>
-                        <td>{{ item.extract_expr || item.expression }}</td>
-                        <td>{{ item.value !== undefined ? item.value : '-' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <el-empty v-else description="暂无提取数据" :image-size="48" />
-                </template>
-                <!-- 断言信息 -->
-                <template v-else-if="responseSubTab === 'assert-info' && assertInfo">
-                  <table class="info-table assert-table" v-if="assertInfo.length">
-                    <thead><tr><th style="width:40px">结果</th><th>断言目标</th><th>比较方式</th><th>预期值</th><th>实际值</th></tr></thead>
-                    <tbody>
-                      <tr v-for="(item, idx) in assertInfo" :key="idx" :class="item.passed ? 'assert-passed' : 'assert-failed'">
-                        <td><el-icon v-if="item.passed" color="#67C23A"><CircleCheckFilled /></el-icon><el-icon v-else color="#F56C6C"><CircleCloseFilled /></el-icon></td>
-                        <td>{{ item.field || item.target }}</td>
-                        <td>{{ getAssertMethodLabel(item.type || item.method) }}</td>
-                        <td>{{ item.expected }}</td>
-                        <td>{{ item.actual !== undefined && item.actual !== null ? item.actual : '-' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <el-empty v-else description="暂无断言数据" :image-size="48" />
-                </template>
-                <!-- 日志信息 -->
-                <template v-else-if="responseSubTab === 'log-info' && logData">
-                  <div class="log-container">
-                    <div
-                      v-for="(logItem, idx) in logData"
-                      :key="idx"
-                      class="log-item"
-                      :class="'log-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : logItem.level?.toLowerCase() || 'info')"
-                    >
-                      <span class="log-level-badge" :class="'badge-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : logItem.level?.toLowerCase() || 'info')">
-                        {{ Array.isArray(logItem) ? logItem[0] : (logItem.level || 'INFO') }}
-                      </span>
-                      <span class="log-message">{{ Array.isArray(logItem) ? logItem.slice(1).join(' ') : (logItem.message || '') }}</span>
-                    </div>
-                  </div>
-                </template>
-                <el-empty v-else description="暂无数据" :image-size="48" />
-              </div>
-            </div>
+            <ApiResponsePanel
+              :result="debugExecResult"
+              :response-headers="debugResponseHeaders"
+              :request-headers="debugRequestHeaders"
+              :extract-info="extractInfo"
+              :assert-info="assertInfo"
+              :log-data="logData"
+              :show-records="showTestRecords"
+              @toggle-records="showTestRecords = !showTestRecords"
+            />
           </div>
 
           <!-- 底部固定Tab导航条 -->
@@ -728,6 +292,7 @@
       v-model="showInterfaceForm"
       :catalog-id="interfaceFormCatalogId"
       :interface-data="editingInterface"
+      :is-copy="isCopyInterface"
       @saved="onInterfaceSaved"
     />
     <InterfaceCaseGenerateDialog
@@ -743,137 +308,7 @@
       :loading="moveLoading"
       @confirm="confirmMoveCatalog"
     />
-    <el-drawer v-model="showTestRecords" title="调试记录" direction="rtl" size="50%" :destroy-on-close="false">
-      <!-- 列表视图 -->
-      <div v-if="!drawerRecordDetail">
-        <el-table :data="debugRecords" v-loading="debugRecordsLoading" size="small" stripe style="width: 100%">
-          <el-table-column prop="triggered_by_username" label="执行人" width="100" />
-          <el-table-column prop="created_at" label="执行时间" min-width="170">
-            <template #default="{ row }">{{ formatRecordTime(row.created_at) }}</template>
-          </el-table-column>
-          <el-table-column prop="status" label="结果" width="80">
-            <template #default="{ row }">
-              <el-tag :type="getStatusCodeType(row.status === 'success' ? 200 : row.status === 'fail' ? 400 : 500)" size="small">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="duration_ms" label="耗时" width="80">
-            <template #default="{ row }">{{ row.duration_ms || 0 }}ms</template>
-          </el-table-column>
-          <el-table-column label="操作" width="80">
-            <template #default="{ row }">
-              <el-button link type="primary" @click="viewDebugRecord(row)">查看</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      <!-- 详情视图 -->
-      <div v-else class="drawer-detail-view">
-        <div class="drawer-detail-header">
-          <el-button link type="primary" @click="drawerRecordDetail = null">← 返回列表</el-button>
-          <span class="drawer-detail-meta">
-            <el-tag :type="getStatusCodeType(drawerRecordDetail.status === 'success' ? 200 : drawerRecordDetail.status === 'fail' ? 400 : 500)" size="small">{{ drawerRecordDetail.status }}</el-tag>
-            {{ formatRecordTime(drawerRecordDetail.created_at) }} &nbsp; 耗时: {{ drawerRecordDetail.duration_ms || 0 }}ms
-            &nbsp; 操作人: {{ drawerRecordDetail.triggered_by_username || '-' }}
-          </span>
-        </div>
-        <div class="response-area" style="flex:1; min-height:0;">
-          <div class="response-area-toolbar">
-            <el-tabs v-model="drawerResponseSubTab" class="response-sub-tabs">
-              <el-tab-pane name="result">
-                <template #label>
-                  <span>响应数据</span>
-                  <el-tag v-if="drawerResponseDataInfo && drawerResponseDataInfo.status_code" :type="getStatusCodeType(drawerResponseDataInfo.status_code)" size="small" style="margin-left:4px;font-size:11px">{{ drawerResponseDataInfo.status_code }}</el-tag>
-                </template>
-              </el-tab-pane>
-              <el-tab-pane label="响应头信息" name="response-headers" />
-              <el-tab-pane label="请求数据" name="request-data" />
-              <el-tab-pane label="请求头信息" name="request-headers" />
-              <el-tab-pane v-if="drawerExtractInfo && drawerExtractInfo.length" label="提取信息" name="extract-info" />
-              <el-tab-pane v-if="drawerAssertInfo && drawerAssertInfo.length" label="断言信息" name="assert-info" />
-              <el-tab-pane label="日志信息" name="log" />
-            </el-tabs>
-          </div>
-          <div class="response-body">
-            <!-- 响应数据 -->
-            <template v-if="drawerResponseSubTab === 'result'">
-              <div class="run-result-block" :class="drawerRecordDetail.status || ''">
-                <el-icon :color="getStatusColor(drawerRecordDetail.status)"><CircleCheckFilled /></el-icon>
-                <span class="result-label">{{ getStatusLabel(drawerRecordDetail.status) }}</span>
-                <el-tag v-if="drawerResponseDataInfo && drawerResponseDataInfo.status_code" :type="getStatusCodeType(drawerResponseDataInfo.status_code)" size="small" style="margin-left:8px">{{ drawerResponseDataInfo.status_code }}</el-tag>
-                <span class="result-meta">耗时: {{ drawerRecordDetail.duration_ms || 0 }}ms</span>
-              </div>
-              <div v-if="drawerRecordDetail.error_message" class="error-message"><strong>错误信息:</strong> {{ drawerRecordDetail.error_message }}</div>
-              <pre v-if="drawerResponseDataInfo && drawerResponseDataInfo.body" class="response-pre">{{ formatResponseBody(drawerResponseDataInfo.body) }}</pre>
-              <el-empty v-else-if="!drawerRecordDetail.error_message" description="暂无响应体" :image-size="48" />
-            </template>
-            <!-- 响应头信息 -->
-            <template v-else-if="drawerResponseSubTab === 'response-headers'">
-              <table v-if="drawerResponseDataInfo && drawerResponseDataInfo.headers && Object.keys(drawerResponseDataInfo.headers).length" class="info-table">
-                <thead><tr><th>Header</th><th>Value</th></tr></thead>
-                <tbody><tr v-for="(value, key) in drawerResponseDataInfo.headers" :key="key"><td style="font-weight:500">{{ key }}</td><td>{{ value }}</td></tr></tbody>
-              </table>
-              <el-empty v-else description="暂无响应头信息" :image-size="48" />
-            </template>
-            <!-- 请求数据 -->
-            <template v-else-if="drawerResponseSubTab === 'request-data'">
-              <div v-if="drawerRequestInfo" class="structured-response">
-                <div class="info-row"><strong>请求方法:</strong> <el-tag size="small">{{ (drawerRequestInfo.method || '-').toUpperCase() }}</el-tag></div>
-                <div class="info-row"><strong>请求URL:</strong> <code>{{ drawerRequestInfo.url || '-' }}</code></div>
-                <div class="info-row" v-if="drawerRequestInfo.params && Object.keys(drawerRequestInfo.params).length"><strong>Query参数:</strong></div>
-                <table v-if="drawerRequestInfo.params && Object.keys(drawerRequestInfo.params).length" class="info-table">
-                  <tr v-for="(value, key) in drawerRequestInfo.params" :key="key"><td>{{ key }}</td><td>{{ value }}</td></tr>
-                </table>
-                <div class="info-row" v-if="drawerRequestInfo.body"><strong>请求体:</strong></div>
-                <pre class="response-pre" v-if="drawerRequestInfo.body">{{ typeof drawerRequestInfo.body === 'string' ? drawerRequestInfo.body : JSON.stringify(drawerRequestInfo.body, null, 2) }}</pre>
-              </div>
-              <el-empty v-else description="暂无请求数据" :image-size="48" />
-            </template>
-            <!-- 请求头信息 -->
-            <template v-else-if="drawerResponseSubTab === 'request-headers'">
-              <table v-if="drawerRequestInfo && drawerRequestInfo.headers && Object.keys(drawerRequestInfo.headers).length" class="info-table">
-                <thead><tr><th>Header</th><th>Value</th></tr></thead>
-                <tbody><tr v-for="(value, key) in drawerRequestInfo.headers" :key="key"><td style="font-weight:500">{{ key }}</td><td>{{ value }}</td></tr></tbody>
-              </table>
-              <el-empty v-else description="暂无请求头信息" :image-size="48" />
-            </template>
-            <!-- 提取信息 -->
-            <template v-else-if="drawerResponseSubTab === 'extract-info'">
-              <table class="info-table extract-table" v-if="drawerExtractInfo && drawerExtractInfo.length">
-                <thead><tr><th>变量名</th><th>表达式</th><th>值</th></tr></thead>
-                <tbody><tr v-for="(item, idx) in drawerExtractInfo" :key="idx"><td>{{ item.var_name || item.name }}</td><td>{{ item.extract_expr || item.expression }}</td><td>{{ item.value !== undefined ? item.value : '-' }}</td></tr></tbody>
-              </table>
-              <el-empty v-else description="暂无提取数据" :image-size="48" />
-            </template>
-            <!-- 断言信息 -->
-            <template v-else-if="drawerResponseSubTab === 'assert-info'">
-              <table class="info-table assert-table" v-if="drawerAssertInfo && drawerAssertInfo.length">
-                <thead><tr><th style="width:40px">结果</th><th>断言目标</th><th>比较方式</th><th>预期值</th><th>实际值</th></tr></thead>
-                <tbody>
-                  <tr v-for="(item, idx) in drawerAssertInfo" :key="idx" :class="item.passed ? 'assert-passed' : 'assert-failed'">
-                    <td><el-icon v-if="item.passed" color="#67C23A"><CircleCheckFilled /></el-icon><el-icon v-else color="#F56C6C"><CircleCloseFilled /></el-icon></td>
-                    <td>{{ item.field || item.target }}</td>
-                    <td>{{ getAssertMethodLabel(item.type || item.method) }}</td>
-                    <td>{{ item.expected }}</td>
-                    <td>{{ item.actual !== undefined && item.actual !== null ? item.actual : '-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <el-empty v-else description="暂无断言数据" :image-size="48" />
-            </template>
-            <!-- 日志信息 -->
-            <template v-else-if="drawerResponseSubTab === 'log'">
-              <div v-if="drawerLogData && drawerLogData.length" class="log-container">
-                <div v-for="(logItem, idx) in drawerLogData" :key="idx" class="log-item" :class="'log-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : 'info')">
-                  <span class="log-level-badge" :class="'badge-' + (Array.isArray(logItem) ? logItem[0]?.toLowerCase() : 'info')">{{ Array.isArray(logItem) ? logItem[0] : 'INFO' }}</span>
-                  <span class="log-message">{{ Array.isArray(logItem) ? logItem.slice(1).join(' ') : '' }}</span>
-                </div>
-              </div>
-              <el-empty v-else description="暂无日志" :image-size="48" />
-            </template>
-          </div>
-        </div>
-      </div>
-    </el-drawer>
+    <ExecRecordsDrawer v-model="showTestRecords" :records="debugRecords" :loading="debugRecordsLoading" name-mode="interface" />
   </div>
 </template>
 
@@ -900,9 +335,10 @@ import {
   CircleCloseFilled,
 } from '@element-plus/icons-vue'
 import {
-  copyInterface,
   createApiCatalog,
+  debugRunApiCase,
   debugRunInterface,
+  deleteApiCase,
   deleteApiCatalog,
   deleteInterface,
   fillDebugFromDoc,
@@ -910,6 +346,7 @@ import {
   getApiCatalogTree,
   getDebugTemplate,
   getDocPreview,
+  getInterface,
   listApiCases,
   listDependencies,
   listInterfaces as fetchInterfaces,
@@ -926,6 +363,9 @@ import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import ApiResponsePanel from '@/components/api-test/ApiResponsePanel.vue'
+import ApiRequestPanel from '@/components/api-test/ApiRequestPanel.vue'
+import ExecRecordsDrawer from '@/components/api-test/ExecRecordsDrawer.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 import ImportInterfacesWizard from '@/components/api-test/ImportInterfacesWizard.vue'
@@ -949,6 +389,7 @@ const selectedInterfaceId = ref(route.query.interfaceId ? Number(route.query.int
 const sidebarKeyword = ref('')
 const expandedCatalogIds = ref([])
 const interfacesByCatalog = ref({})
+const fallbackInterface = ref(null)
 
 const interfaceList = ref([])
 const listLoading = ref(false)
@@ -958,8 +399,35 @@ const listPageSize = ref(20)
 const listSearch = ref('')
 
 // ==================== 详情页3个Tab状态 ====================
-const activeTab = ref('interface-debug')
+const activeTab = ref(route.query.tab === 'test-cases' ? 'test-cases' : route.query.tab === 'doc-preview' ? 'doc-preview' : 'interface-debug')
 const environmentId = ref(null)
+
+// 监听路由 query.tab 变化（从用例详情页返回时）
+watch(() => route.query.tab, function (tab) {
+  if (tab === 'test-cases' || tab === 'doc-preview' || tab === 'interface-debug') {
+    activeTab.value = tab
+  }
+})
+
+// 监听路由 query.interfaceId 变化（从用例详情页返回时）
+watch(() => route.query.interfaceId, async function (newId) {
+  var numId = newId ? Number(newId) : null
+  if (numId && numId !== selectedInterfaceId.value) {
+    selectedInterfaceId.value = numId
+    _ifaceCache.id = null
+    // 刷新列表后检查是否需要兜底获取接口信息
+    await loadInterfaceList()
+    if (!findSelectedIface()) {
+      try {
+        var ifaceRes = await getInterface(numId)
+        fallbackInterface.value = ifaceRes.data.data || ifaceRes.data
+      } catch (e) { /* 忽略 */ }
+    }
+    loadCases()
+    loadDeps()
+    loadDocPreview()
+  }
+})
 
 // 变量文件选择相关
 const environmentList = ref([])
@@ -988,6 +456,31 @@ const requestHeadersInfo = ref(null)
 const extractInfo = ref(null)
 const assertInfo = ref(null)
 const logData = ref([])
+
+// 映射到 ApiResponsePanel 的统一 props
+const debugExecResult = computed(function () {
+  if (!responseResult.value && !responseDataInfo.value) return null
+  var rr = responseResult.value || {}
+  var rd = responseDataInfo.value || {}
+  var rq = requestInfo.value || {}
+  return {
+    success: rr.status === 'success',
+    status_code: rd.status_code || '',
+    duration_ms: rr.duration_ms || 0,
+    method: rq.method || debugMethod.value,
+    url: rq.url || '',
+    error_message: rr.error_message || '',
+    response_body: rd.body || null,
+    request_body: rq.body || null,
+  }
+})
+const debugResponseHeaders = computed(function () {
+  return (responseDataInfo.value && responseDataInfo.value.headers) || {}
+})
+const debugRequestHeaders = computed(function () {
+  return (requestInfo.value && requestInfo.value.headers) || {}
+})
+
 const debugMethod = ref('POST')
 const debugBaseUrl = ref('$(base_url)')
 const debugPath = ref('')
@@ -1117,6 +610,7 @@ const showInterfaceForm = ref(false)
 const showGenerate = ref(false)
 const editingInterface = ref(null)
 const interfaceFormCatalogId = ref(null)
+const isCopyInterface = ref(false)
 
 // 目录管理
 const showMoveDialog = ref(false)
@@ -1136,27 +630,25 @@ function findSelectedIface() {
     var item = cats[ci].items ? cats[ci].items.find(function (i) { return i.id === selectedInterfaceId.value }) : null
     if (item) return item
   }
+  if (fallbackInterface.value && fallbackInterface.value.id === selectedInterfaceId.value) {
+    return fallbackInterface.value
+  }
   return null
 }
 
-var _ifaceCache = { iface: null, id: null }
-function _getCachedIface() {
-  var curId = selectedInterfaceId.value
-  if (_ifaceCache.id !== curId) {
-    _ifaceCache.iface = findSelectedIface()
-    _ifaceCache.id = curId
-  }
-  return _ifaceCache.iface
-}
-watch(selectedInterfaceId, function () { _ifaceCache.id = null })
-
-var currentIfaceSummary = computed(function () { var f = _getCachedIface(); return f ? (f.summary || f.name || '') : '' })
-var currentIfaceMethod = computed(function () { var f = _getCachedIface(); return f ? (f.method ? f.method.toUpperCase() : '') : '' })
-var currentIfacePath = computed(function () { var f = _getCachedIface(); return f ? (f.path || '') : '' })
+var currentIfaceSummary = computed(function () { var f = findSelectedIface(); return f ? (f.summary || f.name || '') : '' })
+var currentIfaceMethod = computed(function () { var f = findSelectedIface(); return f ? (f.method ? f.method.toUpperCase() : '') : '' })
+var currentIfacePath = computed(function () { var f = findSelectedIface(); return f ? (f.path || '') : '' })
 
 const currentEnvName = computed(function () {
   if (!debugEnvId.value) return ''
   var env = environmentList.value.find(function (e) { return e.id === debugEnvId.value })
+  return env ? env.env_name : ''
+})
+
+const caseEnvName = computed(function () {
+  if (!caseEnvId.value) return ''
+  var env = environmentList.value.find(function (e) { return e.id === caseEnvId.value })
   return env ? env.env_name : ''
 })
 
@@ -2045,10 +1537,49 @@ async function loadCases() {
   }
 }
 
-function onBatchCaseCommand(command) {
-  if (command === 'delete') {
-    batchDeleteCases()
+async function batchRunCases() {
+  if (!selectedCaseIds.value.length) return
+  if (!caseEnvId.value) {
+    ElMessage.warning('请先选择变量文件')
+    return
   }
+  // 乐观更新：将选中用例状态设为 running
+  var ids = new Set(selectedCaseIds.value)
+  preconditionCases.value.forEach(function (c) { if (ids.has(c.id)) c.exec_status = 'running' })
+  mainCases.value.forEach(function (c) { if (ids.has(c.id)) c.exec_status = 'running' })
+
+  var successCount = 0
+  var failCount = 0
+  for (var i = 0; i < selectedCaseIds.value.length; i++) {
+    var caseId = selectedCaseIds.value[i]
+    try {
+      await debugRunApiCase(caseId, { environment_id: caseEnvId.value })
+      successCount++
+    } catch (e) {
+      failCount++
+      console.error('批量运行用例失败:', caseId, e)
+    }
+  }
+  if (failCount === 0) {
+    ElMessage.success('批量运行完成，' + successCount + ' 个用例全部成功')
+  } else {
+    ElMessage.warning('批量运行完成，成功 ' + successCount + ' 个，失败 ' + failCount + ' 个')
+  }
+  // 从后端刷新真实状态
+  loadCases()
+}
+
+async function deleteSingleCase(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除用例「${row.title || row.name}」？`,
+      t('common.warning'),
+      { type: 'warning' }
+    )
+    await deleteApiCase(row.id)
+    ElMessage.success(t('common.deleteSuccess'))
+    loadCases()
+  } catch {}
 }
 
 async function batchDeleteCases() {
@@ -2193,12 +1724,14 @@ async function reanalyze() {
 // ==================== CRUD 操作 ====================
 function openCreateInterface() {
   editingInterface.value = null
+  isCopyInterface.value = false
   interfaceFormCatalogId.value = selectedCatalogId.value
   showInterfaceForm.value = true
 }
 
 function openEditInterface(row) {
   editingInterface.value = row
+  isCopyInterface.value = false
   interfaceFormCatalogId.value = row.catalog_id != null ? row.catalog_id : selectedCatalogId.value
   showInterfaceForm.value = true
 }
@@ -2238,13 +1771,11 @@ async function batchDeleteInterfaces(selectedIds) {
   }
 }
 
-async function copyInterfaceItem(row) {
-  var id = row && row.id ? row.id : selectedInterfaceId.value
-  var res = await copyInterface(id)
-  var copied = res.data.data
-  ElMessage.success(copied && copied.path ? ('已复制: ' + copied.path) : t('common.saved'))
-  await refreshAfterInterfaceChange()
-  if (copied && copied.id) selectedInterfaceId.value = copied.id
+function copyInterfaceItem(row) {
+  editingInterface.value = row
+  isCopyInterface.value = true
+  interfaceFormCatalogId.value = row.catalog_id != null ? row.catalog_id : selectedCatalogId.value
+  showInterfaceForm.value = true
 }
 
 function onInterfaceCommand(cmd, iface) {
@@ -2454,6 +1985,13 @@ watch(selectedInterfaceId, function () {
 onMounted(async function () {
   await loadTree()
   await loadInterfaceList()
+  // 从用例详情返回时，接口可能不在已加载列表中，兜底直接获取
+  if (selectedInterfaceId.value && !findSelectedIface()) {
+    try {
+      var ifaceRes = await getInterface(selectedInterfaceId.value)
+      fallbackInterface.value = ifaceRes.data.data || ifaceRes.data
+    } catch (e) { /* 接口不存在则忽略 */ }
+  }
   // 加载变量文件列表
   refreshEnvironmentList()
   // 加载上传文件列表
@@ -2490,6 +2028,7 @@ onMounted(async function () {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 0;
 }
 
 .detail-nav-tabs {
@@ -2612,6 +2151,7 @@ onMounted(async function () {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
+  padding: 12px 16px 0;
   flex-shrink: 0;
 
   .detail-title {
@@ -2954,10 +2494,12 @@ onMounted(async function () {
   border-radius: 4px;
   
   .log-item {
-    padding: 4px 8px;
-    margin-bottom: 2px;
-    border-radius: 2px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border-radius: 4px;
     line-height: 1.6;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     
     .log-level-badge {
       display: inline-block;

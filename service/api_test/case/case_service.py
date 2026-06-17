@@ -30,6 +30,12 @@ class CaseService:
 
     @classmethod
     def _to_out(cls, case: ApiTestCase) -> CaseOut:
+        updated_by_name = None
+        try:
+            if case.updated_by:
+                updated_by_name = case.updated_by.username
+        except Exception:
+            pass
         return CaseOut(
             id=case.id,
             project_id=case.project_id,
@@ -42,6 +48,7 @@ class CaseService:
             exec_status=case.exec_status,
             generation_count=case.generation_count,
             default_file_id=case.default_file_id,
+            updated_by_name=updated_by_name,
             last_run_at=case.last_run_at,
             created_at=case.created_at,
             updated_at=case.updated_at,
@@ -59,7 +66,7 @@ class CaseService:
     ) -> PaginatedCases:
         iface = await InterfaceService._get_current_or_404(interface_id)
         await ensure_api_viewer(iface.project_id, user)
-        qs = ApiTestCase.filter(interface_id=iface.id)
+        qs = ApiTestCase.filter(interface_id=iface.id).prefetch_related("updated_by")
         if case_kind is not None:
             qs = qs.filter(case_kind=case_kind)
         qs = qs.order_by("sort_order", "id")
@@ -101,6 +108,7 @@ class CaseService:
         case = await cls._get_case_or_404(case_id)
         await ensure_api_editor(case.project_id, user)
         await remove_suite_relations_for_cases([case.id])
+        await ApiCaseRunRecord.filter(api_case_id=case.id).delete()
         await case.delete()
 
     @classmethod
@@ -114,6 +122,7 @@ class CaseService:
         project_id = next(iter(project_ids))
         await ensure_api_editor(project_id, user)
         await remove_suite_relations_for_cases(data.case_ids)
+        await ApiCaseRunRecord.filter(api_case_id__in=data.case_ids).delete()
         await ApiTestCase.filter(id__in=data.case_ids).delete()
 
     @classmethod
@@ -132,14 +141,30 @@ class CaseService:
             environment_id=environment_id,
             triggered_by_id=user.id,
         )
+        # 提取详细执行结果
+        detail = None
+        if record.api_requests_info and isinstance(record.api_requests_info, dict):
+            detail = record.api_requests_info.get("_debug_detail") or record.api_requests_info
+        # 获取接口名称
+        iface_name = None
+        if record.interface_id:
+            from service.api_test.interface.interface_service import InterfaceService
+            try:
+                iface = await InterfaceService._get_current_or_404(record.interface_id)
+                iface_name = iface.summary or iface.name
+            except Exception:
+                pass
         return RunRecordOut(
             id=record.id,
             case_name=record.case_name,
+            interface_name=iface_name,
             status=record.status.value,
             run_type=record.run_type.value,
             duration_ms=record.duration_ms,
             error_message=record.error_message,
             created_at=record.created_at,
+            triggered_by_username=user.username,
+            api_requests_info=detail,
         )
 
     @classmethod
@@ -153,7 +178,7 @@ class CaseService:
     ) -> PaginatedRunRecords:
         case = await cls._get_case_or_404(case_id)
         await ensure_api_viewer(case.project_id, user)
-        qs = ApiCaseRunRecord.filter(api_case_id=case.id).order_by("-created_at")
+        qs = ApiCaseRunRecord.filter(api_case_id=case.id).order_by("-created_at").prefetch_related("interface", "triggered_by")
         total, items = await paginate(qs, page, page_size)
         return PaginatedRunRecords(
             total=total,
@@ -163,11 +188,14 @@ class CaseService:
                 RunRecordOut(
                     id=r.id,
                     case_name=r.case_name,
+                    interface_name=r.interface.summary if r.interface else None,
                     status=r.status.value,
                     run_type=r.run_type.value,
                     duration_ms=r.duration_ms,
                     error_message=r.error_message,
                     created_at=r.created_at,
+                    triggered_by_username=r.triggered_by.username if r.triggered_by else None,
+                    api_requests_info=r.api_requests_info,
                 )
                 for r in items
             ],
