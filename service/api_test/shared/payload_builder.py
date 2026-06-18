@@ -48,19 +48,24 @@ def _extract_script(items: list | None) -> str:
 
 
 def _convert_precondition(step: dict) -> dict:
-    """Convert a single API-call precondition into ApiEngine step format.
+    """Convert a precondition step into ApiEngine format.
 
-    Note: Python-only preconditions (kind='python') should NOT go through
-    this function — they are extracted as setup_script/teardown_script
-    in build_runner_case_from_payload to avoid phantom HTTP requests.
+    Supports two input formats:
+    - AI format: body in step.request.data/json, path in step.interface.url
+    - Frontend format: body in step.body, path in step.path
     """
-    path = step.get("path", "")
-    method = step.get("method", "GET")
+    # Path / method: prefer interface sub-object (AI), fallback to top-level (frontend)
+    iface = step.get("interface") or {}
+    path = iface.get("url") or iface.get("path") or step.get("path", "")
+    method = iface.get("method") or step.get("method") or "GET"
     headers = step.get("headers") or {}
-    query = step.get("query") or step.get("params") or {}
-    body = step.get("body") or {}
-    content_type = headers.get("Content-Type", "")
 
+    # Body: prefer request sub-object (AI), fallback to top-level body (frontend)
+    req = step.get("request") or {}
+    body = req.get("data") or req.get("json") or step.get("body") or {}
+    query = req.get("params") or step.get("query") or step.get("params") or {}
+
+    content_type = headers.get("Content-Type", "")
     request_block: dict[str, Any] = {"params": query}
     if "application/json" in content_type:
         request_block["json"] = body
@@ -72,26 +77,32 @@ def _convert_precondition(step: dict) -> dict:
         "interface": {"url": path, "method": method.lower()},
         "headers": headers,
         "request": request_block,
-        "setup_script": _extract_script(step.get("setup_scripts")),
-        "teardown_script": _extract_script(step.get("teardown_scripts")),
+        "setup_script": step.get("setup_script") or _extract_script(step.get("setup_scripts")),
+        "teardown_script": step.get("teardown_script") or _extract_script(step.get("teardown_scripts")),
     }
 
-    # Nested preconditions (recursive, API-call only)
+    # Extract: AI format already has {var_name, extract_expr}; frontend needs conversion
+    extracts = step.get("extract") or step.get("extracts")
+    if extracts and isinstance(extracts, list):
+        if isinstance(extracts[0], dict) and "var_name" in extracts[0]:
+            result["extract"] = extracts
+        else:
+            result["extract"] = _convert_extracts(extracts)
+
+    # Assertions: AI format already has {type, field, expected}; frontend needs conversion
+    assertions = step.get("assertions")
+    if assertions and isinstance(assertions, list):
+        if isinstance(assertions[0], dict) and "type" in assertions[0]:
+            result["assertions"] = assertions
+        else:
+            result["assertions"] = _convert_assertions(assertions)
+
+    # Nested preconditions (recursive)
     sub = step.get("preconditions")
     if sub and isinstance(sub, list):
         nested = [_convert_precondition(s) for s in sub if isinstance(s, dict) and s.get("kind") != "python"]
         if nested:
             result["preconditions"] = nested
-
-    # Extracts
-    extracts = step.get("extracts") or step.get("extract")
-    if extracts:
-        result["extract"] = _convert_extracts(extracts)
-
-    # Assertions
-    assertions = step.get("assertions")
-    if assertions:
-        result["assertions"] = _convert_assertions(assertions)
 
     return result
 
@@ -225,3 +236,144 @@ def build_runner_case_from_payload(
         "extract": engine_extracts,
         "assertions": engine_assertions,
     }
+
+
+def normalize_preconditions(preconditions: list, preconditions_api_doc: list) -> list:
+    """根据接口文档修正 AI 生成的前置步骤的 Content-Type 和 body 字段。
+
+    当 preconditions_api_doc 为空时，返回原始列表（由调用方补充文档后重试）。
+    """
+    if not preconditions:
+        return preconditions
+    if not preconditions_api_doc:
+        print(f"[normalize] docs=0, 跳过 (preconditions={len(preconditions)})")
+        return preconditions
+
+    # 构建多种索引
+    doc_by_summary: dict = {}
+    doc_by_method_path: dict = {}
+    for doc in preconditions_api_doc:
+        summary = (doc.get("summary") or "").strip()
+        if summary:
+            doc_by_summary[summary] = doc
+        method = (doc.get("method") or "").upper()
+        path = doc.get("path") or ""
+        if method and path:
+            doc_by_method_path[f"{method} {path}"] = doc
+
+    print(f"[normalize] summaries={list(doc_by_summary.keys())}, paths={list(doc_by_method_path.keys())}")
+
+    def _find_doc(step: dict):
+        title = (step.get("title") or "").strip()
+        if title in doc_by_summary:
+            return doc_by_summary[title]
+        for summary, doc in doc_by_summary.items():
+            if summary and summary in title:
+                return doc
+        for summary, doc in doc_by_summary.items():
+            if title and title in summary:
+                return doc
+        iface = step.get("interface") or {}
+        step_method = (iface.get("method") or "").upper()
+        step_url = iface.get("url") or iface.get("path") or ""
+        key = f"{step_method} {step_url}"
+        if key in doc_by_method_path:
+            return doc_by_method_path[key]
+        for mp_key, doc in doc_by_method_path.items():
+            if step_url and step_url in mp_key:
+                return doc
+        return None
+
+    def _fix_step(step: dict):
+        if not isinstance(step, dict):
+            return
+        title = (step.get("title") or "").strip()
+        doc = _find_doc(step)
+        if not doc:
+            print(f"[normalize] 未匹配: title='{title}'")
+            return
+
+        request_body = doc.get("requestBody") or {}
+        correct_ct = (request_body.get("content_type") or "").lower()
+        if not correct_ct:
+            print(f"[normalize] '{title}': 接口文档无 content_type, 跳过")
+            return
+
+        headers = step.get("headers") or {}
+        request = step.get("request") or {}
+
+        is_form = "form-urlencoded" in correct_ct or "multipart" in correct_ct
+        current_ct = (headers.get("Content-Type") or "").lower()
+        current_is_form = "form-urlencoded" in current_ct or "multipart" in current_ct
+
+        if is_form and not current_is_form:
+            headers["Content-Type"] = correct_ct or "application/x-www-form-urlencoded"
+            if request.get("json") and not request.get("data"):
+                request["data"] = request.pop("json")
+            print(f"[normalize] 修正 '{title}': json→data, CT→{headers['Content-Type']}")
+        elif not is_form and current_is_form:
+            headers["Content-Type"] = "application/json"
+            if request.get("data") and not request.get("json"):
+                request["json"] = request.pop("data")
+            print(f"[normalize] 修正 '{title}': data→json, CT→{headers['Content-Type']}")
+        else:
+            print(f"[normalize] '{title}' CT 已正确: {current_ct or '(未设置)'}")
+
+        step["headers"] = headers
+        step["request"] = request
+
+        sub = step.get("preconditions")
+        if sub and isinstance(sub, list):
+            for s in sub:
+                _fix_step(s)
+
+    for step in preconditions:
+        _fix_step(step)
+
+    return preconditions
+
+
+async def enrich_preconditions_api_doc(
+    preconditions: list,
+    project_id: int,
+    existing_docs: list | None = None,
+) -> list:
+    """当 preconditions_api_doc 为空时，从数据库按前置步骤 title 查找接口文档。
+
+    返回合并后的文档列表（existing_docs + 从 DB 补充的文档）。
+    """
+    if not preconditions:
+        return existing_docs or []
+
+    existing = list(existing_docs or [])
+    existing_summaries = {
+        (d.get("summary") or "").strip()
+        for d in existing if isinstance(d, dict)
+    }
+
+    from service.api_test.interface.models import ApiInterface
+    from service.api_test.shared.interface_doc import interface_to_doc_dict
+
+    missing_titles = []
+    for step in preconditions:
+        if not isinstance(step, dict):
+            continue
+        title = (step.get("title") or "").strip()
+        if title and title not in existing_summaries:
+            missing_titles.append(title)
+
+    if not missing_titles:
+        return existing
+
+    ifaces = await ApiInterface.filter(
+        project_id=project_id,
+        summary__in=missing_titles,
+        is_current=True,
+    )
+    for iface in ifaces:
+        doc = interface_to_doc_dict(iface)
+        existing.append(doc)
+        print(f"[enrich] 从 DB 补充接口文档: summary='{iface.summary}', "
+              f"content_type='{(iface.request_body or {}).get('content_type')}'")
+
+    return existing

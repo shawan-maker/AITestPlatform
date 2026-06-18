@@ -111,6 +111,18 @@ class CaseBatchDeleteRequest(BaseModel):
     case_ids: list[int] = Field(..., min_length=1)
 
 
+class CaseReuseRequest(BaseModel):
+    source_case_ids: list[int] = Field(..., min_length=1)
+    target_interface_id: int = Field(..., ge=1)
+    target_case_kind: ApiCaseKind
+
+
+class CaseReuseResult(BaseModel):
+    created_count: int
+    created_ids: list[int]
+    failures: list[dict] = []
+
+
 class CaseDebugRunRequest(BaseModel):
     environment_id: int = Field(..., ge=1)
 

@@ -149,8 +149,9 @@
                 <template #title>
                   <span class="collapse-title">{{ t('page.apiCases.preconditionCases') }}</span>
                   <el-badge :value="filteredPreconditionCases.length" type="info" class="collapse-badge" />
+                  <el-button size="small" type="primary" plain @click.stop="showReusePre = true" style="margin-left: 8px">复用用例</el-button>
                 </template>
-                <el-table :data="filteredPreconditionCases" border size="small" row-key="id" empty_text="-" @selection-change="onCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
+                <el-table :data="filteredPreconditionCases" border size="small" row-key="id" empty_text="-" @selection-change="onPreCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
                   <el-table-column type="selection" width="50" />
                   <el-table-column label="#" width="55" align="center">
                     <template #default="{ $index }">{{ $index + 1 }}</template>
@@ -187,8 +188,9 @@
                 <template #title>
                   <span class="collapse-title">{{ t('page.apiCases.mainCases') }}</span>
                   <el-badge :value="filteredMainCases.length" type="info" class="collapse-badge" />
+                  <el-button size="small" type="primary" plain @click.stop="showReuseMain = true" style="margin-left: 8px">复用用例</el-button>
                 </template>
-                <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
+                <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onMainCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
                   <el-table-column type="selection" width="50" />
                   <el-table-column label="#" width="55" align="center">
                     <template #default="{ $index }">{{ $index + 1 }}</template>
@@ -301,6 +303,18 @@
       :interface-id="selectedInterfaceId"
       @confirmed="loadCases"
     />
+    <ReuseCaseDialog
+      v-model="showReusePre"
+      case-kind="precondition"
+      :current-interface-id="selectedInterfaceId"
+      @confirmed="loadCases"
+    />
+    <ReuseCaseDialog
+      v-model="showReuseMain"
+      case-kind="main"
+      :current-interface-id="selectedInterfaceId"
+      @confirmed="loadCases"
+    />
     <CatalogMoveDialog
       v-model="showMoveDialog"
       :catalog-nodes="catalogTree"
@@ -371,6 +385,7 @@ import MonacoJsonEditor from '@/components/editor/MonacoJsonEditor.vue'
 import ImportInterfacesWizard from '@/components/api-test/ImportInterfacesWizard.vue'
 import InterfaceFormDrawer from '@/components/api-test/InterfaceFormDrawer.vue'
 import InterfaceCaseGenerateDialog from '@/components/agent/InterfaceCaseGenerateDialog.vue'
+import ReuseCaseDialog from '@/components/api-test/ReuseCaseDialog.vue'
 import ApiCatalogSidebar from '@/components/tree/ApiCatalogSidebar.vue'
 import InterfaceListPanel from '@/components/api-test/InterfaceListPanel.vue'
 import CatalogMoveDialog from '@/components/tree/CatalogMoveDialog.vue'
@@ -414,7 +429,6 @@ watch(() => route.query.interfaceId, async function (newId) {
   var numId = newId ? Number(newId) : null
   if (numId && numId !== selectedInterfaceId.value) {
     selectedInterfaceId.value = numId
-    _ifaceCache.id = null
     // 刷新列表后检查是否需要兜底获取接口信息
     await loadInterfaceList()
     if (!findSelectedIface()) {
@@ -598,16 +612,27 @@ const preconditionCases = ref([])
 const mainCases = ref([])
 const casesLoading = ref(false)
 const caseSearchKey = ref('')
-const selectedCaseIds = ref([])
+const selectedPreCaseIds = ref([])
+const selectedMainCaseIds = ref([])
 
-function onCaseSelectionChange(rows) {
-  selectedCaseIds.value = rows.map(function (r) { return r.id })
+const selectedCaseIds = computed(function () {
+  return selectedPreCaseIds.value.concat(selectedMainCaseIds.value)
+})
+
+function onPreCaseSelectionChange(rows) {
+  selectedPreCaseIds.value = rows.map(function (r) { return r.id })
+}
+
+function onMainCaseSelectionChange(rows) {
+  selectedMainCaseIds.value = rows.map(function (r) { return r.id })
 }
 const preCollapseOpen = ref(['pre'])
 const mainCollapseOpen = ref(['main'])
 const showImport = ref(false)
 const showInterfaceForm = ref(false)
 const showGenerate = ref(false)
+const showReusePre = ref(false)
+const showReuseMain = ref(false)
 const editingInterface = ref(null)
 const interfaceFormCatalogId = ref(null)
 const isCopyInterface = ref(false)
@@ -1512,7 +1537,7 @@ async function loadTemplate() {
     // 无已保存的模板，用接口默认值
     requestJson.value = '{}'
     assertionsJson.value = '[]'
-    var iface = _getCachedIface()
+    var iface = findSelectedIface() || fallbackInterface.value
     if (iface) {
       debugMethod.value = iface.method ? iface.method.toUpperCase() : 'POST'
       debugPath.value = iface.path || ''
@@ -1576,10 +1601,14 @@ async function deleteSingleCase(row) {
       t('common.warning'),
       { type: 'warning' }
     )
-    await deleteApiCase(row.id)
-    ElMessage.success(t('common.deleteSuccess'))
+    var res = await deleteApiCase(row.id)
+    ElMessage.success(res.data.message || t('common.deleteSuccess'))
     loadCases()
-  } catch {}
+  } catch (e) {
+    if (e !== 'cancel' && e?.message !== 'cancel') {
+      ElMessage.error(e?.message || '删除失败')
+    }
+  }
 }
 
 async function batchDeleteCases() {
@@ -1592,17 +1621,13 @@ async function batchDeleteCases() {
     )
     var count = selectedCaseIds.value.length
     var res = await batchDeleteApiCases({ case_ids: selectedCaseIds.value })
-    var data = res.data.data
-    selectedCaseIds.value = []
-    if (data && data.failures && data.failures.length) {
-      ElMessage.warning(t('common.batchDeletePartial'))
-    } else {
-      ElMessage.success(t('common.batchDeleteSuccess', { count: count }))
-    }
+    selectedPreCaseIds.value = []
+    selectedMainCaseIds.value = []
+    ElMessage.success(res.data.message || t('common.batchDeleteSuccess', { count: count }))
     loadCases()
   } catch (e) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || e.message)
+    if (e !== 'cancel' && e?.message !== 'cancel') {
+      ElMessage.error(e?.response?.data?.message || e?.message || '批量删除失败')
     }
   }
 }

@@ -6,6 +6,7 @@ from service.api_test.case.schemas import (
     ApiSessionPreviewUpdateRequest,
     CaseBatchDeleteRequest,
     CaseDebugRunRequest,
+    CaseReuseRequest,
     CaseUpdateRequest,
     GenerationStatusOut,
     GenerateConfirmRequest,
@@ -98,7 +99,7 @@ async def list_cases(
     interface_id: int,
     case_kind: ApiCaseKind | None = Query(default=None),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=200),
     user: User = Depends(get_current_active_user),
 ):
     data = await CaseService.list_by_interface(
@@ -144,6 +145,25 @@ async def batch_delete_cases(
     return success(message="批量删除成功")
 
 
+@router.post("/cases/reuse", summary="复用用例")
+async def reuse_cases(
+    body: CaseReuseRequest,
+    user: User = Depends(get_current_active_user),
+):
+    data = await CaseService.reuse(user, body)
+    return success(data=data, message=f"成功复用 {data.created_count} 条用例")
+
+
+@router.get("/cases/by-interfaces", summary="按接口批量查询用例")
+async def list_cases_by_interfaces(
+    interface_ids: str = Query(..., description="逗号分隔的接口ID"),
+    user: User = Depends(get_current_active_user),
+):
+    ids = [int(x) for x in interface_ids.split(",") if x.strip().isdigit()]
+    data = await CaseService.list_by_interfaces(user, ids)
+    return success(data=data)
+
+
 @router.post("/cases/{case_id}/debug-run", summary="单用例调试")
 async def debug_run_case(
     case_id: int,
@@ -158,7 +178,7 @@ async def debug_run_case(
 async def list_run_records(
     case_id: int,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=200),
     user: User = Depends(get_current_active_user),
 ):
     data = await CaseService.list_run_records(

@@ -320,6 +320,22 @@ async function loadCaseDetail() {
   extractResultData.value = []
   assertResultData.value = []
   logData.value = []
+  // 重置请求表单，避免切换用例时残留上一个用例的请求数据
+  bodyContent.value = ''
+  bodyType.value = 'json'
+  urlencodedRows.value = []
+  formDataRows.value = []
+  headersData.value = []
+  queryParamsData.value = []
+  pathParamsData.value = []
+  extractData.value = []
+  assertionsData.value = []
+  preOpsData.value = []
+  setupScriptText.value = ''
+  teardownScriptText.value = ''
+  debugForm.method = 'POST'
+  debugForm.base_url = ''
+  debugForm.path = ''
   try {
     var res = await getApiCase(caseId.value)
     caseDetail.value = res.data.data
@@ -614,6 +630,13 @@ async function runDebug() {
       var recRes = await getApiCaseRunRecords(caseId.value)
       runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
     } catch (e) { /* 忽略记录刷新失败 */ }
+    // 刷新前置操作用例列表（调试可能更新了前置用例的执行状态和结果）
+    try {
+      if (caseDetail.value && caseDetail.value.interface_id) {
+        var preRes = await listApiCases(caseDetail.value.interface_id, { case_kind: 'precondition' })
+        preconditionCases.value = preRes.data.data ? (preRes.data.data.items || preRes.data.data) : []
+      }
+    } catch (e) { /* 忽略前置用例刷新失败 */ }
   } catch (err) {
     if (err.name === 'AbortError') {
       execResult.value = { success: false, status_code: '', duration_ms: 0, method: '', url: '', error_message: '调试已取消' }

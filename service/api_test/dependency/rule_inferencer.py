@@ -7,6 +7,11 @@ from service.api_test.dependency.schemas import DependencyEdgeDraft
 
 _AUTH_PATH_RE = re.compile(r"(login|auth|token|signin|sign-in)", re.I)
 _TOKEN_FIELD_RE = re.compile(r"token|access_token|authorization", re.I)
+# 检查登录状态的接口（非认证提供者，而是需要认证的消费方）
+_AUTH_STATUS_CHECK_RE = re.compile(
+    r"(is[-_]?login|check[-_]?login|verify[-_]?login|login[-_]?status|is[-_]?auth|check[-_]?auth|logged[-_]?in)",
+    re.I,
+)
 
 
 class RuleInferencer:
@@ -57,6 +62,9 @@ class RuleInferencer:
     @staticmethod
     def _is_auth_provider(item: dict[str, Any]) -> bool:
         path = item.get("path") or ""
+        # 先排除"检查登录状态"类接口 — 它们是认证的消费者，不是提供者
+        if _AUTH_STATUS_CHECK_RE.search(path):
+            return False
         if _AUTH_PATH_RE.search(path):
             return True
         responses = item.get("responses") or []
@@ -68,6 +76,10 @@ class RuleInferencer:
 
     @staticmethod
     def _is_protected(item: dict[str, Any]) -> bool:
+        path = item.get("path") or ""
+        # 检查登录状态的接口一定需要认证
+        if _AUTH_STATUS_CHECK_RE.search(path):
+            return True
         params = item.get("parameters") or {}
         headers = params.get("header") or []
         for h in headers:

@@ -321,12 +321,19 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
 9. **数据库结构说明**  
    - 如用户未提供数据库表结构，请将用例结构中的 `database` 字段设置为空列表：`[]`
 
-10. **请求头设置**  
+10. **请求头设置**
    - 如果有请求体的情况下，请求头 headers 需要设置 `Content-Type` 字段说明请求类型
    - 分析请求头中涉及到鉴权的token,比如Authorization字段，token值是否有前缀
 
-11. **路径参数处理**  
+11. **路径参数处理**
    - 测试用例的接口中存在路径参数的情况下，路径参数使用变量引用的形式引用测试数据中提供的值，或者前置依赖接口中提取的值
+
+12. **前置依赖接口的请求体格式**
+   - 生成 preconditions 中前置依赖接口的请求时，必须根据该接口的 `requestBody.content_type` 来决定请求参数格式：
+     - 如果 `content_type` 包含 `form-urlencoded`：使用 `request.data` 传参，`headers` 中设置 `Content-Type: application/x-www-form-urlencoded`
+     - 如果 `content_type` 包含 `multipart`：使用 `request.data` 传参，`headers` 中设置 `Content-Type: multipart/form-data`
+     - 如果 `content_type` 包含 `json` 或未指定：使用 `request.json` 传参，`headers` 中设置 `Content-Type: application/json`
+   - `requestBody.body` 中的字段定义（`name`, `example`/`default`）应作为请求参数的键值对来源
 ---
 
 ## 二、用户提供的输入信息：

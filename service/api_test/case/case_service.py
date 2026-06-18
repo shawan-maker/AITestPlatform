@@ -1,6 +1,8 @@
 from service.api_test.case.schemas import (
     CaseBatchDeleteRequest,
     CaseOut,
+    CaseReuseRequest,
+    CaseReuseResult,
     CaseUpdateRequest,
     PaginatedCases,
     PaginatedRunRecords,
@@ -11,7 +13,7 @@ from service.api_test.models import ApiTestCase
 from service.api_test.permissions import ensure_api_editor, ensure_api_viewer
 from service.api_test.shared.runner_gateway import RunnerGateway
 from service.api_test.shared.suite_guard import remove_suite_relations_for_cases
-from service.core.enums import ApiCaseKind
+from service.core.enums import ApiCaseKind, ExecStatus, ReviewStatus
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
 from service.test_environment.models import TestEnvironment
@@ -98,7 +100,14 @@ class CaseService:
                 raise AppException("同接口下用例标题已存在", 409)
             case.title = data.title
         if data.case_payload is not None:
-            case.case_payload = data.case_payload
+            # 保留后端生成的关键字段，避免前端编辑时误覆盖
+            old = case.case_payload or {}
+            new = data.case_payload
+            if isinstance(old, dict) and isinstance(new, dict):
+                for key in ("precondition_ids", "preconditions"):
+                    if key in old and key not in new:
+                        new[key] = old[key]
+            case.case_payload = new
         case.updated_by_id = user.id
         await case.save()
         return cls._to_out(case)
@@ -124,6 +133,72 @@ class CaseService:
         await remove_suite_relations_for_cases(data.case_ids)
         await ApiCaseRunRecord.filter(api_case_id__in=data.case_ids).delete()
         await ApiTestCase.filter(id__in=data.case_ids).delete()
+
+    @classmethod
+    async def reuse(cls, user: User, data: CaseReuseRequest) -> CaseReuseResult:
+        """将源用例复制到目标接口下，case_kind 由调用方指定。"""
+        source_cases = await ApiTestCase.filter(id__in=data.source_case_ids)
+        if not source_cases:
+            raise AppException("源用例不存在", 404)
+
+        target_iface = await InterfaceService._get_current_or_404(data.target_interface_id)
+        await ensure_api_editor(target_iface.project_id, user)
+
+        sort_base = await cls._next_case_sort_order(target_iface.id, data.target_case_kind)
+        created_ids: list[int] = []
+        failures: list[dict] = []
+
+        for order, src in enumerate(source_cases):
+            try:
+                title = src.title
+                exists = await ApiTestCase.filter(
+                    interface_id=target_iface.id,
+                    case_kind=data.target_case_kind,
+                    title=title,
+                ).exists()
+                if exists:
+                    title = f"{title}_reuse{order + 1:02d}"
+
+                new_case = await ApiTestCase.create(
+                    project_id=target_iface.project_id,
+                    module_id=target_iface.module_id,
+                    interface_id=target_iface.id,
+                    title=title,
+                    case_kind=data.target_case_kind,
+                    sort_order=sort_base + order,
+                    case_payload=src.case_payload,
+                    review_status=ReviewStatus.init,
+                    exec_status=ExecStatus.pending,
+                    created_by_id=user.id,
+                    updated_by_id=user.id,
+                )
+                created_ids.append(new_case.id)
+            except Exception as e:
+                failures.append({"case_id": src.id, "message": str(e)})
+
+        return CaseReuseResult(
+            created_count=len(created_ids),
+            created_ids=created_ids,
+            failures=failures,
+        )
+
+    @classmethod
+    async def list_by_interfaces(
+        cls, user: User, interface_ids: list[int]
+    ) -> list[CaseOut]:
+        """按接口ID批量查询用例（不分页，最多200条）。"""
+        if not interface_ids:
+            return []
+        qs = (
+            ApiTestCase.filter(interface_id__in=interface_ids)
+            .prefetch_related("updated_by")
+            .order_by("interface_id", "sort_order", "id")
+        )
+        items = await qs.limit(200)
+        # 权限校验：取第一个用例的 project_id 验证
+        if items:
+            await ensure_api_viewer(items[0].project_id, user)
+        return [cls._to_out(c) for c in items]
 
     @classmethod
     async def debug_run(

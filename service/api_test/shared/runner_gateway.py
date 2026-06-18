@@ -235,26 +235,142 @@ class RunnerGateway:
         environment_id: int,
         triggered_by_id: int,
     ) -> ApiCaseRunRecord:
+        from service.api_test.models import ApiTestCase
         from service.test_environment.models import TestEnvironment
         from service.test_environment.variable.assembler import TestEnvDataAssembler
+        from service.test_execution.case_prepare_service import prepare_case_payload
 
         env = await TestEnvironment.get_or_none(id=environment_id)
         test_env_data = await TestEnvDataAssembler.get_test_env_data(environment_id)
-        temp_vars: dict[str, str] = {}
+        project_id = env.project_id if env else None
+
+        # ---- 按 precondition_ids 加载关联的前置用例 ----
+        pre_ids = (case.case_payload or {}).get("precondition_ids") or []
+        pre_cases = []
+        if pre_ids:
+            pre_cases = await ApiTestCase.filter(id__in=pre_ids).order_by("sort_order", "id")
+        logger.info(
+            "[debug] run_case_debug: case_id=%s, precondition_ids=%s, 加载 %d 个前置用例",
+            case.id, pre_ids, len(pre_cases),
+        )
+
+        # ---- 构建主用例 payload，嵌入前置用例（合并为一次引擎调用） ----
+        prepared_main = await prepare_case_payload(project_id, case.case_payload)
+        if pre_cases:
+            engine_preconditions = []
+            for pc in pre_cases:
+                prepared_pc = await prepare_case_payload(project_id, pc.case_payload)
+                engine_preconditions.append(prepared_pc)
+            prepared_main["preconditions"] = engine_preconditions
+
+        # ---- 一次引擎调用：前置 + 主用例在同一 Session 中执行 ----
         record = await cls.execute_case_payload(
             test_env_data=test_env_data,
-            case_payload=case.case_payload,
+            case_payload=prepared_main,
             case_name=case.title,
             api_case_id=case.id,
             interface_id=case.interface_id,
             environment_id=environment_id,
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.debug,
-            project_id=env.project_id if env else None,
-            temp_vars=temp_vars,
+            project_id=project_id,
         )
+
+        # ---- 从前置步骤独立结果更新各 DB 前置用例 ----
+        if pre_cases:
+            await cls._update_precondition_results(pre_cases, record)
+
+        # ---- 更新主用例状态 ----
         case.last_run_at = record.end_time
         case.exec_status = record.status.value
         case.updated_by_id = triggered_by_id
         await case.save(update_fields=["last_run_at", "exec_status", "updated_by_id", "updated_at"])
         return record
+
+    @classmethod
+    async def _update_precondition_results(
+        cls,
+        pre_cases: list,
+        main_record: "ApiCaseRunRecord",
+    ) -> None:
+        """从主用例执行结果中解析前置步骤数据，更新各 DB 前置用例。
+
+        引擎 (BaseCase) 为每个前置步骤记录独立的执行结果
+        （precondition_results），包含完整的响应/请求/断言数据。
+        """
+        from service.core.enums import ExecStatus
+
+        log_data: list = []
+        pre_step_data: dict[str, dict] = {}  # title → per-step engine result
+
+        if isinstance(main_record.api_requests_info, dict):
+            dd = main_record.api_requests_info.get("_debug_detail") or {}
+            log_data = dd.get("log_data") or []
+            # 收集 per-step 前置结果
+            for ps in (main_record.api_requests_info.get("precondition_results") or []):
+                t = (ps.get("title") or "").strip()
+                if t:
+                    pre_step_data[t] = ps
+
+        # 按 title 收集日志和状态
+        pre_logs: dict[str, list] = {}
+        pre_status: dict[str, str] = {}
+        current_title = None
+
+        for entry in log_data:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+                continue
+            level = str(entry[0])
+            msg = " ".join(str(x) for x in entry[1:])
+
+            if "执行前置步骤:" in msg:
+                current_title = msg.split("执行前置步骤:")[-1].strip()
+                pre_logs.setdefault(current_title, [])
+            elif current_title:
+                pre_logs.setdefault(current_title, []).append([level, msg])
+
+            if "前置完成:" in msg:
+                title = msg.split("前置完成:")[-1].strip()
+                pre_status[title] = "success"
+            elif "前置失败:" in msg or "前置执行异常:" in msg:
+                parts = msg.split(":")
+                if len(parts) >= 2:
+                    title = parts[-1].strip().split("—")[0].strip()
+                    pre_status.setdefault(title, "fail")
+
+        # 更新各 DB 前置用例
+        for pc in pre_cases:
+            status = pre_status.get(pc.title)
+            logs = pre_logs.get(pc.title, [])
+            step = pre_step_data.get(pc.title, {})
+
+            # 从 per-step 数据推断状态
+            if status is None and step:
+                sc = step.get("status_code", "")
+                status = "success" if str(sc).startswith("2") else "fail"
+            elif status is None:
+                status = "success" if main_record.status == CaseRunStatus.success else "fail"
+
+            payload_copy = dict(pc.case_payload)
+
+            pc.exec_status = (
+                ExecStatus.success if status == "success" else ExecStatus.fail
+            )
+            payload_copy["_exec_result"] = {
+                "status": status,
+                "response_code": step.get("status_code", ""),
+                "response_body": step.get("response_body"),
+                "response_headers": step.get("response_headers", {}),
+                "request_headers": step.get("request_headers") or payload_copy.get("headers") or {},
+                "request_body": step.get("request_body"),
+                "method": step.get("method", ""),
+                "url": step.get("url", ""),
+                "run_time": step.get("run_time", 0),
+                "log_data": logs,
+                "assert_info": step.get("assert_info") or [],
+                "extract_info": step.get("extract_info") or [],
+            }
+            pc.case_payload = payload_copy
+            await pc.save(
+                update_fields=["exec_status", "case_payload", "updated_at"],
+            )

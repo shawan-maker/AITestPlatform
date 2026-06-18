@@ -185,6 +185,18 @@ class APIRuncaseGeneratorWorkflow:
             resp = None
             writer(f"⚠️ LLM 返回类型异常：{type(resp)}")
         writer("【执行节点完成】 2、生成可运行的api结构化测试用例")
+        # ★ 根据接口文档修正 AI 生成的前置步骤 Content-Type / body 字段
+        if isinstance(resp, dict):
+            _pre_list = resp.get("preconditions")
+            _precoditions_docs = state.get("precoditions_api_doc") or []
+            if _pre_list and isinstance(_pre_list, list):
+                from service.api_test.shared.payload_builder import normalize_preconditions
+                writer(f"★ normalize: AI 生成 {len(_pre_list)} 个前置步骤, 接口文档 {len(_precoditions_docs)} 个")
+                resp["preconditions"] = normalize_preconditions(
+                    _pre_list, _precoditions_docs,
+                )
+            else:
+                writer(f"★ normalize: 无前置步骤需要修正 (preconditions={type(_pre_list).__name__})")
         # 3、返回基础的测试用例
         return {"api_case": resp}
 
@@ -256,6 +268,18 @@ class APIRuncaseGeneratorWorkflow:
                                       "api_case":state.get("api_case")
                                       })
         writer("【执行节点完成】 4、重新生成可运行的api结构化测试用例")
+        # ★ 根据接口文档修正 AI 生成的前置步骤 Content-Type / body 字段
+        if isinstance(resp, dict):
+            _pre_list = resp.get("preconditions")
+            _precoditions_docs = state.get("precoditions_api_doc") or []
+            if _pre_list and isinstance(_pre_list, list):
+                from service.api_test.shared.payload_builder import normalize_preconditions
+                writer(f"★ normalize(重试): AI 生成 {len(_pre_list)} 个前置步骤, 接口文档 {len(_precoditions_docs)} 个")
+                resp["preconditions"] = normalize_preconditions(
+                    _pre_list, _precoditions_docs,
+                )
+            else:
+                writer(f"★ normalize(重试): 无前置步骤需要修正")
         # 3、返回基础的测试用例
         return {"api_case": resp}
 

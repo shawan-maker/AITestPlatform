@@ -92,6 +92,16 @@ export function batchDeleteApiCases(data) {
   return request.post('/api-test/cases/batch-delete', data)
 }
 
+export function reuseApiCases(data) {
+  return request.post('/api-test/cases/reuse', data)
+}
+
+export function listCasesByInterfaces(interfaceIds) {
+  return request.get('/api-test/cases/by-interfaces', {
+    params: { interface_ids: interfaceIds.join(',') }
+  })
+}
+
 export function generateCasePreview(interfaceId, data) {
   // v3: 异步预览，接口立即返回 session_id，前端轮询 generation-status 获取结果
   return request.post(`/api-test/interfaces/${interfaceId}/cases/generate-preview`, data)
