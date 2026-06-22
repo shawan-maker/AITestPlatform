@@ -3,6 +3,7 @@ from __future__ import annotations
 from tortoise.expressions import Q
 
 from service.api_test.models import ApiTestCase
+from service.api_test.interface.models import ApiInterface
 from service.core.enums import ExecStatus, SuiteCaseType
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
@@ -77,9 +78,15 @@ class CaseRelationService:
         ).order_by("case_order", "id")
         if q:
             kw = q.strip()
+            # 按用例名称或接口名称搜索
+            iface_ids = await ApiInterface.filter(
+                project_id=suite.project_id, summary__icontains=kw
+            ).values_list("id", flat=True)
             case_ids = await ApiTestCase.filter(
                 project_id=suite.project_id
-            ).filter(Q(title__icontains=kw)).values_list("id", flat=True)
+            ).filter(
+                Q(title__icontains=kw) | Q(interface_id__in=list(iface_ids))
+            ).values_list("id", flat=True)
             qs = qs.filter(case_id__in=list(case_ids) or [-1])
         total, items = await paginate(qs, page, page_size)
         out = [await cls._build_case_out(rel) for rel in items]

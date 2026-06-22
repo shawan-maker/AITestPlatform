@@ -5,24 +5,80 @@
     <template v-else>
       <FilterBar @search="load" @reset="reset">
         <template #primary>
-          <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
+          <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
           <el-button v-if="canEdit && selectedIds.length" type="danger" @click="batchRemove">{{ t('common.batchDelete') }} ({{ selectedIds.length }})</el-button>
         </template>
-        <el-select v-model="filters.task_type" :placeholder="t('page.test.taskType')" clearable>
-          <el-option v-for="tt in TASK_TYPES" :key="tt" :label="tt" :value="tt" />
+        <el-input v-model="filters.q" :placeholder="t('common.keyword')" clearable style="width: 200px" />
+        <el-select v-model="filters.type" :placeholder="t('page.test.taskType')" clearable style="width: 140px">
+          <el-option v-for="tt in TASK_TYPES" :key="tt" :label="TASK_TYPE_MAP[tt]?.label || tt" :value="tt" />
+        </el-select>
+        <el-select v-model="filters.status" :placeholder="t('page.test.execStatus')" clearable style="width: 140px">
+          <el-option v-for="s in RUN_STATUS" :key="s" :label="RUN_STATUS_MAP[s]?.label || s" :value="s" />
         </el-select>
       </FilterBar>
       <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" row-key="id" @page-change="load" @selection-change="onSelectionChange">
         <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
-        <AppTableColumn prop="name" variant="content" :label="t('common.name')" />
-        <AppTableColumn prop="task_type" variant="flex" :label="t('page.test.taskType')" />
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="120">
+        <AppTableColumn prop="task_name" variant="content" :label="t('page.test.tasks.taskName')" />
+        <AppTableColumn variant="fixed" :label="t('page.test.taskType')" :width="80">
+          <template #default="{ row }"><el-tag :type="TASK_TYPE_MAP[row.type]?.type" size="small">{{ TASK_TYPE_MAP[row.type]?.label || row.type }}</el-tag></template>
+        </AppTableColumn>
+        <AppTableColumn prop="case_count" variant="fixed" :label="t('page.test.caseCount')" :width="80" />
+        <AppTableColumn variant="fixed" :label="t('page.test.execStatus')" :width="100">
+          <template #default="{ row }"><StatusTag :status="row.last_run?.status" :map="RUN_STATUS_MAP" /></template>
+        </AppTableColumn>
+        <AppTableColumn variant="fixed" :label="t('page.test.successRate')" :width="140">
+          <template #default="{ row }">{{ row.last_run?.success_rate || '-' }}</template>
+        </AppTableColumn>
+        <AppTableColumn variant="fixed" :label="t('page.test.executor')" :width="100">
+          <template #default="{ row }">{{ row.last_run?.triggered_by_name || '-' }}</template>
+        </AppTableColumn>
+        <AppTableColumn variant="fixed" :label="t('page.test.lastRun')" :width="170">
+          <template #default="{ row }">{{ row.last_run?.start_time ? formatTime(row.last_run.start_time) : '-' }}</template>
+        </AppTableColumn>
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="140">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/tasks/${row.id}`)">{{ t('common.view') }}</el-button>
+            <ConfirmDelete v-if="canEdit" @confirm="remove(row)">
+              <el-button link type="danger">{{ t('common.delete') }}</el-button>
+            </ConfirmDelete>
           </template>
         </AppTableColumn>
       </PaginatedTable>
     </template>
+
+    <!-- 新建任务对话框 -->
+    <el-dialog :close-on-click-modal="false" v-model="showCreate" :title="t('page.test.tasks.create')" width="560px">
+      <el-form label-width="100px">
+        <el-form-item :label="t('page.test.tasks.taskName')" required>
+          <el-input v-model="form.task_name" />
+        </el-form-item>
+        <el-form-item :label="t('page.test.taskType')">
+          <el-radio-group v-model="form.type">
+            <el-radio value="api">API</el-radio>
+            <el-radio value="manual">{{ t('page.test.manualType') }}</el-radio>
+            <el-radio value="functional">{{ t('page.test.functionalType') }}</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item :label="t('common.description')">
+          <el-input v-model="form.description" type="textarea" :rows="2" />
+        </el-form-item>
+        <template v-if="form.type === 'api' || form.type === 'functional'">
+          <el-form-item :label="t('page.apiCases.selectEnv')">
+            <EnvironmentSelect v-model="form.environment_id" />
+          </el-form-item>
+          <el-form-item :label="t('page.test.runMode')">
+            <el-radio-group v-model="form.run_mode">
+              <el-radio value="serial">{{ t('page.test.serial') }}</el-radio>
+              <el-radio value="parallel">{{ t('page.test.parallel') }}</el-radio>
+            </el-radio-group>
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreate = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="saving" @click="create">{{ t('common.save') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -31,30 +87,79 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listTasks, batchDeleteTasks } from '@/api/testManagement'
+import { listTasks, createTask, deleteTask, batchDeleteTasks } from '@/api/testManagement'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
-import { TASK_TYPES } from '@/utils/constants'
+import { RUN_STATUS, RUN_STATUS_MAP, TASK_TYPES, TASK_TYPE_MAP } from '@/utils/constants'
+import { formatTime } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
+import StatusTag from '@/components/common/StatusTag.vue'
+import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
+import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 const { page, pageSize, total } = usePagination()
-const filters = reactive({ task_type: '' })
+const filters = reactive({ q: '', type: '', status: '' })
 const items = ref([])
 const loading = ref(false)
 const showCreate = ref(false)
+const saving = ref(false)
+const form = reactive({ task_name: '', type: 'api', description: '', environment_id: null, run_mode: 'serial' })
 const selectedIds = ref([])
 
 function onSelectionChange(rows) {
   selectedIds.value = rows.map(function (r) { return r.id })
+}
+
+function openCreate() {
+  Object.assign(form, { task_name: '', type: 'api', description: '', environment_id: null, run_mode: 'serial' })
+  showCreate.value = true
+}
+
+async function load() {
+  const params = withProjectParams({ page: page.value, page_size: pageSize.value, q: filters.q || undefined, type: filters.type || undefined, status: filters.status || undefined })
+  if (!params) return
+  loading.value = true
+  try {
+    const res = await listTasks(params)
+    items.value = res.data.data?.items ?? []
+    total.value = res.data.data?.total ?? 0
+  } finally {
+    loading.value = false
+  }
+}
+
+function reset() { filters.q = ''; filters.type = ''; filters.status = ''; page.value = 1; load() }
+
+async function create() {
+  if (!form.task_name?.trim()) {
+    ElMessage.warning(t('page.test.tasks.taskName') + t('page.defects.required'))
+    return
+  }
+  saving.value = true
+  try {
+    const params = withProjectParams()
+    await createTask({ ...form, project_id: params.project_id })
+    ElMessage.success(t('common.saved'))
+    showCreate.value = false
+    load()
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  await deleteTask(row.id)
+  ElMessage.success(t('common.deleted'))
+  load()
 }
 
 async function batchRemove() {
@@ -80,19 +185,5 @@ async function batchRemove() {
   }
 }
 
-async function load() {
-  const params = withProjectParams({ page: page.value, page_size: pageSize.value, task_type: filters.task_type || undefined })
-  if (!params) return
-  loading.value = true
-  try {
-    const res = await listTasks(params)
-    items.value = res.data.data?.items ?? []
-    total.value = res.data.data?.total ?? 0
-  } finally {
-    loading.value = false
-  }
-}
-
-function reset() { filters.task_type = ''; page.value = 1; load() }
 onMounted(load)
 </script>

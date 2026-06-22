@@ -3,7 +3,7 @@
     <el-form label-width="100px">
       <el-form-item :label="t('common.status')">
         <el-select v-model="form.status">
-          <el-option v-for="s in DEFECT_STATUS" :key="s" :label="t(`defect.status.${s}`)" :value="s" />
+          <el-option v-for="s in validStatuses" :key="s" :label="DEFECT_STATUS_MAP[s]?.label || s" :value="s" />
         </el-select>
       </el-form-item>
       <el-form-item :label="t('page.defects.assignee')">
@@ -19,12 +19,15 @@
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DEFECT_STATUS } from '@/utils/constants'
+import { DEFECT_STATUS_MAP, DEFECT_ALLOWED_TRANSITIONS } from '@/utils/constants'
 import UserSearchPicker from '@/components/picker/UserSearchPicker.vue'
 
-const props = defineProps({ modelValue: { type: Boolean, default: false } })
+const props = defineProps({
+  modelValue: { type: Boolean, default: false },
+  currentStatus: { type: String, default: 'init' },
+})
 const emit = defineEmits(['update:modelValue', 'submit'])
 const { t } = useI18n()
 
@@ -33,9 +36,22 @@ const visible = computed({
   set: (v) => emit('update:modelValue', v),
 })
 
-const form = reactive({ status: 'open', assignee_id: null })
+const validStatuses = computed(() => {
+  return DEFECT_ALLOWED_TRANSITIONS[props.currentStatus] || []
+})
+
+const form = reactive({ status: '', assignee_id: null })
+
+watch(visible, (v) => {
+  if (v) {
+    var targets = validStatuses.value
+    form.status = targets[0] || ''
+    form.assignee_id = null
+  }
+})
 
 function submit() {
+  if (!form.status) return
   emit('submit', { status: form.status, assignee_id: form.assignee_id || undefined })
 }
 </script>

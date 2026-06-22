@@ -25,8 +25,8 @@ export function batchDeleteSuites(ids) {
   return request.post('/test-management/suites/batch-delete', { suite_ids: ids })
 }
 
-export function listSuiteCases(suiteId) {
-  return request.get(`/test-management/suites/${suiteId}/cases`)
+export function listSuiteCases(suiteId, params = {}) {
+  return request.get(`/test-management/suites/${suiteId}/cases`, { params })
 }
 
 export function replaceSuiteCases(suiteId, data) {
@@ -146,10 +146,6 @@ export function transitionDefect(id, data) {
 
 export function addDefectComment(id, data) {
   return request.post(`/test-management/defects/${id}/comments`, data)
-}
-
-export function deleteDefect(id) {
-  return request.delete(`/test-management/defects/${id}`)
 }
 
 export function batchDeleteDefects(ids) {

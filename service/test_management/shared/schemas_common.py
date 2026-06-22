@@ -13,6 +13,7 @@ class LastRunBrief(BaseModel):
     passed_cases: int = 0
     total_cases: int = 0
     success_rate: str | None = None
+    triggered_by_name: str | None = None
 
 
 class RelationItemBase(BaseModel):

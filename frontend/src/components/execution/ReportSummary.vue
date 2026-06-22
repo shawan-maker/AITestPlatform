@@ -20,6 +20,7 @@
       :can-edit="canEdit"
       @view-log="$emit('view-log', $event)"
       @linked="$emit('linked')"
+      @create-defect="$emit('create-defect', $event)"
     />
   </div>
 </template>
@@ -41,7 +42,7 @@ const props = defineProps({
   canEdit: { type: Boolean, default: true },
 })
 
-defineEmits(['view-log', 'linked'])
+defineEmits(['view-log', 'linked', 'create-defect'])
 
 const { t } = useI18n()
 const passRateRef = ref(null)

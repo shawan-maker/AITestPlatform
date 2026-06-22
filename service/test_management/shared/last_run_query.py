@@ -15,6 +15,7 @@ async def fetch_suite_last_runs(suite_ids: list[int]) -> dict[int, TestSuiteRun]
     runs = (
         await TestSuiteRun.filter(suite_id__in=suite_ids)
         .order_by("-id")
+        .prefetch_related("triggered_by")
         .all()
     )
     result: dict[int, TestSuiteRun] = {}
@@ -30,6 +31,7 @@ async def fetch_task_last_runs(task_ids: list[int]) -> dict[int, TestTaskRun]:
     runs = (
         await TestTaskRun.filter(task_id__in=task_ids)
         .order_by("-id")
+        .prefetch_related("triggered_by")
         .all()
     )
     result: dict[int, TestTaskRun] = {}
@@ -37,6 +39,16 @@ async def fetch_task_last_runs(task_ids: list[int]) -> dict[int, TestTaskRun]:
         if run.task_id not in result:
             result[run.task_id] = run
     return result
+
+
+def _get_triggered_by_name(run) -> str | None:
+    """Extract triggered_by username from a prefetched run."""
+    if run is None:
+        return None
+    user = getattr(run, "triggered_by", None)
+    if user is None:
+        return None
+    return getattr(user, "username", None)
 
 
 def last_run_brief_from_suite_run(run: TestSuiteRun | None) -> dict:
@@ -49,6 +61,7 @@ def last_run_brief_from_suite_run(run: TestSuiteRun | None) -> dict:
             "passed_cases": 0,
             "total_cases": 0,
             "success_rate": None,
+            "triggered_by_name": None,
         }
     return {
         "run_id": run.id,
@@ -58,6 +71,7 @@ def last_run_brief_from_suite_run(run: TestSuiteRun | None) -> dict:
         "passed_cases": run.passed_cases,
         "total_cases": run.total_cases,
         "success_rate": format_success_rate(run.passed_cases, run.total_cases),
+        "triggered_by_name": _get_triggered_by_name(run),
     }
 
 
@@ -71,6 +85,7 @@ def last_run_brief_from_task_run(run: TestTaskRun | None) -> dict:
             "passed_cases": 0,
             "total_cases": 0,
             "success_rate": None,
+            "triggered_by_name": None,
         }
     return {
         "run_id": run.id,
@@ -80,6 +95,7 @@ def last_run_brief_from_task_run(run: TestTaskRun | None) -> dict:
         "passed_cases": run.passed_cases,
         "total_cases": run.total_cases,
         "success_rate": format_success_rate(run.passed_cases, run.total_cases),
+        "triggered_by_name": _get_triggered_by_name(run),
     }
 
 

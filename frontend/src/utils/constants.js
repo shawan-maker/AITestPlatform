@@ -44,25 +44,52 @@ export const INDEX_STATUS_MAP = {
 export const DEFECT_STATUS = ['init', 'open', 'in_progress', 'resolved', 'closed']
 
 export const DEFECT_STATUS_MAP = {
-  init: { type: 'info', label: 'init' },
-  open: { type: 'danger', label: 'open' },
-  in_progress: { type: 'warning', label: 'in_progress' },
-  resolved: { type: 'success', label: 'resolved' },
-  closed: { type: 'info', label: 'closed' },
+  init: { type: 'info', label: '新建' },
+  open: { type: 'danger', label: '打开' },
+  in_progress: { type: 'warning', label: '处理中' },
+  resolved: { type: 'success', label: '已解决' },
+  closed: { type: 'info', label: '已关闭' },
 }
 
-export const DEFECT_SEVERITY = ['一般', '严重', '致命']
-export const DEFECT_PRIORITY = ['高', '中', '低']
-export const DEFECT_CATEGORY = ['功能', '性能', '界面', '兼容', '安全', '其他']
+// 合法状态流转（与后端 transition.py ALLOWED_TRANSITIONS 一致）
+export const DEFECT_ALLOWED_TRANSITIONS = {
+  init: ['open'],
+  open: ['in_progress', 'closed'],
+  in_progress: ['open', 'resolved'],
+  resolved: ['closed', 'in_progress'],
+  closed: ['open'],
+}
+
+export const DEFECT_SEVERITY_MAP = { normal: '一般', serious: '严重', critical: '致命' }
+export const DEFECT_PRIORITY_MAP = { high: '高', medium: '中', low: '低' }
+export const DEFECT_CATEGORY_MAP = { functional: '功能', performance: '性能', ui: '界面', compatibility: '兼容', security: '安全', other: '其他' }
 
 export const RUN_STATUS = ['pending', 'running', 'completed', 'failed', 'cancelled']
 
 export const RUN_STATUS_MAP = {
-  pending: { type: 'info', label: 'pending' },
-  running: { type: 'warning', label: 'running' },
-  completed: { type: 'success', label: 'completed' },
-  failed: { type: 'danger', label: 'failed' },
-  cancelled: { type: 'info', label: 'cancelled' },
+  pending: { type: 'info', label: '未执行' },
+  running: { type: 'warning', label: '执行中' },
+  completed: { type: 'success', label: '已完成' },
+  failed: { type: 'danger', label: '已失败' },
+  cancelled: { type: 'info', label: '已停止' },
+}
+
+export const SUITE_TYPE_MAP = {
+  api: { type: 'primary', label: 'API' },
+  functional: { type: 'success', label: '功能' },
+  ui: { type: 'warning', label: 'UI' },
+}
+
+export const TASK_TYPE_MAP = {
+  api: { type: 'primary', label: 'API' },
+  functional: { type: 'success', label: '功能' },
+  manual: { type: 'info', label: '手工' },
+  ui: { type: 'warning', label: 'UI' },
+}
+
+export const RUN_MODE_MAP = {
+  serial: '串行',
+  parallel: '并行',
 }
 
 export const CONFIG_GROUP = ['base', 'headers', 'envs']
@@ -70,13 +97,14 @@ export const CONFIG_GROUPS = CONFIG_GROUP
 export const CONFIG_TYPES = ['scalar', 'secret', 'file_ref']
 
 export const CASE_RESULT_MAP = {
-  success: { type: 'success', label: 'success' },
-  pass: { type: 'success', label: 'pass' },
-  fail: { type: 'danger', label: 'fail' },
-  failed: { type: 'danger', label: 'failed' },
-  error: { type: 'danger', label: 'error' },
-  skip: { type: 'info', label: 'skip' },
-  skipped: { type: 'info', label: 'skipped' },
+  success: { type: 'success', label: '成功' },
+  pass: { type: 'success', label: '通过' },
+  fail: { type: 'danger', label: '失败' },
+  failed: { type: 'danger', label: '失败' },
+  error: { type: 'danger', label: '错误' },
+  skip: { type: 'info', label: '跳过' },
+  skipped: { type: 'info', label: '跳过' },
+  pending: { type: 'info', label: '未开始' },
 }
 
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
