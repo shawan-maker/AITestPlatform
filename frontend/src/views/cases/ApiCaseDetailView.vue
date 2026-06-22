@@ -44,7 +44,6 @@
               <span class="item-name">{{ item.title || item.name }}</span>
               <div class="item-actions">
                 <el-button text size="small" @click.stop><el-icon><Clock /></el-icon></el-button>
-                <el-button text size="small" @click.stop><el-icon><CopyDocument /></el-icon></el-button>
                 <el-button text size="small" @click.stop="deleteCase(item)"><el-icon><Delete /></el-icon></el-button>
               </div>
             </div>

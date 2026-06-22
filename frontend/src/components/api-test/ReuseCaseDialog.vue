@@ -93,7 +93,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Document, Folder } from '@element-plus/icons-vue'
 import { getApiCatalogTree, listInterfacesByCatalog, listApiCases, reuseApiCases } from '@/api/apiTest'
@@ -116,25 +116,17 @@ const saving = ref(false)
 const treeSearchKey = ref('')
 const caseSearchKey = ref('')
 
-// 目录树数据
 const catalogTree = ref([])
-// 每个目录下的接口 { catalogId: [interfaces] }
 const interfacesByCatalog = ref({})
-// 当前选中接口的用例列表
 const currentCases = ref([])
 const currentInterfaceName = ref('')
 const currentInterfaceId = ref(null)
-
-// 全局已选用例 ID
 const selectedCaseIds = ref(new Set())
-// 接口用例缓存 { interfaceId: [cases] }
 const caseCache = ref({})
-// 正在同步表格勾选（防止 clearSelection 触发 selection-change 清空 selectedCaseIds）
 var isSyncingTable = false
 
 const treeProps = { children: 'children', label: 'label' }
 
-// 兼容两种 case_payload 格式取 URL 和 method
 function getCaseUrl(row) {
   var p = row.case_payload
   if (!p) return ''
@@ -154,18 +146,15 @@ function getMethodType(row) {
   return 'info'
 }
 
-// 构建树形数据（目录+接口混合）
 const treeData = computed(function () {
   return buildTreeNodes(catalogTree.value)
 })
 
-// 过滤后的树
 const filteredTree = computed(function () {
   if (!treeSearchKey.value) return treeData.value
   return filterTree(treeData.value, treeSearchKey.value.toLowerCase())
 })
 
-// 过滤后的用例
 const filteredCases = computed(function () {
   if (!caseSearchKey.value) return currentCases.value
   var kw = caseSearchKey.value.toLowerCase()
@@ -185,7 +174,6 @@ function buildTreeNodes(nodes) {
       catalogId: node.id,
       children: [],
     }
-    // 添加该目录下的接口
     var ifaces = interfacesByCatalog.value[node.id] || []
     for (var j = 0; j < ifaces.length; j++) {
       treeNode.children.push({
@@ -196,7 +184,6 @@ function buildTreeNodes(nodes) {
         children: [],
       })
     }
-    // 递归子目录
     if (node.children && node.children.length) {
       treeNode.children = treeNode.children.concat(buildTreeNodes(node.children))
     }
@@ -235,7 +222,6 @@ async function loadTree() {
     if (!params) return
     var res = await getApiCatalogTree(params)
     catalogTree.value = res.data.data?.items ?? res.data.data ?? []
-    // 加载每个目录下的接口
     await loadAllCatalogInterfaces(catalogTree.value)
   } catch (e) {
     console.error('加载目录树失败:', e)
@@ -261,28 +247,29 @@ async function loadAllCatalogInterfaces(nodes) {
   }
 }
 
-// 点击标签文字 → 右侧显示用例列表（不影响勾选框）
+// ========== 点击标签：显示用例，不影响勾选 ==========
 async function onLabelClick(data) {
+  // 先设守卫，防止 table 数据变更触发的 @selection-change 清空 selectedCaseIds
+  isSyncingTable = true
   if (data.isInterface) {
     currentInterfaceId.value = data.interfaceId
     currentInterfaceName.value = data.label
     await loadInterfaceCases(data.interfaceId)
-    syncTableSelection()
   } else {
     currentInterfaceId.value = null
     currentInterfaceName.value = data.label + '（全部用例）'
     await loadCatalogAllCases(data)
   }
+  // 切换接口后，同步已有选择状态到表格
+  scheduleSyncSelection()
 }
 
-// 加载目录下所有接口的用例并合并展示
 async function loadCatalogAllCases(catalogNode) {
   casesLoading.value = true
   try {
     var allCases = []
     await collectCasesRecursive(catalogNode, allCases)
     currentCases.value = allCases
-    syncTableSelection()
   } catch (e) {
     console.error('加载目录用例失败:', e)
     currentCases.value = []
@@ -291,7 +278,6 @@ async function loadCatalogAllCases(catalogNode) {
   }
 }
 
-// 递归收集目录下所有接口的用例
 async function collectCasesRecursive(node, result) {
   if (node.isInterface) {
     await loadInterfaceCases(node.interfaceId)
@@ -326,58 +312,115 @@ async function loadInterfaceCases(interfaceId) {
   }
 }
 
-// 同步表格勾选状态
-function syncTableSelection() {
-  isSyncingTable = true
+// ========== 勾选同步 ==========
+function scheduleSyncSelection() {
+  console.log('[DEBUG] scheduleSyncSelection called, will wait 2x nextTick')
+  // 等两次 nextTick：第一次等 Vue 更新 DOM，第二次等 el-table 内部渲染行
   nextTick(function () {
-    if (!caseTableRef.value) { isSyncingTable = false; return }
-    // 先清除所有行的选中
-    caseTableRef.value.clearSelection()
-    // 再逐行设置
+    console.log('[DEBUG] nextTick 1 done')
     nextTick(function () {
-      if (!caseTableRef.value) { isSyncingTable = false; return }
-      currentCases.value.forEach(function (row) {
-        if (selectedCaseIds.value.has(row.id)) {
-          caseTableRef.value.toggleRowSelection(row, true)
-        }
-      })
-      isSyncingTable = false
+      console.log('[DEBUG] nextTick 2 done, calling doSyncSelection')
+      doSyncSelection()
     })
   })
 }
 
-// 右侧表格勾选变化
-function onCaseSelectionChange(rows) {
-  if (isSyncingTable) return  // 程序同步中，忽略
-  // 当前页面所有用例 ID
-  var pageIds = currentCases.value.map(function (c) { return c.id })
-  // 先移除当前页面所有用例的选中状态
-  pageIds.forEach(function (id) { selectedCaseIds.value.delete(id) })
-  // 再添加当前选中的
-  rows.forEach(function (r) { selectedCaseIds.value.add(r.id) })
-  // 触发响应式更新
-  selectedCaseIds.value = new Set(selectedCaseIds.value)
+function doSyncSelection() {
+  console.log('[DEBUG] doSyncSelection start, tableRef:', !!caseTableRef.value)
+  if (!caseTableRef.value) { isSyncingTable = false; return }
+  // 清除所有勾选
+  caseTableRef.value.clearSelection()
+  console.log('[DEBUG] clearSelection called')
+  // 等 clearSelection 的 @selection-change 事件处理完
+  setTimeout(function () {
+    if (!caseTableRef.value) { isSyncingTable = false; return }
+    // 从表格当前数据中逐行勾选
+    var tableData = caseTableRef.value.data || []
+    console.log('[DEBUG] tableData length:', tableData.length, 'selectedCaseIds:', [...selectedCaseIds.value])
+    var checked = 0
+    for (var i = 0; i < tableData.length; i++) {
+      if (selectedCaseIds.value.has(tableData[i].id)) {
+        caseTableRef.value.toggleRowSelection(tableData[i], true)
+        checked++
+      }
+    }
+    console.log('[DEBUG] toggleRowSelection checked', checked, 'rows')
+    // 等所有 toggleRowSelection 的 @selection-change 事件处理完
+    setTimeout(function () {
+      isSyncingTable = false
+      console.log('[DEBUG] isSyncingTable = false, sync complete')
+    }, 100)
+  }, 100)
 }
 
-// 左侧树勾选
+// ========== 右侧表格手动勾选 ==========
+function onCaseSelectionChange(rows) {
+  console.log('[DEBUG] onCaseSelectionChange called, rows:', rows.length, 'isSyncingTable:', isSyncingTable)
+  if (isSyncingTable) {
+    console.log('[DEBUG] onCaseSelectionChange SKIPPED (isSyncingTable=true)')
+    return
+  }
+  var pageIds = currentCases.value.map(function (c) { return c.id })
+  console.log('[DEBUG] onCaseSelectionChange processing, pageIds:', pageIds, 'row ids:', rows.map(r => r.id))
+  pageIds.forEach(function (id) { selectedCaseIds.value.delete(id) })
+  rows.forEach(function (r) { selectedCaseIds.value.add(r.id) })
+  selectedCaseIds.value = new Set(selectedCaseIds.value)
+  console.log('[DEBUG] onCaseSelectionChange done, selectedCaseIds:', [...selectedCaseIds.value])
+}
+
+// ========== 左侧树勾选 ==========
 async function onTreeCheck(data, checkInfo) {
-  var checked = checkInfo.checked
+  // Element Plus @check 事件参数: (data, { checkedNodes, checkedKeys, halfCheckedNodes, halfCheckedKeys })
+  // 判断当前节点是否被勾选：看 nodeKey 是否在 checkedKeys 中
+  var checked = (checkInfo.checkedKeys || []).includes(data.nodeKey)
+  console.log('[DEBUG] onTreeCheck: label:', data.label, 'checked:', checked, 'nodeKey:', data.nodeKey)
+
+  // ★ 关键：在改变任何数据之前先设守卫
+  isSyncingTable = true
+
   if (data.isInterface) {
-    // 勾选接口 → 切换右侧到该接口，并选中/取消所有用例
+    // 勾选接口 → 切换到该接口并选中/取消所有用例
     currentInterfaceId.value = data.interfaceId
     currentInterfaceName.value = data.label
     await loadInterfaceCases(data.interfaceId)
     var cases = caseCache.value[data.interfaceId] || []
+    console.log('[DEBUG] loaded', cases.length, 'cases for interface', data.interfaceId)
     cases.forEach(function (c) {
       if (checked) selectedCaseIds.value.add(c.id)
       else selectedCaseIds.value.delete(c.id)
     })
   } else {
-    // 勾选目录 → 递归选中/取消该目录下所有接口的所有用例
+    // 勾选目录 → 递归选中/取消所有用例（同时切换右侧显示）
+    // 同时手动勾选/取消目录下的所有接口子节点
+    currentInterfaceId.value = null
+    currentInterfaceName.value = data.label + '（全部用例）'
+    var allCases = []
+    await collectCasesRecursive(data, allCases)
+    currentCases.value = allCases
+    console.log('[DEBUG] catalog: loaded', allCases.length, 'total cases')
     await selectCatalogRecursive(data, checked)
+
+    // 手动设置目录下所有接口子节点的勾选状态
+    if (treeRef.value) {
+      setChildNodesChecked(data, checked)
+    }
   }
   selectedCaseIds.value = new Set(selectedCaseIds.value)
-  syncTableSelection()
+  console.log('[DEBUG] selectedCaseIds after tree check:', [...selectedCaseIds.value])
+  scheduleSyncSelection()
+}
+
+// 递归设置目录下所有接口节点的勾选状态
+function setChildNodesChecked(node, checked) {
+  if (!treeRef.value) return
+  if (node.isInterface) {
+    treeRef.value.setChecked(node.nodeKey, checked, false)
+  }
+  if (node.children && node.children.length) {
+    for (var i = 0; i < node.children.length; i++) {
+      setChildNodesChecked(node.children[i], checked)
+    }
+  }
 }
 
 async function selectCatalogRecursive(node, checked) {
@@ -396,6 +439,7 @@ async function selectCatalogRecursive(node, checked) {
   }
 }
 
+// ========== 确定 ==========
 async function onConfirm() {
   if (!selectedCaseIds.value.size) return
   if (!props.currentInterfaceId) {
@@ -459,8 +503,14 @@ async function onConfirm() {
   overflow: auto;
 }
 
+// 关键：让标签 span 占满整个节点内容区，阻止空白区域点击冒泡到 el-tree
 .tree-node-label {
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
+  cursor: pointer;
 }
 
 .case-list-header {

@@ -174,7 +174,6 @@
                   <el-table-column :label="t('common.actions')" width="160" fixed="right">
                     <template #default="{ row }">
                       <el-button link type="primary" size="small" :icon="View" @click.stop="router.push('/cases/api/cases/' + row.id)" />
-                      <el-button link type="primary" size="small" :icon="CopyDocument" @click.stop="" />
                       <el-button link type="danger" size="small" :icon="Delete" @click.stop="deleteSingleCase(row)" />
                     </template>
                   </el-table-column>
@@ -213,7 +212,6 @@
                   <el-table-column :label="t('common.actions')" width="160" fixed="right">
                     <template #default="{ row }">
                       <el-button link type="primary" size="small" :icon="View" @click.stop="router.push('/cases/api/cases/' + row.id)" />
-                      <el-button link type="primary" size="small" :icon="CopyDocument" @click.stop="" />
                       <el-button link type="danger" size="small" :icon="Delete" @click.stop="deleteSingleCase(row)" />
                     </template>
                   </el-table-column>

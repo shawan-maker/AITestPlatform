@@ -134,6 +134,15 @@ class CaseService:
         await ApiCaseRunRecord.filter(api_case_id__in=data.case_ids).delete()
         await ApiTestCase.filter(id__in=data.case_ids).delete()
 
+    @staticmethod
+    async def _next_case_sort_order(interface_id: int, case_kind) -> int:
+        last = (
+            await ApiTestCase.filter(interface_id=interface_id, case_kind=case_kind)
+            .order_by("-sort_order")
+            .first()
+        )
+        return (last.sort_order + 1) if last else 0
+
     @classmethod
     async def reuse(cls, user: User, data: CaseReuseRequest) -> CaseReuseResult:
         """将源用例复制到目标接口下，case_kind 由调用方指定。"""
