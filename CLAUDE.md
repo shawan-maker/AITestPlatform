@@ -25,10 +25,10 @@ pytest
 pytest tests/ai_generation/test_api_generation.py  # single test file
 
 # Smoke tests (hit live backend)
-python scripts/project_smoke_test.py
-python scripts/knowledge_smoke_test.py
-python scripts/api_test_smoke_test.py
-# ... see scripts/*_smoke_test.py
+python tests/smoke/project_smoke_test.py
+python tests/smoke/knowledge_smoke_test.py
+python tests/smoke/api_test_smoke_test.py
+# ... see tests/smoke/*_smoke_test.py
 ```
 
 ### Frontend (Vue 3 + Vite, Node 18+)

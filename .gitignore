@@ -5,12 +5,16 @@ venv/
 # 环境变量与密钥
 .env
 .env.*
+!.env.example
 
 # Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+
+# 测试目录（含 smoke tests、other 等不上传的文件）
+tests/
 
 # IDE
 .idea/
@@ -19,12 +23,12 @@ __pycache__/
 # 设计文档
 service/design/
 
-# 本地数据/缓存（按需）
-rag/output/
-rag/rag_storage/
-rag/parsed/
-rag/temp/
-rag/document/
+# 本地数据/缓存
+temp/
+rag_storage/
+rag/*
+!rag/ragManager.py
+!rag/rag_api.py
 *.log
 
 # 其他文件
