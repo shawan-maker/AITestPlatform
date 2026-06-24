@@ -64,6 +64,7 @@ class DefectCommentCreateRequest(BaseModel):
 
 class DefectListItemOut(BaseModel):
     id: int
+    defect_code: str | None = None
     title: str
     severity: DefectSeverity
     priority: DefectPriority
@@ -113,6 +114,7 @@ class DefectStatusTimelineItem(BaseModel):
 
 class DefectDetailOut(BaseModel):
     id: int
+    defect_code: str | None = None
     project_id: int
     project_name: str | None = None
     module_id: int | None = None

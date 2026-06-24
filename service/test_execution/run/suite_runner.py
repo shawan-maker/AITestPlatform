@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from service.api_test.models import ApiTestCase
-from service.core.enums import CaseRunStatus, ExecStatus, RunMode, RunStatus, SuiteCaseType
+from service.core.enums import CaseRunStatus, RunMode, RunStatus, SuiteCaseType
 from service.test_environment.variable.assembler import TestEnvDataAssembler
 from service.test_execution.models import TestSuiteRun
 from service.test_execution.run.run_lock import clear_cancel_flag, is_cancel_requested
@@ -48,8 +48,6 @@ class SuiteRunner:
             case = await ApiTestCase.get_or_none(id=rel.case_id)
             if case is None:
                 return True, None
-            if case.exec_status != ExecStatus.ready:
-                return True, None
             record = await SuiteCaseRunner.run_one(
                 case=case,
                 project_id=suite.project_id,
@@ -75,6 +73,16 @@ class SuiteRunner:
             else:
                 error += 1
 
+        async def flush_progress() -> None:
+            """将当前进度增量写入 DB，供列表页实时刷新。"""
+            suite_run.passed_cases = passed
+            suite_run.failed_cases = failed
+            suite_run.error_cases = error
+            suite_run.skipped_cases = skipped
+            await suite_run.save(
+                update_fields=["passed_cases", "failed_cases", "error_cases", "skipped_cases", "updated_at"]
+            )
+
         dep_serial: list[SuiteCaseRelation] = []
         parallel_main: list[SuiteCaseRelation] = []
         for rel in relations:
@@ -89,21 +97,27 @@ class SuiteRunner:
                     cancelled = True
                     break
                 apply_result(*await run_relation(rel, serial_context))
+                await flush_progress()
 
             if not cancelled and parallel_main:
+                if is_cancel_requested(suite_run_id):
+                    cancelled = True
+                else:
 
-                async def run_parallel(rel: SuiteCaseRelation) -> tuple[bool, CaseRunStatus | None]:
-                    return await run_relation(rel, RunVarContext())
+                    async def run_parallel(rel: SuiteCaseRelation) -> tuple[bool, CaseRunStatus | None]:
+                        return await run_relation(rel, RunVarContext())
 
-                results = await asyncio.gather(*(run_parallel(r) for r in parallel_main))
-                for was_skipped, status in results:
-                    apply_result(was_skipped, status)
+                    results = await asyncio.gather(*(run_parallel(r) for r in parallel_main))
+                    for was_skipped, status in results:
+                        apply_result(was_skipped, status)
+                    await flush_progress()
         else:
             for rel in relations:
                 if is_cancel_requested(suite_run_id):
                     cancelled = True
                     break
                 apply_result(*await run_relation(rel, serial_context))
+                await flush_progress()
 
         end = datetime.now(timezone.utc)
         total = passed + failed + error + skipped
@@ -115,12 +129,24 @@ class SuiteRunner:
             total=suite_run.total_cases or total,
             cancelled=cancelled,
         )
-        suite_run.status = final_status
-        suite_run.passed_cases = passed
-        suite_run.failed_cases = failed
-        suite_run.error_cases = error
-        suite_run.skipped_cases = skipped
-        suite_run.end_time = end
-        suite_run.duration_ms = int((end - start).total_seconds() * 1000)
-        await suite_run.save()
+        # Don't overwrite cancelled status that was already set by CancelService
+        await TestSuiteRun.filter(id=suite_run_id).exclude(status=RunStatus.cancelled).update(
+            status=final_status,
+            passed_cases=passed,
+            failed_cases=failed,
+            error_cases=error,
+            skipped_cases=skipped,
+            end_time=end,
+            duration_ms=int((end - start).total_seconds() * 1000),
+        )
+        # For cancelled runs, only update progress counts and timing
+        if cancelled:
+            await TestSuiteRun.filter(id=suite_run_id).update(
+                passed_cases=passed,
+                failed_cases=failed,
+                error_cases=error,
+                skipped_cases=skipped,
+                end_time=end,
+                duration_ms=int((end - start).total_seconds() * 1000),
+            )
         clear_cancel_flag(suite_run_id)

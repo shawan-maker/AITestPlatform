@@ -108,7 +108,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: 100%;
   gap: 2px 4px;
 

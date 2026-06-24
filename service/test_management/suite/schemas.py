@@ -12,6 +12,8 @@ class SuiteListQuery(PaginationParams):
     q: str | None = None
     status: RunStatus | None = None
     type: TaskSuiteType | None = None
+    result: str | None = None  # "success" | "fail"
+    triggered_by: str | None = None  # username keyword
 
 
 class SuiteCaseItemIn(BaseModel):
@@ -46,6 +48,7 @@ class SuiteOut(BaseModel):
     type: TaskSuiteType
     module_id: int | None
     environment_id: int | None
+    environment_name: str | None = None
     run_mode: RunMode
     case_count: int = 0
     last_run: LastRunBrief

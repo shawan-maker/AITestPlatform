@@ -1,19 +1,19 @@
 <template>
   <div v-loading="loading" class="knowledge-detail-view app-card">
-    <PageHeader :title="doc?.title || t('page.knowledge.title')">
-      <template #actions>
-        <el-button @click="router.push('/docs/knowledge')">{{ t('common.back') }}</el-button>
-        <el-button v-if="canEdit" @click="showReupload = true">{{ t('page.knowledge.reupload') }}</el-button>
-        <el-button @click="showHistory = true">{{ t('page.knowledge.versionHistory') }}</el-button>
-        <el-button @click="download">{{ t('common.download') }}</el-button>
-        <el-button v-if="canEdit && canSaveInterfaces(doc)" @click="openImport">
-          {{ t('page.knowledge.saveInterfaces') }}
-        </el-button>
-        <ConfirmDelete v-if="canEdit" :message="t('page.knowledge.deleteConfirm')" @confirm="remove">
-          <el-button type="danger">{{ t('common.delete') }}</el-button>
-        </ConfirmDelete>
-      </template>
-    </PageHeader>
+    <PageHeader :title="doc?.title || t('page.knowledge.title')" />
+
+    <div class="page-toolbar">
+      <el-button @click="router.push('/docs/knowledge')">{{ t('common.back') }}</el-button>
+      <el-button v-if="canEdit" @click="showReupload = true">{{ t('page.knowledge.reupload') }}</el-button>
+      <el-button @click="showHistory = true">{{ t('page.knowledge.versionHistory') }}</el-button>
+      <el-button @click="download">{{ t('common.download') }}</el-button>
+      <el-button v-if="canEdit && canSaveInterfaces(doc)" @click="openImport">
+        {{ t('page.knowledge.saveInterfaces') }}
+      </el-button>
+      <ConfirmDelete v-if="canEdit" :message="t('page.knowledge.deleteConfirm')" @confirm="remove">
+        <el-button type="danger">{{ t('common.delete') }}</el-button>
+      </ConfirmDelete>
+    </div>
 
     <AsyncJobBanner
       :visible="isProcessing"

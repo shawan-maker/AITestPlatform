@@ -1,9 +1,6 @@
 <template>
   <div class="api-workspace app-card">
-    <PageHeader :title="t('page.apiCases.title')">
-      <template #actions>
-      </template>
-    </PageHeader>
+    <PageHeader :title="t('page.apiCases.title')" />
     <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
     <SplitView v-else :initial-width="selectedInterfaceId ? 0 : 380" :min-width="300" :max-width="560" :drawer-title="t('page.apiCases.allInterfaces')">
       <template #left>
@@ -148,6 +145,7 @@
               <el-collapse-item name="pre">
                 <template #title>
                   <span class="collapse-title">{{ t('page.apiCases.preconditionCases') }}</span>
+                  <span v-if="lastViewedMainCaseTitle && linkedPreconditionCases.length" class="collapse-subtitle">（{{ lastViewedMainCaseTitle }}）</span>
                   <el-badge :value="filteredPreconditionCases.length" type="info" class="collapse-badge" />
                   <el-button size="small" type="primary" plain @click.stop="showReusePre = true" style="margin-left: 8px">复用用例</el-button>
                 </template>
@@ -189,13 +187,21 @@
                   <el-badge :value="filteredMainCases.length" type="info" class="collapse-badge" />
                   <el-button size="small" type="primary" plain @click.stop="showReuseMain = true" style="margin-left: 8px">复用用例</el-button>
                 </template>
-                <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onMainCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
+                <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onMainCaseSelectionChange" @row-click="onMainCaseRowClick">
                   <el-table-column type="selection" width="50" />
                   <el-table-column label="#" width="55" align="center">
                     <template #default="{ $index }">{{ $index + 1 }}</template>
                   </el-table-column>
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
                     <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
+                  </el-table-column>
+                  <el-table-column :label="t('page.apiCases.preconditionCases')" min-width="180" show-overflow-tooltip>
+                    <template #default="{ row }">
+                      <template v-if="getLinkedPreconditionNames(row).length">
+                        <el-tag v-for="name in getLinkedPreconditionNames(row)" :key="name" size="small" type="info" style="margin: 2px">{{ name }}</el-tag>
+                      </template>
+                      <span v-else class="text-muted">-</span>
+                    </template>
                   </el-table-column>
                   <el-table-column prop="updated_at" :label="t('page.apiCases.updateTime')" width="170">
                     <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
@@ -325,7 +331,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onActivated, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -355,10 +361,12 @@ import {
   deleteInterface,
   fillDebugFromDoc,
   listDebugRecords,
+  getApiCase,
   getApiCatalogTree,
   getDebugTemplate,
   getDocPreview,
   getInterface,
+  batchGetApiCases,
   listApiCases,
   listDependencies,
   listInterfaces as fetchInterfaces,
@@ -389,6 +397,8 @@ import InterfaceListPanel from '@/components/api-test/InterfaceListPanel.vue'
 import CatalogMoveDialog from '@/components/tree/CatalogMoveDialog.vue'
 import { listEnvironments as fetchEnvList, listUploadedFiles } from '@/api/environment'
 
+defineOptions({ name: 'ApiTestWorkspaceView' })
+
 const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
@@ -398,9 +408,14 @@ const { canEdit } = usePermission()
 // ==================== 目录树 / 接口列表 ====================
 const catalogTree = ref([])
 const selectedCatalogId = ref(route.query.catalogId ? Number(route.query.catalogId) : null)
-const selectedInterfaceId = ref(route.query.interfaceId ? Number(route.query.interfaceId) : null)
+const selectedInterfaceId = ref(
+  route.query.interfaceId
+    ? Number(route.query.interfaceId)
+    : (sessionStorage.getItem('workspaceLastInterfaceId') ? Number(sessionStorage.getItem('workspaceLastInterfaceId')) : null)
+)
 const sidebarKeyword = ref('')
 const expandedCatalogIds = ref([])
+const runningPollTimer = ref(null)
 const interfacesByCatalog = ref({})
 const fallbackInterface = ref(null)
 
@@ -612,6 +627,9 @@ const casesLoading = ref(false)
 const caseSearchKey = ref('')
 const selectedPreCaseIds = ref([])
 const selectedMainCaseIds = ref([])
+// 当前选中主用例关联的前置用例（跨接口）
+const linkedPreconditionCases = ref([])
+const lastViewedMainCaseTitle = ref('')
 
 const selectedCaseIds = computed(function () {
   return selectedPreCaseIds.value.concat(selectedMainCaseIds.value)
@@ -860,11 +878,12 @@ var responseCodes = computed(function () {
   })
 })
 
-/** 过滤后的前置操作用例 */
+/** 过滤后的前置操作用例（优先显示当前主用例关联的前置用例） */
 var filteredPreconditionCases = computed(function () {
+  var source = linkedPreconditionCases.value.length ? linkedPreconditionCases.value : preconditionCases.value
   var kw = caseSearchKey.value.trim().toLowerCase()
-  if (!kw) return preconditionCases.value
-  return preconditionCases.value.filter(function (c) {
+  if (!kw) return source
+  return source.filter(function (c) {
     var n = c.title || c.name || ''
     return n.toLowerCase().indexOf(kw) >= 0
   })
@@ -1206,6 +1225,29 @@ function execStatusLabel(status) {
   if (s === 'running') return '运行中'
   if (s === 'pending') return '待执行'
   return status
+}
+
+function getPreconditionCount(row) {
+  var ids = (row.case_payload || {}).precondition_ids
+  return Array.isArray(ids) ? ids.length : 0
+}
+
+function getLinkedPreconditionNames(row) {
+  var ids = (row.case_payload || {}).precondition_ids
+  if (!Array.isArray(ids) || !ids.length) return []
+  // 合并当前接口前置用例 + 跨接口已加载的前置用例
+  var allCases = preconditionCases.value.concat(linkedPreconditionCases.value)
+  var caseMap = {}
+  allCases.forEach(function (c) { if (c && c.id) caseMap[c.id] = c })
+  var names = []
+  ids.forEach(function (id) {
+    var c = caseMap[id]
+    if (c) {
+      names.push(c.title || c.name || '')
+    }
+    // 找不到对应数据的 ID 不显示（可能已被删除）
+  })
+  return names
 }
 
 // ==================== Query Params 操作 ====================
@@ -1555,8 +1597,112 @@ async function loadCases() {
     ])
     preconditionCases.value = results[0].data.data?.items ?? results[0].data.data ?? []
     mainCases.value = results[1].data.data?.items ?? results[1].data.data ?? []
+    // 加载上次查看的主用例关联的前置用例
+    await loadLinkedPreconditions()
+    // 检查是否有 running 状态的用例，如有则启动轮询
+    checkRunningAndPoll()
   } finally {
     casesLoading.value = false
+  }
+}
+
+function checkRunningAndPoll() {
+  var hasRunning = mainCases.value.some(function (c) { return c.exec_status === 'running' })
+    || preconditionCases.value.some(function (c) { return c.exec_status === 'running' })
+  if (hasRunning && !runningPollTimer.value) {
+    runningPollTimer.value = setInterval(async function () {
+      try {
+        var results = await Promise.all([
+          listApiCases(selectedInterfaceId.value, { case_kind: 'precondition' }),
+          listApiCases(selectedInterfaceId.value, { case_kind: 'main' }),
+        ])
+        preconditionCases.value = results[0].data.data?.items ?? results[0].data.data ?? []
+        mainCases.value = results[1].data.data?.items ?? results[1].data.data ?? []
+        var stillRunning = mainCases.value.some(function (c) { return c.exec_status === 'running' })
+          || preconditionCases.value.some(function (c) { return c.exec_status === 'running' })
+        if (!stillRunning) {
+          clearInterval(runningPollTimer.value)
+          runningPollTimer.value = null
+          await loadLinkedPreconditions()
+        }
+      } catch (e) {
+        console.error('[Workspace] poll error:', e)
+        clearInterval(runningPollTimer.value)
+        runningPollTimer.value = null
+      }
+    }, 3000)
+  }
+}
+
+function onMainCaseRowClick(row) {
+  // 保存当前主用例 ID 到 sessionStorage（按接口隔离），用于返回时恢复前置用例列表
+  var ifaceId = selectedInterfaceId.value || 'global'
+  sessionStorage.setItem('lastViewedMainCaseId_' + ifaceId, String(row.id))
+  sessionStorage.setItem('lastViewedMainCaseTitle_' + ifaceId, row.title || row.name || '')
+  // 保存当前接口ID，返回时恢复
+  sessionStorage.setItem('workspaceLastInterfaceId', String(selectedInterfaceId.value || ''))
+  router.push('/cases/api/cases/' + row.id)
+}
+
+async function loadLinkedPreconditions() {
+  var ifaceId = selectedInterfaceId.value || 'global'
+  var caseId = sessionStorage.getItem('lastViewedMainCaseId_' + ifaceId)
+  if (!caseId) {
+    linkedPreconditionCases.value = []
+    lastViewedMainCaseTitle.value = ''
+    return
+  }
+  lastViewedMainCaseTitle.value = sessionStorage.getItem('lastViewedMainCaseTitle_' + ifaceId) || ''
+  try {
+    // 从已加载的主用例列表中查找
+    var mainCase = mainCases.value.find(function (c) { return c.id === Number(caseId) })
+    var preIds = []
+    if (mainCase && mainCase.case_payload) {
+      preIds = mainCase.case_payload.precondition_ids || []
+    } else {
+      // 主用例不在当前接口，通过 API 获取
+      var res = await getApiCase(Number(caseId))
+      var data = res.data.data
+      if (data && data.case_payload) {
+        preIds = data.case_payload.precondition_ids || []
+      }
+    }
+    if (!preIds.length) {
+      linkedPreconditionCases.value = []
+      return
+    }
+    // 先从本地列表查找
+    var localMap = {}
+    preconditionCases.value.forEach(function (c) { localMap[c.id] = c })
+    var missing = []
+    var found = []
+    preIds.forEach(function (id) {
+      if (localMap[id]) {
+        found.push(localMap[id])
+      } else {
+        missing.push(id)
+      }
+    })
+    // 跨接口加载缺失的前置用例
+    if (missing.length) {
+      try {
+        var batchRes = await batchGetApiCases(missing)
+        var remoteCases = batchRes.data.data || []
+        found = found.concat(remoteCases)
+      } catch (e) {
+        // 加载失败时用 ID 占位
+        missing.forEach(function (id) {
+          found.push({ id: id, title: 'ID:' + id, case_payload: {} })
+        })
+      }
+    }
+    // 按 precondition_ids 顺序排列
+    var orderMap = {}
+    preIds.forEach(function (id, idx) { orderMap[id] = idx })
+    found.sort(function (a, b) { return (orderMap[a.id] ?? 999) - (orderMap[b.id] ?? 999) })
+    linkedPreconditionCases.value = found
+  } catch (e) {
+    linkedPreconditionCases.value = []
   }
 }
 
@@ -1603,9 +1749,10 @@ async function deleteSingleCase(row) {
     ElMessage.success(res.data.message || t('common.deleteSuccess'))
     loadCases()
   } catch (e) {
-    if (e !== 'cancel' && e?.message !== 'cancel') {
-      ElMessage.error(e?.message || '删除失败')
-    }
+    if (e === 'cancel' || e?.message === 'cancel') return
+    // 409 引用冲突错误已由拦截器展示，不重复提示
+    if (e?.response?.status === 409) return
+    ElMessage.error(e?.message || '删除失败')
   }
 }
 
@@ -1624,9 +1771,10 @@ async function batchDeleteCases() {
     ElMessage.success(res.data.message || t('common.batchDeleteSuccess', { count: count }))
     loadCases()
   } catch (e) {
-    if (e !== 'cancel' && e?.message !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || e?.message || '批量删除失败')
-    }
+    if (e === 'cancel' || e?.message === 'cancel') return
+    // 409 引用冲突错误已由拦截器展示，不重复提示
+    if (e?.response?.status === 409) return
+    ElMessage.error(e?.response?.data?.message || e?.message || '批量删除失败')
   }
 }
 
@@ -2026,6 +2174,21 @@ onMounted(async function () {
     await loadDocPreview()
   }
 })
+
+// keep-alive 恢复时刷新数据
+onActivated(function () {
+  if (selectedInterfaceId.value) {
+    loadCases()
+  }
+})
+
+// 组件销毁时清除轮询定时器
+onUnmounted(function () {
+  if (runningPollTimer.value) {
+    clearInterval(runningPollTimer.value)
+    runningPollTimer.value = null
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -2159,6 +2322,12 @@ onMounted(async function () {
 }
 
 .collapse-title {
+  margin-right: 8px;
+}
+
+.collapse-subtitle {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
   margin-right: 8px;
 }
 

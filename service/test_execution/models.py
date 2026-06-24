@@ -207,6 +207,7 @@ class FunctionalCaseRunRecord(models.Model):
 
 class TestDefect(models.Model):
     id = fields.IntField(pk=True)
+    defect_code = fields.CharField(max_length=32, null=True, unique=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="test_defects", on_delete=fields.CASCADE
     )

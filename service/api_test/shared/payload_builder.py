@@ -43,7 +43,7 @@ def _extract_script(items: list | None) -> str:
     # Only inject if there is real code (not just comments/whitespace)
     import re
     if re.sub(r'#[^\n]*', '', combined).strip():
-        combined = "from ApiEngine import global_func\n" + combined
+        combined = "from ApiEngine.infra import global_func\n" + combined
     return combined
 
 

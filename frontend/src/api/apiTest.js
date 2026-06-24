@@ -88,12 +88,20 @@ export function deleteApiCase(id) {
   return request.delete(`/api-test/cases/${id}`)
 }
 
+export function batchGetApiCases(caseIds) {
+  return request.post('/api-test/cases/batch-get', { case_ids: caseIds })
+}
+
 export function batchDeleteApiCases(data) {
   return request.post('/api-test/cases/batch-delete', data)
 }
 
 export function reuseApiCases(data) {
   return request.post('/api-test/cases/reuse', data)
+}
+
+export function unlinkPrecondition(caseId, preId) {
+  return request.post(`/api-test/cases/${caseId}/unlink-precondition/${preId}`)
 }
 
 export function listCasesByInterfaces(interfaceIds) {
@@ -121,9 +129,14 @@ export function getGenerationStatus(interfaceId, sessionId) {
   })
 }
 
-// v2-L2: 用例调试运行（支持AbortController取消）
-export function debugRunApiCase(id, data, { signal } = {}) {
-  return request.post(`/api-test/cases/${id}/debug-run`, data, { signal })
+// v2-L2: 用例调试运行（异步触发）
+export function debugRunApiCase(id, data) {
+  return request.post(`/api-test/cases/${id}/debug-run`, data)
+}
+
+// 调试运行状态轮询
+export function getDebugRunStatus(caseId, recordId) {
+  return request.get(`/api-test/cases/${caseId}/debug-run/${recordId}`)
 }
 
 export function getApiCaseRunRecords(id) {

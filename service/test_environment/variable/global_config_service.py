@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from service.core.enums import ConfigType
 from service.core.exceptions import AppException
@@ -100,19 +101,25 @@ class ProjectGlobalConfigService:
     async def apply_engine_writeback(
         cls,
         project_id: int,
-        updates: dict[str, str],
-        deletes: list[str],
+        debug_updates: dict[str, Any],
     ) -> None:
-        for key in deletes:
-            deleted = await ProjectGlobalConfig.filter(project_id=project_id, name=key).delete()
-            if not deleted:
-                logger.info("del_global_variable no-op: key '%s' not in project global layer", key)
-        for key, value in updates.items():
-            await ProjectGlobalConfig.update_or_create(
-                defaults={"config_type": ConfigType.scalar, "value": value or ""},
-                project_id=project_id,
-                name=key,
-            )
+        """将引擎执行过程中的全局变量变更同步到数据库。
+
+        debug_updates 约定：
+        - value 非 None → 新增/更新全局变量
+        - value 为 None → 删除全局变量
+        """
+        for key, value in debug_updates.items():
+            if value is None:
+                deleted = await ProjectGlobalConfig.filter(project_id=project_id, name=key).delete()
+                if not deleted:
+                    logger.info("del_global_variable no-op: key '%s' not in project global layer", key)
+            else:
+                await ProjectGlobalConfig.update_or_create(
+                    defaults={"config_type": ConfigType.scalar, "value": str(value)},
+                    project_id=project_id,
+                    name=key,
+                )
 
     @classmethod
     def _to_out(cls, config: ProjectGlobalConfig) -> ConfigItemOut:

@@ -14,7 +14,6 @@ const show = computed(() => route.meta.projectRequired === true)
 
 <style scoped lang="scss">
 .project-context-bar {
-  width: 280px;
-  max-width: 100%;
+  flex-shrink: 0;
 }
 </style>

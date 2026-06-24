@@ -36,3 +36,29 @@ export function summarizePayload(text, maxLen = 120) {
   const s = String(text).replace(/\s+/g, ' ')
   return s.length > maxLen ? `${s.slice(0, maxLen)}…` : s
 }
+
+/**
+ * Format duration in ms to human-readable string.
+ * e.g. 61397 → "1m 1s 397ms" (en) or "1分1秒397毫秒" (zh)
+ */
+export function formatDuration(ms, locale = 'zh') {
+  if (ms == null || ms < 0) return '-'
+  if (ms === 0) return locale === 'zh' ? '0毫秒' : '0ms'
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
+  const remainder = ms % 1000
+  const parts = []
+  if (locale === 'zh') {
+    if (h) parts.push(h + '时')
+    if (m) parts.push(m + '分')
+    if (s) parts.push(s + '秒')
+    if (remainder) parts.push(remainder + '毫秒')
+  } else {
+    if (h) parts.push(h + 'h')
+    if (m) parts.push(m + 'm')
+    if (s) parts.push(s + 's')
+    if (remainder) parts.push(remainder + 'ms')
+  }
+  return parts.join(locale === 'zh' ? '' : ' ')
+}

@@ -67,7 +67,10 @@ class SuiteService:
             raise AppException("API 套件必须指定测试环境", 400)
 
     @classmethod
-    def _to_out(cls, suite: TestSuite, *, case_count: int, last_run: LastRunBrief) -> SuiteOut:
+    def _to_out(
+        cls, suite: TestSuite, *, case_count: int, last_run: LastRunBrief,
+        environment_name: str | None = None,
+    ) -> SuiteOut:
         return SuiteOut(
             id=suite.id,
             project_id=suite.project_id,
@@ -76,12 +79,24 @@ class SuiteService:
             type=suite.type,
             module_id=suite.module_id,
             environment_id=suite.environment_id,
+            environment_name=environment_name,
             run_mode=suite.run_mode,
             case_count=case_count,
             last_run=last_run,
             created_at=suite.created_at,
             updated_at=suite.updated_at,
         )
+
+    @classmethod
+    async def _resolve_env_names(cls, suite_ids: list[int]) -> dict[int, str]:
+        """Batch resolve environment names for suites."""
+        suites = await TestSuite.filter(id__in=suite_ids, environment_id__isnull=False).values("id", "environment_id")
+        env_ids = list({s["environment_id"] for s in suites if s["environment_id"]})
+        if not env_ids:
+            return {}
+        envs = await TestEnvironment.filter(id__in=env_ids).values("id", "env_name")
+        env_map = {e["id"]: e["env_name"] for e in envs}
+        return {s["id"]: env_map.get(s["environment_id"]) for s in suites if s["environment_id"]}
 
     @classmethod
     async def list(cls, user: User, query: SuiteListQuery) -> PaginatedSuites:
@@ -96,16 +111,28 @@ class SuiteService:
                 query.project_id, query.status
             )
             qs = qs.filter(id__in=suite_ids_with_status or [-1])
+        if query.result is not None:
+            suite_ids_with_result = await cls._filter_suite_ids_by_result(
+                query.project_id, query.result
+            )
+            qs = qs.filter(id__in=suite_ids_with_result or [-1])
+        if query.triggered_by:
+            suite_ids_by_executor = await cls._filter_suite_ids_by_executor(
+                query.project_id, query.triggered_by
+            )
+            qs = qs.filter(id__in=suite_ids_by_executor or [-1])
         qs = qs.order_by("-updated_at", "-id")
         total, items = await paginate(qs, query.page, query.page_size)
         suite_ids = [s.id for s in items]
         case_counts = await count_suite_cases(suite_ids)
         last_runs = await fetch_suite_last_runs(suite_ids)
+        env_names = await cls._resolve_env_names(suite_ids)
         out_items = [
             cls._to_out(
                 s,
                 case_count=case_counts.get(s.id, 0),
                 last_run=LastRunBrief(**last_run_brief_from_suite_run(last_runs.get(s.id))),
+                environment_name=env_names.get(s.id),
             )
             for s in items
         ]
@@ -123,6 +150,47 @@ class SuiteService:
         suite_ids = [s["id"] for s in suites]
         last_runs = await fetch_suite_last_runs(suite_ids)
         return [sid for sid, run in last_runs.items() if run.status == status]
+
+    @classmethod
+    async def _filter_suite_ids_by_result(
+        cls, project_id: int, result: str
+    ) -> list[int]:
+        """Filter suites by execution result: 'success' or 'fail'."""
+        suites = await TestSuite.filter(project_id=project_id).values("id")
+        suite_ids = [s["id"] for s in suites]
+        last_runs = await fetch_suite_last_runs(suite_ids)
+        matched = []
+        for sid, run in last_runs.items():
+            if result == "success":
+                if run.status == RunStatus.completed and run.total_cases > 0 and run.passed_cases == run.total_cases:
+                    matched.append(sid)
+            elif result == "fail":
+                if run.status == RunStatus.failed:
+                    matched.append(sid)
+                elif run.status == RunStatus.completed and run.total_cases > 0 and run.passed_cases < run.total_cases:
+                    matched.append(sid)
+        return matched
+
+    @classmethod
+    async def _filter_suite_ids_by_executor(
+        cls, project_id: int, keyword: str
+    ) -> list[int]:
+        """Filter suites by executor username keyword."""
+        from service.user.models import User as UserModel
+
+        users = await UserModel.filter(username__icontains=keyword.strip()).values("id")
+        user_ids = [u["id"] for u in users]
+        if not user_ids:
+            return []
+        from service.test_execution.models import TestSuiteRun
+
+        suites = await TestSuite.filter(project_id=project_id).values("id")
+        suite_ids = [s["id"] for s in suites]
+        last_runs = await fetch_suite_last_runs(suite_ids)
+        return [
+            sid for sid, run in last_runs.items()
+            if run.triggered_by_id in user_ids
+        ]
 
     @classmethod
     async def create(cls, user: User, data: SuiteCreateRequest) -> SuiteDetailOut:
@@ -154,10 +222,12 @@ class SuiteService:
         await ensure_tm_viewer(suite.project_id, user)
         case_counts = await count_suite_cases([suite.id])
         last_runs = await fetch_suite_last_runs([suite.id])
+        env_names = await cls._resolve_env_names([suite.id])
         base = cls._to_out(
             suite,
             case_count=case_counts.get(suite.id, 0),
             last_run=LastRunBrief(**last_run_brief_from_suite_run(last_runs.get(suite.id))),
+            environment_name=env_names.get(suite.id),
         )
         task_rels = await TaskSuiteRelation.filter(suite_id=suite.id).prefetch_related("task")
         bound_tasks = [

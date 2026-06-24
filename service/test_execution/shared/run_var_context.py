@@ -23,7 +23,6 @@ def prepare_runner_env(
             envs[key] = value
     env_copy["envs"] = envs
     env_copy["debug_updates"] = {}
-    env_copy["debug_deletes"] = []
     return env_copy
 
 
@@ -44,14 +43,3 @@ def sync_temp_vars_from_engine(
             temp_vars[key] = str(value) if value is not None else ""
 
 
-def collect_engine_writeback(engine_env: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
-    updates = engine_env.get("debug_updates") or {}
-    deletes = engine_env.get("debug_deletes") or []
-    if not isinstance(updates, dict):
-        updates = {}
-    if not isinstance(deletes, list):
-        deletes = []
-    return (
-        {str(k): str(v) if v is not None else "" for k, v in updates.items()},
-        [str(k) for k in deletes],
-    )

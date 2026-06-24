@@ -49,6 +49,8 @@ class DefectWriter:
                 created_by_id=user.id,
                 updated_by_id=user.id,
             )
+            defect.defect_code = f"defect-{defect.id:06d}"
+            await defect.save(update_fields=["defect_code"])
             await DefectHistoryWriter.record_created(defect.id, user)
             if comment and comment.strip():
                 c = await TestDefectComment.create(

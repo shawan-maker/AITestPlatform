@@ -1,17 +1,16 @@
+import asyncio
 import copy
 import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from ApiEngine.BaseCase import ENV
 from ApiEngine.core import TestRunner
 
 from service.core.enums import CaseRunStatus, CaseRunType
 from service.test_environment.variable.global_config_service import ProjectGlobalConfigService
 from service.test_execution.models import ApiCaseRunRecord
 from service.test_execution.shared.run_var_context import (
-    collect_engine_writeback,
     prepare_runner_env,
     sync_temp_vars_from_engine,
 )
@@ -95,6 +94,7 @@ class RunnerGateway:
         project_id: int | None = None,
         temp_vars: dict[str, str] | None = None,
         writeback_global: bool = True,
+        existing_record_id: int | None = None,
     ) -> ApiCaseRunRecord:
         base_envs = dict(test_env_data.get("envs") or {})
         runner_env = prepare_runner_env(test_env_data, temp_vars)
@@ -111,7 +111,7 @@ class RunnerGateway:
         }
         
         try:
-            result = runner.execute_cases(case_payload)
+            result = await asyncio.to_thread(runner.execute_cases, case_payload)
 
             # 解析引擎返回的详细结果
             if isinstance(result, dict):
@@ -161,41 +161,50 @@ class RunnerGateway:
         if '_debug_detail' in result:
             result['_debug_detail']['duration_ms'] = duration_ms
 
-        engine_snapshot = {
-            "envs": copy.deepcopy(dict(ENV.get("envs") or {})),
-            "debug_updates": copy.deepcopy(ENV.get("debug_updates") or {}),
-            "debug_deletes": copy.deepcopy(ENV.get("debug_deletes") or []),
-        }
+        engine_snapshot = runner.get_env_snapshot()
         if temp_vars is not None:
             sync_temp_vars_from_engine(temp_vars, base_envs, engine_snapshot)
 
         if writeback_global and project_id is not None:
-            updates, deletes = collect_engine_writeback(engine_snapshot)
-            if updates or deletes:
+            debug_updates = engine_snapshot.get("debug_updates") or {}
+            if debug_updates:
                 await ProjectGlobalConfigService.apply_engine_writeback(
-                    project_id, updates, deletes
+                    project_id, debug_updates
                 )
 
         status = map_runner_status(result if isinstance(result, dict) else {})
         safe_result = _make_json_safe(result) if isinstance(result, dict) else None
-        return await ApiCaseRunRecord.create(
-            api_case_id=api_case_id,
-            interface_id=interface_id,
-            suite_run_id=suite_run_id,
-            task_run_id=task_run_id,
-            run_type=run_type,
-            environment_id=environment_id,
-            env_snapshot_id=env_snapshot_id,
-            triggered_by_id=triggered_by_id,
-            case_name=case_name,
-            status=status,
-            case_snapshot=case_payload,
-            error_message=result.get("message") if isinstance(result, dict) else None,
-            start_time=start,
-            end_time=end,
-            duration_ms=int((end - start).total_seconds() * 1000),
-            api_requests_info=safe_result,
-        )
+        if existing_record_id:
+            # 更新已有记录（异步调试模式）
+            record = await ApiCaseRunRecord.get(id=existing_record_id)
+            record.status = status
+            record.case_snapshot = case_payload
+            record.error_message = result.get("message") if isinstance(result, dict) else None
+            record.start_time = start
+            record.end_time = end
+            record.duration_ms = int((end - start).total_seconds() * 1000)
+            record.api_requests_info = safe_result
+            await record.save()
+            return record
+        else:
+            return await ApiCaseRunRecord.create(
+                api_case_id=api_case_id,
+                interface_id=interface_id,
+                suite_run_id=suite_run_id,
+                task_run_id=task_run_id,
+                run_type=run_type,
+                environment_id=environment_id,
+                env_snapshot_id=env_snapshot_id,
+                triggered_by_id=triggered_by_id,
+                case_name=case_name,
+                status=status,
+                case_snapshot=case_payload,
+                error_message=result.get("message") if isinstance(result, dict) else None,
+                start_time=start,
+                end_time=end,
+                duration_ms=int((end - start).total_seconds() * 1000),
+                api_requests_info=safe_result,
+            )
 
     @classmethod
     async def run_interface_debug(
@@ -231,15 +240,17 @@ class RunnerGateway:
     async def run_case_debug(
         cls,
         *,
-        case,
+        case_id: int,
         environment_id: int,
         triggered_by_id: int,
+        existing_record_id: int | None = None,
     ) -> ApiCaseRunRecord:
         from service.api_test.models import ApiTestCase
         from service.test_environment.models import TestEnvironment
         from service.test_environment.variable.assembler import TestEnvDataAssembler
         from service.test_execution.case_prepare_service import prepare_case_payload
 
+        case = await ApiTestCase.get(id=case_id)
         env = await TestEnvironment.get_or_none(id=environment_id)
         test_env_data = await TestEnvDataAssembler.get_test_env_data(environment_id)
         project_id = env.project_id if env else None
@@ -274,6 +285,7 @@ class RunnerGateway:
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.debug,
             project_id=project_id,
+            existing_record_id=existing_record_id,
         )
 
         # ---- 从前置步骤独立结果更新各 DB 前置用例 ----
@@ -331,12 +343,12 @@ class RunnerGateway:
 
             if "前置完成:" in msg:
                 title = msg.split("前置完成:")[-1].strip()
-                pre_status[title] = "success"
+                pre_status.setdefault(title, "success")
             elif "前置失败:" in msg or "前置执行异常:" in msg:
                 parts = msg.split(":")
                 if len(parts) >= 2:
                     title = parts[-1].strip().split("—")[0].strip()
-                    pre_status.setdefault(title, "fail")
+                    pre_status[title] = "fail"
 
         # 更新各 DB 前置用例
         for pc in pre_cases:
@@ -346,8 +358,19 @@ class RunnerGateway:
 
             # 从 per-step 数据推断状态
             if status is None and step:
-                sc = step.get("status_code", "")
-                status = "success" if str(sc).startswith("2") else "fail"
+                # 优先使用引擎返回的 status 字段
+                status = step.get("status")
+            if status is None and step:
+                # 检查 assert_info 是否有失败的断言
+                assert_info = step.get("assert_info") or []
+                has_failed_assert = any(
+                    a.get("passed") is False for a in assert_info
+                )
+                if has_failed_assert:
+                    status = "fail"
+                else:
+                    sc = step.get("status_code", "")
+                    status = "success" if str(sc).startswith("2") else "fail"
             elif status is None:
                 status = "success" if main_record.status == CaseRunStatus.success else "fail"
 
@@ -374,3 +397,43 @@ class RunnerGateway:
             await pc.save(
                 update_fields=["exec_status", "case_payload", "updated_at"],
             )
+
+            # 为前置用例创建独立的执行记录
+            run_status = CaseRunStatus.success if status == "success" else CaseRunStatus.fail
+            # run_time 可能是数字（秒）或字符串（如 "46 ms"），需要安全解析
+            step_duration_ms = 0
+            raw_rt = step.get("run_time")
+            if raw_rt is not None:
+                if isinstance(raw_rt, (int, float)):
+                    step_duration_ms = int(raw_rt * 1000) if raw_rt < 1000 else int(raw_rt)
+                elif isinstance(raw_rt, str):
+                    import re
+                    nums = re.findall(r'[\d.]+', raw_rt)
+                    if nums:
+                        try:
+                            val = float(nums[0])
+                            step_duration_ms = int(val) if 'ms' in raw_rt.lower() else int(val * 1000)
+                        except (ValueError, OverflowError):
+                            pass
+            if not step_duration_ms and main_record.duration_ms:
+                step_duration_ms = main_record.duration_ms
+            try:
+                pre_record = await ApiCaseRunRecord.create(
+                    api_case_id=pc.id,
+                    interface_id=pc.interface_id,
+                    run_type=CaseRunType.debug,
+                    environment_id=main_record.environment_id,
+                    triggered_by_id=main_record.triggered_by_id,
+                    case_name=pc.title,
+                    status=run_status,
+                    start_time=main_record.start_time,
+                    end_time=main_record.end_time,
+                    duration_ms=step_duration_ms,
+                    api_requests_info={
+                        "_precondition_detail": step,
+                        "log_data": logs,
+                    },
+                )
+                logger.info("[debug] Created run record for precondition case %s (record_id=%s, status=%s, duration_ms=%s)", pc.id, pre_record.id, run_status, step_duration_ms)
+            except Exception as e:
+                logger.warning("Failed to create run record for precondition case %s: %s", pc.id, e)

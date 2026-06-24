@@ -1,10 +1,10 @@
 <template>
   <div v-loading="pageLoading" class="project-workspace app-card">
-    <PageHeader :title="pageTitle">
-      <template #actions>
-        <el-button @click="router.push('/projects')">{{ t('common.back') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="pageTitle" />
+
+    <div class="page-toolbar">
+      <el-button @click="router.push('/projects')">{{ t('common.back') }}</el-button>
+    </div>
 
     <el-tabs v-model="activeTab" :before-leave="onBeforeTabLeave">
       <el-tab-pane :label="t('page.projectSettings.tabBasic')" name="basic">

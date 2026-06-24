@@ -1,14 +1,9 @@
 <template>
   <div class="page-header">
-    <div class="page-header__left">
-      <ProjectContextBar />
-      <div class="page-header__title">
-        <slot name="title">{{ title }}</slot>
-      </div>
+    <div class="page-header__title">
+      <slot name="title">{{ title }}</slot>
     </div>
-    <div v-if="$slots.actions" class="page-header__actions">
-      <slot name="actions" />
-    </div>
+    <ProjectContextBar />
   </div>
 </template>
 
@@ -23,11 +18,11 @@ defineProps({
 <style scoped lang="scss">
 .page-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
-  padding: 16px 20px;
+  padding: 12px 20px;
   border-radius: $radius-md;
   background: linear-gradient(
     135deg,
@@ -40,24 +35,12 @@ defineProps({
     0 1px 3px rgba($color-primary-dark, 0.12);
 }
 
-.page-header__left {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-
 .page-header__title {
   font-size: 22px;
   font-weight: 600;
-}
-
-.page-header__actions {
-  flex-shrink: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

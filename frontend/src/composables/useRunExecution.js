@@ -7,7 +7,7 @@ import { usePolling } from './usePolling'
 /**
  * Composable for run/stop/polling logic, shared by suite and task views.
  */
-export function useRunExecution({ triggerFn, progressFn, getRunId, onStarted }) {
+export function useRunExecution({ triggerFn, progressFn, getRunId, onStarted, onComplete, onTick }) {
   const { t } = useI18n()
   const running = ref(false)
   const activeRun = ref(null)
@@ -24,7 +24,8 @@ export function useRunExecution({ triggerFn, progressFn, getRunId, onStarted }) 
       pollingInstance = usePolling(async () => {
         const pRes = await progressFn(rid)
         progress.value = pRes.data.data
-      }, { interval: 2000, until: () => !['running', 'pending'].includes(progress.value?.status) })
+        if (onTick) onTick()
+      }, { interval: 2000, until: () => !['running', 'pending'].includes(progress.value?.status), onStop: () => { if (onComplete) onComplete() } })
       pollingInstance.start()
       ElMessage.success(t('page.test.runStarted'))
       if (onStarted) onStarted()
@@ -44,5 +45,16 @@ export function useRunExecution({ triggerFn, progressFn, getRunId, onStarted }) 
     }
   }
 
-  return { running, activeRun, progress, isRunning, run, stopRun }
+  function resumePolling(rid) {
+    activeRun.value = { suite_run_id: rid, id: rid }
+    if (pollingInstance) pollingInstance.stop()
+    pollingInstance = usePolling(async () => {
+      const pRes = await progressFn(rid)
+      progress.value = pRes.data.data
+      if (onTick) onTick()
+    }, { interval: 2000, until: () => !['running', 'pending'].includes(progress.value?.status), onStop: () => { if (onComplete) onComplete() } })
+    pollingInstance.start()
+  }
+
+  return { running, activeRun, progress, isRunning, run, stopRun, resumePolling }
 }

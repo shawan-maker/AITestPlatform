@@ -1,10 +1,10 @@
 <template>
   <div v-loading="loading" class="user-detail-view app-card">
-    <PageHeader :title="user?.username || t('page.admin.users.title')">
-      <template #actions>
-        <el-button @click="router.push('/admin/users')">{{ t('common.back') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="user?.username || t('page.admin.users.title')" />
+
+    <div class="page-toolbar">
+      <el-button @click="router.push('/admin/users')">{{ t('common.back') }}</el-button>
+    </div>
 
     <el-descriptions v-if="user" :column="2" border class="user-detail-view__info">
       <el-descriptions-item label="ID">{{ user.id }}</el-descriptions-item>

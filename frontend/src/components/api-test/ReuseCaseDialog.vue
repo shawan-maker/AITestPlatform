@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="复用用例"
+    :title="mode === 'select' ? '选择用例' : '复用用例'"
     width="80vw"
     :destroy-on-close="true"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -101,8 +101,16 @@ import { useProjectScope } from '@/composables/useProjectScope'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
+  /** 'reuse' = duplicate cases to target interface; 'select' = just pick and emit */
+  mode: { type: String, default: 'reuse' },
   caseKind: { type: String, default: 'main' },
   currentInterfaceId: { type: Number, default: null },
+  /** IDs already associated — pre-checked and excluded from selection in 'select' mode */
+  preSelectedIds: { type: Array, default: () => [] },
+  /** Filter cases by case_kind (e.g. 'precondition' or 'main'). null = no filter */
+  caseKindFilter: { type: String, default: null },
+  /** Map of caseId → interfaceId for pre-selected cases, used to pre-check tree nodes */
+  preSelectedCaseMap: { type: Object, default: () => ({}) },
 })
 
 const emit = defineEmits(['update:modelValue', 'confirmed'])
@@ -205,7 +213,7 @@ function filterTree(nodes, keyword) {
 }
 
 async function onOpen() {
-  selectedCaseIds.value = new Set()
+  selectedCaseIds.value = new Set(props.preSelectedIds || [])
   currentCases.value = []
   currentInterfaceName.value = ''
   currentInterfaceId.value = null
@@ -213,6 +221,7 @@ async function onOpen() {
   treeSearchKey.value = ''
   caseSearchKey.value = ''
   await loadTree()
+  preCheckTreeNodes()
 }
 
 async function loadTree() {
@@ -245,6 +254,37 @@ async function loadAllCatalogInterfaces(nodes) {
       await loadAllCatalogInterfaces(node.children)
     }
   }
+}
+
+// ========== 预选树节点：根据 preSelectedCaseMap 勾选接口和目录节点 ==========
+function preCheckTreeNodes() {
+  if (!treeRef.value || !props.preSelectedCaseMap || !Object.keys(props.preSelectedCaseMap).length) return
+  // Collect interface IDs that contain pre-selected cases
+  var ifaceIds = new Set()
+  for (var caseId in props.preSelectedCaseMap) {
+    ifaceIds.add(props.preSelectedCaseMap[caseId])
+  }
+  // Walk tree and check matching interface nodes + their parent catalogs
+  checkTreeNodesRecursive(treeData.value, ifaceIds)
+}
+
+function checkTreeNodesRecursive(nodes, ifaceIds) {
+  if (!nodes || !treeRef.value) return false
+  var anyChecked = false
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i]
+    if (node.isInterface && ifaceIds.has(node.interfaceId)) {
+      treeRef.value.setChecked(node.nodeKey, true, false)
+      anyChecked = true
+    } else if (node.children && node.children.length) {
+      var childChecked = checkTreeNodesRecursive(node.children, ifaceIds)
+      if (childChecked) {
+        treeRef.value.setChecked(node.nodeKey, true, false)
+        anyChecked = true
+      }
+    }
+  }
+  return anyChecked
 }
 
 // ========== 点击标签：显示用例，不影响勾选 ==========
@@ -300,7 +340,9 @@ async function loadInterfaceCases(interfaceId) {
   }
   casesLoading.value = true
   try {
-    var res = await listApiCases(interfaceId, { page: 1, page_size: 200 })
+    var params = { page: 1, page_size: 200 }
+    if (props.caseKindFilter) params.case_kind = props.caseKindFilter
+    var res = await listApiCases(interfaceId, params)
     var cases = res.data.data?.items ?? res.data.data ?? []
     caseCache.value[interfaceId] = cases
     currentCases.value = cases
@@ -439,9 +481,54 @@ async function selectCatalogRecursive(node, checked) {
   }
 }
 
+// ========== 接口信息查找表 ==========
+const interfaceLookup = computed(function () {
+  var map = {}
+  var catalogs = interfacesByCatalog.value
+  for (var catId in catalogs) {
+    var ifaces = catalogs[catId]
+    for (var i = 0; i < ifaces.length; i++) {
+      map[ifaces[i].id] = {
+        summary: ifaces[i].summary || ifaces[i].name || null,
+        path: ifaces[i].path || null,
+        method: ifaces[i].method || null,
+      }
+    }
+  }
+  return map
+})
+
 // ========== 确定 ==========
 async function onConfirm() {
+  // select 模式：发射选中用例 + 已加载的全部用例 ID，由调用方合并（允许空选择以清空前置操作）
+  if (props.mode === 'select') {
+    var lookup = interfaceLookup.value
+    var selected = []
+    var allLoadedIds = []
+    for (var ifaceId in caseCache.value) {
+      var cases = caseCache.value[ifaceId]
+      var ifaceInfo = lookup[ifaceId] || {}
+      for (var i = 0; i < cases.length; i++) {
+        allLoadedIds.push(cases[i].id)
+        if (selectedCaseIds.value.has(cases[i].id)) {
+          selected.push({
+            id: cases[i].id,
+            title: cases[i].title,
+            interface_name: ifaceInfo.summary || null,
+            interface_path: ifaceInfo.path || null,
+            interface_method: ifaceInfo.method || null,
+          })
+        }
+      }
+    }
+    emit('confirmed', selected, allLoadedIds)
+    emit('update:modelValue', false)
+    return
+  }
+
   if (!selectedCaseIds.value.size) return
+
+  // reuse 模式：调用复用 API
   if (!props.currentInterfaceId) {
     ElMessage.warning('未选择目标接口')
     return

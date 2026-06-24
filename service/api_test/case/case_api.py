@@ -136,6 +136,28 @@ async def delete_case(
     return success(message="用例删除成功")
 
 
+@router.post("/cases/{case_id}/unlink-precondition/{pre_id}", summary="解除前置用例关联")
+async def unlink_precondition(
+    case_id: int,
+    pre_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    await CaseService.unlink_precondition(user, case_id, pre_id)
+    return success(message="前置关联已移除")
+
+
+@router.post("/cases/batch-get", summary="批量获取用例")
+async def batch_get_cases(
+    body: dict,
+    user: User = Depends(get_current_active_user),
+):
+    case_ids = body.get("case_ids", [])
+    if not case_ids:
+        return success(data=[])
+    data = await CaseService.batch_get(user, case_ids)
+    return success(data=data)
+
+
 @router.post("/cases/batch-delete", summary="批量删除用例")
 async def batch_delete_cases(
     body: CaseBatchDeleteRequest,
@@ -164,13 +186,23 @@ async def list_cases_by_interfaces(
     return success(data=data)
 
 
-@router.post("/cases/{case_id}/debug-run", summary="单用例调试")
+@router.post("/cases/{case_id}/debug-run", summary="单用例调试（异步触发）")
 async def debug_run_case(
     case_id: int,
     body: CaseDebugRunRequest,
     user: User = Depends(get_current_active_user),
 ):
-    data = await CaseService.debug_run(user, case_id, environment_id=body.environment_id)
+    data = await CaseService.trigger_debug_run(user, case_id, environment_id=body.environment_id)
+    return success(data=data)
+
+
+@router.get("/cases/{case_id}/debug-run/{record_id}", summary="调试运行状态轮询")
+async def get_debug_run_status(
+    case_id: int,
+    record_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    data = await CaseService.get_debug_run_status(user, case_id, record_id)
     return success(data=data)
 
 

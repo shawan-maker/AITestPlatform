@@ -12,7 +12,7 @@ from service.test_execution.report.schemas import (
 )
 from service.test_execution.shared.summary_calculator import format_pass_rate, pass_rate
 from service.test_management.permissions import ensure_tm_viewer
-from service.test_management.models import TestSuite, TestTask
+from service.test_management.models import SuiteCaseRelation, TestSuite, TestTask
 from service.user.models import User
 
 
@@ -65,22 +65,65 @@ class ReportService:
         return [DefectSeverityChart(severity=k, count=v) for k, v in counts.items()]
 
     @classmethod
-    async def _list_case_runs_for_suite(cls, suite_run_id: int) -> list[CaseRunDetailOut]:
-        records = await ApiCaseRunRecord.filter(suite_run_id=suite_run_id).order_by("id")
-        return [
-            CaseRunDetailOut(
-                id=r.id,
-                case_id=r.api_case_id,
-                case_name=r.case_name,
-                status=r.status,
-                duration_ms=r.duration_ms,
-                error_message=r.error_message,
-                defect_id=r.defect_id,
-                start_time=r.start_time,
-                end_time=r.end_time,
+    async def _list_case_runs_for_suite(cls, suite_run_id: int, suite_id: int | None = None) -> list[CaseRunDetailOut]:
+        records = await ApiCaseRunRecord.filter(suite_run_id=suite_run_id).order_by("id").prefetch_related(
+            "interface", "defect"
+        )
+        result = []
+        seen_case_ids: set[int] = set()
+        for r in records:
+            iface = r.interface
+            defect = r.defect
+            if r.api_case_id:
+                seen_case_ids.add(r.api_case_id)
+            result.append(
+                CaseRunDetailOut(
+                    id=r.id,
+                    case_id=r.api_case_id,
+                    case_name=r.case_name,
+                    status=r.status.value if hasattr(r.status, "value") else str(r.status),
+                    duration_ms=r.duration_ms,
+                    error_message=r.error_message,
+                    defect_id=r.defect_id,
+                    defect_title=defect.title if defect else None,
+                    defect_code=defect.defect_code if defect else None,
+                    external_key=defect.external_key if defect else None,
+                    interface_method=iface.method if iface else None,
+                    interface_path=iface.path if iface else None,
+                    start_time=r.start_time,
+                    end_time=r.end_time,
+                )
             )
-            for r in records
-        ]
+        # Add not-started cases (in suite but without run records)
+        if suite_id is not None:
+            relations = await SuiteCaseRelation.filter(suite_id=suite_id).order_by("case_order", "id")
+            from service.api_test.models import ApiTestCase, ApiInterface
+
+            for rel in relations:
+                if rel.case_id in seen_case_ids:
+                    continue
+                case = await ApiTestCase.get_or_none(id=rel.case_id)
+                if case is None:
+                    continue
+                seen_case_ids.add(rel.case_id)
+                iface = await ApiInterface.get_or_none(id=case.interface_id) if case.interface_id else None
+                result.append(
+                    CaseRunDetailOut(
+                        id=0,
+                        case_id=case.id,
+                        case_name=case.title or case.name or "",
+                        status="pending",
+                        duration_ms=None,
+                        error_message=None,
+                        defect_id=None,
+                        defect_title=None,
+                        interface_method=iface.method if iface else None,
+                        interface_path=iface.path if iface else None,
+                        start_time=None,
+                        end_time=None,
+                    )
+                )
+        return result
 
     @classmethod
     async def get_suite_report(cls, user: User, suite_run_id: int) -> SuiteReportOut:
@@ -102,11 +145,25 @@ class ReportService:
             end_time=suite_run.end_time,
             duration_ms=suite_run.duration_ms,
         )
-        cases = await cls._list_case_runs_for_suite(suite_run_id)
+        cases = await cls._list_case_runs_for_suite(suite_run_id, suite_id=suite.id)
         chart = await cls._defect_chart_for_run(suite_run_id, is_task=False)
+        # Resolve triggered_by name
+        triggered_by_name = None
+        if suite_run.triggered_by_id:
+            trigger_user = await User.get_or_none(id=suite_run.triggered_by_id)
+            triggered_by_name = trigger_user.username if trigger_user else None
+        # Resolve task name
+        task_name = None
+        if suite_run.run_task_id:
+            task_run = await TestTaskRun.get_or_none(id=suite_run.run_task_id)
+            if task_run:
+                task = await TestTask.get_or_none(id=task_run.task_id)
+                task_name = task.task_name if task else None
         return SuiteReportOut(
             suite_run_id=suite_run_id,
             suite_name=suite.suite_name,
+            task_name=task_name,
+            triggered_by_name=triggered_by_name,
             summary=summary,
             cases=cases,
             defect_chart=chart,

@@ -168,6 +168,7 @@ class RunMode(str, Enum):
 
 
 class DefectSeverity(str, Enum):
+    minor = "minor"
     normal = "normal"
     serious = "serious"
     critical = "critical"
@@ -215,6 +216,7 @@ class SuiteCaseType(str, Enum):
 
 
 class CaseRunStatus(str, Enum):
+    running = "running"
     success = "success"
     fail = "fail"
     error = "error"

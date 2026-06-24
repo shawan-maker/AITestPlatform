@@ -63,7 +63,7 @@ class TaskRunner:
 
         end = datetime.now(timezone.utc)
         total = total_passed + total_failed + total_error + total_skipped
-        task_run.status = compute_run_status(
+        final_status = compute_run_status(
             passed=total_passed,
             failed=total_failed,
             error=total_error,
@@ -71,6 +71,9 @@ class TaskRunner:
             total=task_run.total_cases or total,
             cancelled=cancelled,
         )
+        # Don't overwrite cancelled status that was already set by CancelService
+        if not cancelled:
+            task_run.status = final_status
         task_run.passed_cases = total_passed
         task_run.failed_cases = total_failed
         task_run.error_cases = total_error

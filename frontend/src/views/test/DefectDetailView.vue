@@ -1,12 +1,12 @@
 <template>
   <div v-loading="loading" class="defect-detail-view app-card">
-    <PageHeader :title="defect?.title || t('page.defects.title')">
-      <template #actions>
-        <el-button @click="router.push('/test/defects')">{{ t('common.back') }}</el-button>
-        <el-button v-if="canEdit" @click="startEdit">{{ t('common.edit') }}</el-button>
-        <el-button v-if="canEdit" type="primary" @click="showTransition = true">{{ t('page.defects.transition') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="defect?.title || t('page.defects.title')" />
+
+    <div class="page-toolbar">
+      <el-button @click="router.push('/test/defects')">{{ t('common.back') }}</el-button>
+      <el-button v-if="canEdit" @click="startEdit">{{ t('common.edit') }}</el-button>
+      <el-button v-if="canEdit" type="primary" @click="showTransition = true">{{ t('page.defects.transition') }}</el-button>
+    </div>
 
     <template v-if="defect">
       <!-- 基本信息 -->

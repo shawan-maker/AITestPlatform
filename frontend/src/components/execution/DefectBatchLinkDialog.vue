@@ -11,8 +11,24 @@
       <el-form-item v-if="mode === 'external_key'" :label="t('execution.externalKey')">
         <el-input v-model="externalKey" :placeholder="t('execution.externalKeyPlaceholder')" />
       </el-form-item>
-      <el-form-item v-else :label="t('page.defects.title')">
-        <el-input-number v-model="defectId" :min="1" />
+      <el-form-item v-else :label="t('execution.linkDefect')">
+        <el-select
+          v-model="defectId"
+          filterable
+          remote
+          :remote-method="searchDefects"
+          :loading="searching"
+          :placeholder="t('page.defects.searchTitle')"
+          style="width: 100%"
+          @focus="searchDefects('')"
+        >
+          <el-option
+            v-for="d in defectOptions"
+            :key="d.id"
+            :label="(d.defect_code || '#' + d.id) + ' - ' + d.title"
+            :value="d.id"
+          />
+        </el-select>
       </el-form-item>
     </el-form>
     <template #footer>
@@ -25,6 +41,8 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { listDefects } from '@/api/testManagement'
+import { useProjectScope } from '@/composables/useProjectScope'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -34,6 +52,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit'])
 const { t } = useI18n()
+const { projectId } = useProjectScope()
 
 const visible = computed({
   get: () => props.modelValue,
@@ -43,14 +62,30 @@ const visible = computed({
 const mode = ref('external_key')
 const externalKey = ref('')
 const defectId = ref(null)
+const defectOptions = ref([])
+const searching = ref(false)
 
 watch(visible, (v) => {
   if (v) {
     mode.value = 'external_key'
     externalKey.value = ''
     defectId.value = null
+    defectOptions.value = []
   }
 })
+
+async function searchDefects(query) {
+  if (!projectId.value) return
+  searching.value = true
+  try {
+    var res = await listDefects({ project_id: projectId.value, page: 1, page_size: 50, q: query || undefined })
+    defectOptions.value = res.data.data?.items ?? []
+  } catch (e) {
+    defectOptions.value = []
+  } finally {
+    searching.value = false
+  }
+}
 
 function submit() {
   const payload = { case_run_ids: props.caseRunIds }

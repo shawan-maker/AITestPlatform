@@ -10,7 +10,7 @@ from service.core.enums import (
 
 
 class DefectCreateRequest(BaseModel):
-    project_id: int = Field(ge=1)
+    project_id: int | None = Field(default=None, ge=1)
     module_id: int | None = None
     title: str = Field(min_length=1, max_length=255)
     steps: str | None = None
@@ -35,6 +35,7 @@ class DefectBatchLinkRequest(BaseModel):
 
 class DefectOut(BaseModel):
     id: int
+    defect_code: str | None = None
     title: str
     severity: DefectSeverity
     priority: DefectPriority

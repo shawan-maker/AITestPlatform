@@ -62,44 +62,77 @@ async def is_token_revoked(jti: str) -> bool:
     client = await get_redis()
     if client is None:
         return False
-    return bool(await client.exists(_revoked_key(jti)))
+    try:
+        return bool(await client.exists(_revoked_key(jti)))
+    except Exception as exc:
+        logger.warning("Redis 查询 token 黑名单失败，降级放行: %s", exc)
+        await _reset_redis()
+        return False
 
 
 async def revoke_token(jti: str, ttl_seconds: int) -> None:
     client = await get_redis()
     if client is None:
         return
-    await client.setex(_revoked_key(jti), max(ttl_seconds, 1), "1")
+    try:
+        await client.setex(_revoked_key(jti), max(ttl_seconds, 1), "1")
+    except Exception as exc:
+        logger.warning("Redis 写入 token 黑名单失败: %s", exc)
+        await _reset_redis()
 
 
 async def invalidate_user_tokens(user_id: int) -> None:
     client = await get_redis()
     if client is None:
         return
-    now = int(time.time())
-    await client.setex(
-        _user_invalid_before_key(user_id),
-        _user_invalidation_ttl(),
-        str(now),
-    )
+    try:
+        now = int(time.time())
+        await client.setex(
+            _user_invalid_before_key(user_id),
+            _user_invalidation_ttl(),
+            str(now),
+        )
+    except Exception as exc:
+        logger.warning("Redis 用户 token 失效标记写入失败: %s", exc)
+        await _reset_redis()
 
 
 async def is_user_token_invalidated(user_id: int, token_iat: Any) -> bool:
     client = await get_redis()
     if client is None:
         return False
-    invalid_before = await client.get(_user_invalid_before_key(user_id))
-    if not invalid_before:
+    try:
+        invalid_before = await client.get(_user_invalid_before_key(user_id))
+        if not invalid_before:
+            return False
+        token_ts = _normalize_timestamp(token_iat)
+        if token_ts is None:
+            return False
+        return token_ts < float(invalid_before)
+    except Exception as exc:
+        logger.warning("Redis 查询用户 token 失效标记失败，降级放行: %s", exc)
+        await _reset_redis()
         return False
-    token_ts = _normalize_timestamp(token_iat)
-    if token_ts is None:
-        return False
-    return token_ts < float(invalid_before)
 
 
 async def close_redis() -> None:
     global _redis_client, _redis_checked
     if _redis_client is not None:
-        await _redis_client.aclose()
+        try:
+            await _redis_client.aclose()
+        except Exception:
+            pass
+        _redis_client = None
+    _redis_checked = False
+
+
+async def _reset_redis() -> None:
+    """连接异常时重置缓存，下次 get_redis() 会重新连接。"""
+    global _redis_client, _redis_checked
+    if _redis_client is not None:
+        try:
+            await _redis_client.aclose()
+        except Exception:
+            pass
         _redis_client = None
     _redis_checked = False

@@ -181,7 +181,7 @@ class ApiTestCase(models.Model):
 
     class Meta:
         table = "api_test_case"
-        unique_together = (("interface_id", "title"),)
+        unique_together = (("interface_id", "case_kind", "title"),)
         indexes = (
             ("project_id", "module_id", "exec_status"),
             ("interface_id", "case_kind"),

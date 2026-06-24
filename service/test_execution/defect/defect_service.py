@@ -78,13 +78,31 @@ class RunDefectService:
 
     @classmethod
     async def create(cls, user: User, data: DefectCreateRequest) -> DefectOut:
-        await ensure_tm_editor(data.project_id, user)
+        # Resolve project_id from run records if not provided
+        project_id = data.project_id
+        if project_id is None:
+            if data.case_run_id:
+                record = await ApiCaseRunRecord.get_or_none(id=data.case_run_id)
+                if record and record.api_case_id:
+                    from service.api_test.models import ApiTestCase
+                    case = await ApiTestCase.get_or_none(id=record.api_case_id)
+                    if case:
+                        project_id = case.project_id
+            if project_id is None and data.functional_run_id:
+                frecord = await FunctionalCaseRunRecord.get_or_none(id=data.functional_run_id)
+                if frecord:
+                    await frecord.fetch_related("functional_case")
+                    if frecord.functional_case:
+                        project_id = frecord.functional_case.project_id
+            if project_id is None:
+                raise AppException("无法确定项目，请提供 project_id", 400)
+        await ensure_tm_editor(project_id, user)
         defect_category = data.defect_category or await cls._infer_category(data)
-        module_id = await cls._resolve_module_id(data, data.project_id)
+        module_id = await cls._resolve_module_id(data, project_id)
 
         defect = await DefectWriter.create_from_run(
             user,
-            project_id=data.project_id,
+            project_id=project_id,
             module_id=module_id,
             title=data.title,
             defect_category=defect_category,

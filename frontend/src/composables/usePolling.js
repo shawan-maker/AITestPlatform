@@ -1,12 +1,13 @@
 import { onUnmounted } from 'vue'
 
-export function usePolling(fn, { interval = 2500, until = () => false } = {}) {
+export function usePolling(fn, { interval = 2500, until = () => false, onStop } = {}) {
   let timer = null
 
   function stop() {
     if (timer) {
       clearInterval(timer)
       timer = null
+      if (onStop) onStop()
     }
   }
 

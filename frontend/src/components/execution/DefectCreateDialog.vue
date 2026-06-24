@@ -1,7 +1,7 @@
 <template>
   <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.defects.create')" width="640px">
     <el-form label-width="100px">
-      <el-form-item :label="t('page.defects.title')" required>
+      <el-form-item :label="t('page.defects.defectTitle')" required>
         <el-input v-model="form.title" />
       </el-form-item>
       <el-form-item :label="t('page.defects.category')">

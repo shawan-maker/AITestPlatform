@@ -1,7 +1,7 @@
 from service.core.enums import RunStatus
 from service.core.exceptions import AppException
 from service.test_execution.models import TestSuiteRun, TestTaskRun
-from service.test_execution.run.run_lock import clear_cancel_flag, request_cancel
+from service.test_execution.run.run_lock import request_cancel
 from service.test_management.permissions import ensure_tm_editor
 
 
@@ -17,7 +17,6 @@ class CancelService:
             request_cancel(run_id)
             suite_run.status = RunStatus.cancelled
             await suite_run.save(update_fields=["status", "updated_at"])
-            clear_cancel_flag(run_id)
             return
 
         task_run = await TestTaskRun.get_or_none(id=run_id)
@@ -29,7 +28,6 @@ class CancelService:
             request_cancel(run_id)
             task_run.status = RunStatus.cancelled
             await task_run.save(update_fields=["status", "updated_at"])
-            clear_cancel_flag(run_id)
             return
 
         raise AppException("运行记录不存在", 404)

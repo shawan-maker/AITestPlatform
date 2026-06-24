@@ -28,10 +28,15 @@ class CaseRunDetailOut(BaseModel):
     id: int
     case_id: int | None
     case_name: str
-    status: CaseRunStatus
-    duration_ms: int | None
+    status: str  # CaseRunStatus or "pending" for not-started cases
+    duration_ms: int | None = None
     error_message: str | None = None
     defect_id: int | None = None
+    defect_title: str | None = None
+    defect_code: str | None = None
+    external_key: str | None = None
+    interface_method: str | None = None
+    interface_path: str | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
 
@@ -47,6 +52,8 @@ class SuiteReportSection(BaseModel):
 class SuiteReportOut(BaseModel):
     suite_run_id: int
     suite_name: str
+    task_name: str | None = None
+    triggered_by_name: str | None = None
     summary: ReportSummaryOut
     cases: list[CaseRunDetailOut]
     defect_chart: list[DefectSeverityChart] = []

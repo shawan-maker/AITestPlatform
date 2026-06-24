@@ -26,15 +26,16 @@
         </el-table-column>
         <el-table-column prop="status" label="结果" width="80">
           <template #default="{ row }">
-            <el-tag :type="statusTagType(row.status)" size="small">{{ row.status }}</el-tag>
+            <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="duration_ms" label="耗时" width="80">
-          <template #default="{ row }">{{ row.duration_ms || 0 }}ms</template>
+        <el-table-column prop="duration_ms" :label="t('execution.duration')" width="150">
+          <template #default="{ row }">{{ row.status === 'running' ? '-' : formatDuration(row.duration_ms, locale) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="80">
           <template #default="{ row }">
-            <el-button link type="primary" @click="viewRecord(row)">查看</el-button>
+            <el-button v-if="row.status !== 'running'" link type="primary" @click="viewRecord(row)">查看</el-button>
+            <span v-else class="running-text">执行中</span>
           </template>
         </el-table-column>
       </el-table>
@@ -46,7 +47,7 @@
         <el-button link type="primary" @click="selectedRecord = null">← 返回列表</el-button>
         <span class="drawer-detail-meta">
           <el-tag :type="statusTagType(selectedRecord.status)" size="small">{{ selectedRecord.status }}</el-tag>
-          {{ formatTime(selectedRecord.created_at) }} &nbsp; 耗时: {{ selectedRecord.duration_ms || 0 }}ms
+          {{ formatTime(selectedRecord.created_at) }} &nbsp; {{ t('execution.duration') }}: {{ formatDuration(selectedRecord.duration_ms, locale) }}
           <template v-if="selectedRecord.triggered_by_username"> &nbsp; 操作人: {{ selectedRecord.triggered_by_username }}</template>
         </span>
       </div>
@@ -64,8 +65,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import ApiResponsePanel from './ApiResponsePanel.vue'
+import { formatDuration } from '@/utils/format'
+
+const { t, locale } = useI18n()
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -87,7 +92,16 @@ const detailLogData = ref([])
 function statusTagType(status) {
   if (status === 'success') return 'success'
   if (status === 'fail') return 'warning'
+  if (status === 'running') return 'info'
   return 'danger'
+}
+
+function statusLabel(status) {
+  if (status === 'running') return '执行中'
+  if (status === 'success') return '成功'
+  if (status === 'fail') return '失败'
+  if (status === 'error') return '错误'
+  return status
 }
 
 function formatTime(val) {
@@ -163,5 +177,10 @@ function viewRecord(row) {
     font-size: 13px;
     color: var(--el-text-color-secondary);
   }
+}
+
+.running-text {
+  font-size: 12px;
+  color: var(--el-color-info);
 }
 </style>

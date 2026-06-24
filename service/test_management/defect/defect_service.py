@@ -58,6 +58,7 @@ class DefectService:
     ) -> DefectListItemOut:
         return DefectListItemOut(
             id=defect.id,
+            defect_code=defect.defect_code,
             title=defect.title,
             severity=defect.severity,
             priority=defect.priority,
@@ -179,6 +180,7 @@ class DefectService:
 
         return DefectDetailOut(
             id=defect.id,
+            defect_code=defect.defect_code,
             project_id=defect.project_id,
             project_name=project.name if project else None,
             module_id=defect.module_id,

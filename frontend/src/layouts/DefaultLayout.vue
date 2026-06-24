@@ -9,7 +9,11 @@
         <span class="default-layout__mobile-title">{{ t('common.appNameShort') }}</span>
       </header>
       <main class="default-layout__main" :class="{ 'default-layout__main--flush-bottom': route.meta.flushBottom }">
-        <router-view />
+        <router-view v-slot="{ Component }">
+          <keep-alive :include="['ApiTestWorkspaceView']">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
 

@@ -1,7 +1,7 @@
 from tortoise.expressions import Q
 
 from service.api_test.models import ApiTestCase
-from service.core.enums import ExecStatus, TaskSuiteType
+from service.core.enums import TaskSuiteType
 from service.core.pagination import paginate
 from service.functional_test.case.models import FunctionalCase
 from service.project.models import ProjectModule
@@ -27,21 +27,24 @@ class PickerService:
     async def list_api_cases(cls, user: User, query: ApiCasePickerQuery) -> PaginatedApiCasePicker:
         await ensure_tm_viewer(query.project_id, user)
         qs = ApiTestCase.filter(
-            project_id=query.project_id, exec_status=ExecStatus.ready
-        ).order_by("-updated_at", "-id")
+            project_id=query.project_id
+        ).select_related("interface").order_by("-updated_at", "-id")
         if query.q:
             kw = query.q.strip()
-            qs = qs.filter(Q(title__icontains=kw))
+            qs = qs.filter(
+                Q(title__icontains=kw)
+                | Q(interface__summary__icontains=kw)
+                | Q(interface__path__icontains=kw)
+            )
         total, items = await paginate(qs, query.page, query.page_size)
         out: list[ApiCasePickerOut] = []
         for case in items:
             iface_name = iface_path = iface_method = None
-            if case.interface_id:
-                iface = await case.interface
-                if iface:
-                    iface_name = iface.summary
-                    iface_path = iface.path
-                    iface_method = iface.method
+            if case.interface_id and case.interface:
+                iface = case.interface
+                iface_name = iface.summary
+                iface_path = iface.path
+                iface_method = iface.method
             out.append(
                 ApiCasePickerOut(
                     id=case.id,

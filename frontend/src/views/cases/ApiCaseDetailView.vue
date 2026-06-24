@@ -100,6 +100,17 @@
           </el-dropdown>
         </div>
 
+        <!-- 前置操作面板（仅主用例显示） -->
+        <PreconditionPanel
+          v-if="isMainCase"
+          :precondition-ids="preconditionIds"
+          :interface-id="caseDetail?.interface_id"
+          :case-id="caseDetail?.id"
+          :all-precondition-cases="preconditionCases"
+          :refresh-key="preconditionRefreshKey"
+          @update:precondition-ids="onPreconditionIdsUpdate"
+        />
+
         <!-- 请求面板 -->
         <ApiRequestPanel
           v-model:method="debugForm.method"
@@ -163,10 +174,12 @@ import {
 } from '@element-plus/icons-vue'
 import ApiRequestPanel from '@/components/api-test/ApiRequestPanel.vue'
 import ApiResponsePanel from '@/components/api-test/ApiResponsePanel.vue'
+import PreconditionPanel from '@/components/api-test/PreconditionPanel.vue'
 import SplitView from '@/components/common/SplitView.vue'
 import ExecRecordsDrawer from '@/components/api-test/ExecRecordsDrawer.vue'
 import {
   debugRunApiCase,
+  getDebugRunStatus,
   getApiCase,
   getApiCaseRunRecords,
   listApiCases,
@@ -195,6 +208,30 @@ const preconditionCases = ref([])
 const mainCases = ref([])
 const batchMode = ref(false)
 const expandedSections = reactive({ pre: true, main: true })
+const preconditionRefreshKey = ref(0)
+
+/* ---- 前置操作关联 ---- */
+const isMainCase = computed(function () {
+  return caseDetail.value && caseDetail.value.case_kind === 'main'
+})
+const preconditionIds = computed(function () {
+  if (!caseDetail.value || !caseDetail.value.case_payload) return []
+  return caseDetail.value.case_payload.precondition_ids || []
+})
+
+async function onPreconditionIdsUpdate(newIds) {
+  try {
+    var payload = Object.assign({}, caseDetail.value.case_payload || {})
+    payload.precondition_ids = newIds
+    var res = await updateApiCase(caseId.value, { case_payload: payload })
+    if (res.data.data && res.data.data.case_payload) {
+      caseDetail.value.case_payload = res.data.data.case_payload
+    }
+    ElMessage.success(t('common.saved'))
+  } catch (err) {
+    ElMessage.error(err.message || '保存失败')
+  }
+}
 
 function toggleSection(key) {
   expandedSections[key] = !expandedSections[key]
@@ -223,7 +260,8 @@ const debugForm = reactive({
   path: '',
 })
 const running = ref(false)
-const debugAbortController = ref(null)
+const debugPolling = ref(false)
+const debugPollTimer = ref(null)
 
 /* ---- 子Tab ---- */
 var subTabs = [
@@ -287,8 +325,10 @@ const logData = ref([])
 
 /* ---- 方法 ---- */
 function dotClass(status) {
+  if (status === 'running') return 'dot-running'
   if (status === 'success') return 'dot-success'
-  if (status === 'failed') return 'dot-failed'
+  if (status === 'fail' || status === 'failed') return 'dot-failed'
+  if (status === 'error') return 'dot-error'
   return 'dot-pending'
 }
 
@@ -577,25 +617,46 @@ async function runDebug() {
   // 先保存修改后的内容，再调试
   try {
     var payload = buildCasePayload()
-    await updateApiCase(caseId.value, { case_payload: payload })
+    var saveRes = await updateApiCase(caseId.value, { case_payload: payload })
+    if (saveRes.data.data && saveRes.data.data.case_payload) {
+      caseDetail.value.case_payload = saveRes.data.data.case_payload
+    }
   } catch (err) {
     ElMessage.error('保存失败: ' + (err.message || ''))
     return
   }
   running.value = true
-  var controller = new AbortController()
-  debugAbortController.value = controller
+  // 清空上一次的结果
+  execResult.value = null
+  responseHeaders.value = {}
+  requestHeaders.value = {}
+  extractResultData.value = []
+  assertResultData.value = []
+  logData.value = []
+
+  // 乐观更新：将主用例和前置操作用例状态设为 running（不可变替换，确保 Vue 响应）
+  caseDetail.value = Object.assign({}, caseDetail.value, { exec_status: 'running' })
+  preconditionCases.value = preconditionCases.value.map(function (c) {
+    return Object.assign({}, c, { exec_status: 'running' })
+  })
+  preconditionRefreshKey.value++
+
   try {
-    var res = await debugRunApiCase(
-      caseId.value,
-      { environment_id: caseEnvId.value },
-      { signal: controller.signal }
-    )
-    var data = res.data.data
+    // 异步触发调试运行
+    var triggerRes = await debugRunApiCase(caseId.value, { environment_id: caseEnvId.value })
+    var recordId = triggerRes.data.data.record_id
+
+    // 刷新执行记录列表（显示"执行中"记录）
+    refreshRunRecords()
+
+    // 轮询直到完成
+    debugPolling.value = true
+    var data = await pollDebugRunStatus(caseId.value, recordId)
+
+    // 执行完成，填充结果
     var detail = data.api_requests_info || {}
     var respInfo = detail.response_info || {}
     var reqInfo = detail.request_info || {}
-    // 更新 ApiResponsePanel 的 props
     execResult.value = {
       success: data.status === 'success',
       status_code: respInfo.status_code || '',
@@ -618,44 +679,71 @@ async function runDebug() {
         passed: a.passed !== undefined ? a.passed : true,
       }
     })
-    // 日志
     var logRaw = detail.log_data || []
     logData.value = logRaw.map(function (item) {
       if (Array.isArray(item)) return { level: item[0] || 'INFO', message: item.slice(1).join(' ') }
       return { level: item.level || 'INFO', message: item.message || String(item) }
     })
-    // 刷新执行记录列表
-    try {
-      var recRes = await getApiCaseRunRecords(caseId.value)
-      runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
-    } catch (e) { /* 忽略记录刷新失败 */ }
-    // 刷新前置操作用例列表（调试可能更新了前置用例的执行状态和结果）
-    try {
-      if (caseDetail.value && caseDetail.value.interface_id) {
-        var preRes = await listApiCases(caseDetail.value.interface_id, { case_kind: 'precondition' })
-        preconditionCases.value = preRes.data.data ? (preRes.data.data.items || preRes.data.data) : []
-      }
-    } catch (e) { /* 忽略前置用例刷新失败 */ }
+    // 刷新执行记录列表和前置操作用例
+    refreshRunRecords()
+    refreshPreconditionCases()
   } catch (err) {
-    if (err.name === 'AbortError') {
-      execResult.value = { success: false, status_code: '', duration_ms: 0, method: '', url: '', error_message: '调试已取消' }
-      responseResultText.value = '调试已取消'
-    } else if (err?.response?.status === 404) {
+    if (err?.response?.status === 404) {
       ElMessage.warning(err?.response?.data?.message || '用例已被删除，请返回列表')
       router.push({ path: '/cases/api', query: route.query })
     } else {
-      throw err
+      ElMessage.error(err?.message || '调试执行失败')
+      execResult.value = { success: false, status_code: '', duration_ms: 0, method: '', url: '', error_message: err?.message || '调试执行失败' }
     }
   } finally {
     running.value = false
-    debugAbortController.value = null
+    debugPolling.value = false
+    await refreshPreconditionCases()
+    preconditionRefreshKey.value++
   }
 }
 
-function cancelDebug() {
-  if (debugAbortController.value) {
-    debugAbortController.value.abort()
+async function pollDebugRunStatus(caseIdVal, recordId) {
+  var maxAttempts = 300  // 最多轮询 5 分钟（每秒 1 次）
+  for (var i = 0; i < maxAttempts; i++) {
+    await new Promise(function (resolve) {
+      debugPollTimer.value = setTimeout(resolve, 1000)
+    })
+    if (!debugPolling.value) {
+      throw new Error('调试已取消')
+    }
+    var res = await getDebugRunStatus(caseIdVal, recordId)
+    var data = res.data.data
+    if (data.status !== 'running') {
+      return data
+    }
   }
+  throw new Error('调试执行超时')
+}
+
+function cancelDebug() {
+  debugPolling.value = false
+  if (debugPollTimer.value) {
+    clearTimeout(debugPollTimer.value)
+    debugPollTimer.value = null
+  }
+}
+
+async function refreshRunRecords() {
+  if (!caseId.value || isNaN(caseId.value)) return
+  try {
+    var recRes = await getApiCaseRunRecords(caseId.value)
+    runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
+  } catch (e) { /* 忽略 */ }
+}
+
+async function refreshPreconditionCases() {
+  try {
+    if (caseDetail.value && caseDetail.value.interface_id) {
+      var preRes = await listApiCases(caseDetail.value.interface_id, { case_kind: 'precondition' })
+      preconditionCases.value = preRes.data.data ? (preRes.data.data.items || preRes.data.data) : []
+    }
+  } catch (e) { /* 忽略 */ }
 }
 
 function buildCasePayload() {
@@ -706,7 +794,10 @@ function buildCasePayload() {
 async function saveDebug() {
   try {
     var payload = buildCasePayload()
-    await updateApiCase(caseId.value, { case_payload: payload })
+    var res = await updateApiCase(caseId.value, { case_payload: payload })
+    if (res.data.data && res.data.data.case_payload) {
+      caseDetail.value.case_payload = res.data.data.case_payload
+    }
     ElMessage.success(t('common.saved'))
   } catch (err) {
     ElMessage.error(err.message || '保存失败')
@@ -866,9 +957,11 @@ watch(caseId, function (newId) {
       height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
+      &.dot-running { background-color: var(--el-color-primary); animation: dot-pulse 1s ease-in-out infinite; }
       &.dot-success { background-color: var(--el-color-success); }
       &.dot-failed { background-color: var(--el-color-danger); }
-      &.dot-pending { background-color: var(--el-color-warning); }
+      &.dot-error { background-color: var(--el-color-warning); }
+      &.dot-pending { background-color: var(--el-text-color-placeholder); }
     }
 
     .item-name {
@@ -1156,5 +1249,10 @@ watch(caseId, function (newId) {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>

@@ -1,14 +1,14 @@
 <template>
   <div v-loading="loading" class="task-detail-view app-card">
-    <PageHeader :title="task?.task_name || t('page.test.tasks.title')">
-      <template #actions>
-        <el-button @click="router.push('/test/tasks')">{{ t('common.back') }}</el-button>
-        <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
-        <el-button v-if="canEdit && activeRun && isRunning" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
-        <el-button v-if="canEdit && isManual" type="warning" @click="startManualRun">{{ t('page.test.manualRun') }}</el-button>
-        <el-button v-if="canEdit && !isManual" type="primary" :loading="running" @click="run(taskId)">{{ t('page.test.run') }}</el-button>
-      </template>
-    </PageHeader>
+    <PageHeader :title="task?.task_name || t('page.test.tasks.title')" />
+
+    <div class="page-toolbar">
+      <el-button @click="router.push('/test/tasks')">{{ t('common.back') }}</el-button>
+      <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
+      <el-button v-if="canEdit && activeRun && isRunning" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
+      <el-button v-if="canEdit && isManual" type="warning" @click="startManualRun">{{ t('page.test.manualRun') }}</el-button>
+      <el-button v-if="canEdit && !isManual" type="primary" :loading="running" @click="run(taskId)">{{ t('page.test.run') }}</el-button>
+    </div>
 
     <el-tabs v-model="activeTab">
       <!-- 基本信息 -->
@@ -184,6 +184,7 @@ const { running, activeRun, progress, isRunning, run, stopRun } = useRunExecutio
   progressFn: getTaskProgress,
   getRunId: (r) => r.task_run_id ?? r.run_id ?? r.id,
   onStarted: () => { activeTab.value = 'history'; load() },
+  onComplete: () => { load() },
 })
 
 // Shared: report viewer
