@@ -20,7 +20,7 @@ const AUTH_SKIP_PATHS = ['/auth/login', '/auth/register', '/auth/refresh']
 
 const service = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
-  timeout: 60000,
+  timeout: 300000,
 })
 
 function shouldSkipAuth(url = '') {
@@ -35,7 +35,7 @@ async function doRefreshToken() {
   const res = await axios.post(
     `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
     { refresh_token: refresh },
-    { timeout: 60000 },
+    { timeout: 300000 },
   )
   const payload = res.data
   if (payload && typeof payload.code === 'number' && !isApiSuccess(payload.code)) {

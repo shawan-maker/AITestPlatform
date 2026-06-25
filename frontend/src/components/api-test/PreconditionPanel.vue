@@ -9,7 +9,9 @@
     <div v-show="!collapsed" class="precondition-body">
       <el-table :key="'pre-' + refreshKey" v-if="preconditionList.length" :data="preconditionList" size="small" border>
         <el-table-column type="index" :label="t('common.index') || '序号'" :width="60" align="center" />
-        <el-table-column prop="title" :label="t('page.functional.caseName') || '用例名称'" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="title" :label="t('page.functional.caseName') || '用例名称'" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">{{ stripTitleSuffix(row.title) }}</template>
+        </el-table-column>
         <el-table-column :label="t('page.defects.interfaceName') || '接口'" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ getCaseInterfaceName(row) }}</template>
         </el-table-column>
@@ -191,6 +193,11 @@ const filteredConfigCases = computed(function () {
     return (c.title || '').toLowerCase().indexOf(kw) >= 0
   })
 })
+
+function stripTitleSuffix(title) {
+  if (!title) return ''
+  return title.replace(/[（(][^）)]*[）)]$/, '').trim() || title
+}
 
 function dotClass(status) {
   if (status === 'running') return 'dot-running'

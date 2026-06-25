@@ -470,114 +470,12 @@ class ApiCaseGenerationService:
             created_case_ids: list[int] = []
             run_errors: list[str] = []
 
-            # 未选择环境：跳过预执行，直接创建 DB 记录，状态为 pending
-            if not environment_id:
-                logger.info("[预执行] session=%s 未选择环境，跳过预执行，直接保存", session.id)
-                # 创建 precondition 用例
-                precondition_map = await cls._create_precondition_cases(
-                    interface=iface,
-                    base_cases=base_cases,
-                    selected_indexes=[idx for idx, _ in selected_items],
-                    precoditions_api_doc=precoditions_api_doc,
-                    environment_id=None,
-                    test_env_data=None,
-                    user_id=user.id,
-                    session_id=session.id,
-                )
-                async with in_transaction():
-                    sort_base = await cls._next_case_sort_order(iface.id, ApiCaseKind.main)
-                    for order, (idx, base) in enumerate(selected_items):
-                        base_row = await ApiBaseCase.create(
-                            project_id=iface.project_id,
-                            interface_id=iface.id,
-                            name=str(base.get("name") or f"基础用例-{idx}"),
-                            steps=base.get("steps") or [],
-                            dependencies=base.get("dependencies"),
-                            expected=base.get("expected") or [],
-                            status=ApiBaseCaseStatus.draft,
-                            source=SourceType.ai,
-                            generation_session_id=session.id,
-                            created_by_id=user.id,
-                        )
-                        created_base_ids.append(base_row.id)
-                        case_row = await ApiTestCase.create(
-                            project_id=iface.project_id,
-                            module_id=iface.module_id,
-                            base_case_id=base_row.id,
-                            interface_id=iface.id,
-                            title=str(base.get("name") or base_row.name),
-                            case_kind=ApiCaseKind.main,
-                            sort_order=sort_base + order,
-                            case_payload={
-                                "title": base.get("name", ""),
-                                "method": getattr(iface, "method", "GET"),
-                                "path": getattr(iface, "path", ""),
-                                "headers": {},
-                                "query": {},
-                                "body": None,
-                                "assertions": [
-                                    {"target": exp, "method": "contains", "expected": ""}
-                                    for exp in (base.get("expected") or [])
-                                ],
-                                "steps": base.get("steps") or [],
-                                "expected": base.get("expected") or [],
-                                "preconditions": [],
-                                "precondition_ids": [
-                                    precondition_map[cls._clean_dependency_name(str(d).strip())]
-                                    for d in (base.get("dependencies") or [])
-                                    if cls._clean_dependency_name(str(d).strip()) in precondition_map
-                                ] if precondition_map else [],
-                            },
-                            review_status=ReviewStatus.init,
-                            exec_status=ExecStatus.pending,
-                            environment_id=None,
-                            generation_session_id=session.id,
-                            created_by_id=user.id,
-                            updated_by_id=user.id,
-                        )
-                        created_case_ids.append(case_row.id)
+            # ═══════════════════════════════════════════════════════
+            # Phase 1: LLM 结构化（所有用例，含/不含环境都走此路径）
+            # ═══════════════════════════════════════════════════════
+            logger.info("[confirm] session=%s Phase1: 开始 LLM 结构化 %d 个用例", session.id, len(selected_items))
 
-                session.output_payload["confirm_result"] = {
-                    "created_base_case_ids": created_base_ids,
-                    "created_case_ids": created_case_ids,
-                    "run_errors": [],
-                    "created_interface_id": created_interface_id,
-                    "created_precondition_ids": list(precondition_map.values()) if precondition_map else [],
-                }
-                session.output_payload["confirm_progress"]["completed"] = len(selected_items)
-                session.status = SessionStatus.success
-                session.finished_at = datetime.now(timezone.utc)
-                await session.save(update_fields=["status", "output_payload", "finished_at"])
-                logger.info("[预执行] session=%s 直接保存完成, cases=%d", session.id, len(created_case_ids))
-                return
-
-            # 选择了环境：执行预执行流程
-            from service.test_execution.env_loader import load_test_env_data
-            test_env_data = await load_test_env_data(environment_id)
-            logger.info("[预执行] session=%s 环境数据加载完成", session.id)
-
-            # 定义进度回调 — 在线程中执行，通过 run_coroutine_threadsafe 持久化到 DB
-            loop = asyncio.get_running_loop()
-
-            def on_progress(completed, total, item):
-                progress = session.output_payload.get("confirm_progress", {})
-                progress["completed"] = completed
-                progress["stage"] = "executing"
-                for pi in progress.get("items", []):
-                    if pi.get("index") == item.get("index"):
-                        pi["status"] = item.get("status", "pending")
-                        pi["error"] = item.get("error")
-                session.output_payload["confirm_progress"] = progress
-                # 异步持久化进度到 DB（不阻塞线程）
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        session.save(update_fields=["output_payload"]),
-                        loop,
-                    )
-                except Exception:
-                    pass  # 持久化失败不影响执行
-
-            # 当正式依赖文档为空时，从 DB 按 base_case dependencies 名称查找接口文档
+            # 补充前置依赖接口文档
             if not precoditions_api_doc:
                 from service.api_test.shared.payload_builder import enrich_preconditions_api_doc
                 all_dep_names: list[str] = []
@@ -598,36 +496,40 @@ class ApiCaseGenerationService:
                     )
                     for found in found_ifaces:
                         precoditions_api_doc.append(interface_to_doc_dict(found))
-                    logger.info(
-                        "[预执行] precoditions_api_doc 原为空, 从 DB 补充 %d 个接口文档",
-                        len(precoditions_api_doc),
-                    )
+                    logger.info("[confirm] 从 DB 补充 %d 个接口文档", len(precoditions_api_doc))
+
+            # 加载环境数据（有环境时用于传给 LLM 做变量引用）
+            test_env_data = None
+            if environment_id:
+                from service.test_execution.env_loader import load_test_env_data
+                test_env_data = await load_test_env_data(environment_id)
+
+            # 调用 LLM 结构化（skip_execution=True：只生成结构化用例，不执行）
+            # 创建进度回调：每个用例完成后更新 session 进度供前端轮询
+            loop = asyncio.get_running_loop()
+
+            def _on_progress(completed: int, total: int, item: dict):
+                """在 to_thread 线程中调用，更新 session 进度。"""
+                session.output_payload["confirm_progress"]["completed"] = completed
+                session.output_payload["confirm_progress"]["total"] = total
+                asyncio.run_coroutine_threadsafe(
+                    session.save(update_fields=["output_payload"]),
+                    loop,
+                )
 
             pre_run_results = await cls._pre_run_selected_base_cases(
                 selected_items=selected_items,
                 api_doc=api_doc,
                 precoditions_api_doc=precoditions_api_doc,
-                environment_id=environment_id,
+                environment_id=environment_id or 0,
                 project_id=iface.project_id,
                 test_env_data=test_env_data,
-                progress_callback=on_progress,
+                skip_execution=True,
+                progress_callback=_on_progress,
             )
+            logger.info("[confirm] session=%s Phase1: LLM 结构化完成, results=%d", session.id, len(pre_run_results))
 
-            logger.info(
-                "[预执行] session=%s 预执行完成, results=%d",
-                session.id, len(pre_run_results),
-            )
-            for r in pre_run_results:
-                logger.info(
-                    "[预执行]   case[%d] review=%s error=%s",
-                    r.index, r.review_status, r.error,
-                )
-                logger.info(
-                    "[预执行]   case[%d] api_case keys=%s",
-                    r.index, list(r.api_case.keys()) if isinstance(r.api_case, dict) else type(r.api_case),
-                )
-
-            # 收集 AI 生成的前置步骤（按 title 去重）
+            # 收集 AI 生成的前置步骤
             ai_precondition_map: dict[str, dict] = {}
             for r in pre_run_results:
                 if not isinstance(r.api_case, dict):
@@ -638,13 +540,11 @@ class ApiCaseGenerationService:
                     title = (pre.get("title") or "").strip()
                     if title and title not in ai_precondition_map:
                         ai_precondition_map[title] = pre
-            if ai_precondition_map:
-                logger.info(
-                    "[预执行] 收集到 %d 个 AI 前置步骤: %s",
-                    len(ai_precondition_map), list(ai_precondition_map.keys()),
-                )
 
-            # 创建 precondition 用例（优先使用 AI 数据）
+            # ★ 变量对齐：修正分布式 LLM 生成导致的变量名不一致
+            cls._align_variable_names(ai_precondition_map, pre_run_results)
+
+            # 创建前置操作用例
             precondition_map = await cls._create_precondition_cases(
                 interface=iface,
                 base_cases=base_cases,
@@ -657,20 +557,16 @@ class ApiCaseGenerationService:
                 ai_precondition_map=ai_precondition_map,
             )
 
-            # 从 workflow 预执行结果中提取前置步骤独立执行数据，更新 DB 前置用例
-            if precondition_map:
-                await cls._update_precondition_results_from_pre_run(
-                    precondition_map, pre_run_results,
-                )
+            # ═══════════════════════════════════════════════════════
+            # Phase 1 续: 保存结构化用例到 DB
+            # ═══════════════════════════════════════════════════════
+            initial_exec_status = ExecStatus.running if environment_id else ExecStatus.pending
 
-            # 创建 DB 记录
             async with in_transaction():
                 sort_base = await cls._next_case_sort_order(iface.id, ApiCaseKind.main)
                 for order, pre_result in enumerate(pre_run_results):
                     idx = pre_result.index
                     base = base_cases[idx]
-                    if pre_result.error:
-                        run_errors.append(pre_result.error)
 
                     base_row = await ApiBaseCase.create(
                         project_id=iface.project_id,
@@ -686,15 +582,9 @@ class ApiCaseGenerationService:
                     )
                     created_base_ids.append(base_row.id)
 
-                    # 构建主用例 payload；DB 前置用例已创建时移除 AI 内嵌前置步骤
-                    main_exec_result = dict(pre_result.exec_result or {})
-                    main_payload = {
-                        **pre_result.api_case,
-                        "_exec_result": main_exec_result,
-                    }
+                    main_payload = dict(pre_result.api_case) if isinstance(pre_result.api_case, dict) else {}
                     if precondition_map:
                         main_payload["preconditions"] = []
-                        # 记录该主用例关联的前置用例 ID
                         dep_names = [cls._clean_dependency_name(str(d).strip()) for d in (base.get("dependencies") or [])]
                         main_payload["precondition_ids"] = [
                             precondition_map[n] for n in dep_names if n in precondition_map
@@ -705,18 +595,12 @@ class ApiCaseGenerationService:
                         module_id=iface.module_id,
                         base_case_id=base_row.id,
                         interface_id=iface.id,
-                        title=str(pre_result.api_case.get("title") or base_row.name),
+                        title=str(pre_result.api_case.get("title") or base.get("name") or base_row.name) if isinstance(pre_result.api_case, dict) else base_row.name,
                         case_kind=ApiCaseKind.main,
                         sort_order=sort_base + order,
                         case_payload=main_payload,
-                        review_status=pre_result.review_status,
-                        exec_status=ExecStatus.success
-                        if pre_result.review_status == ReviewStatus.success
-                        else ExecStatus.fail
-                        if pre_result.review_status == ReviewStatus.fail
-                        else ExecStatus.error
-                        if pre_result.review_status == ReviewStatus.error
-                        else ExecStatus.pending,
+                        review_status=pre_result.review_status if isinstance(pre_result.review_status, ReviewStatus) else ReviewStatus.init,
+                        exec_status=initial_exec_status,
                         environment_id=environment_id,
                         generation_session_id=session.id,
                         created_by_id=user.id,
@@ -724,106 +608,33 @@ class ApiCaseGenerationService:
                     )
                     created_case_ids.append(case_row.id)
 
-            # 为预执行创建测试记录
-            from service.test_execution.models import ApiCaseRunRecord
-            from datetime import datetime as _dt
-
-            # 为主用例创建测试记录
-            for order, pre_result in enumerate(pre_run_results):
-                if order >= len(created_case_ids):
-                    break
-                case_id = created_case_ids[order]
-                er = pre_result.exec_result or {}
-                if isinstance(er, dict) and "cases" in er:
-                    cases_list = er.get("cases") or []
-                    er = cases_list[0] if cases_list else {}
-
-                review = pre_result.review_status
-                run_status = (
-                    CaseRunStatus.success if review == ReviewStatus.success
-                    else CaseRunStatus.fail if review == ReviewStatus.fail
-                    else CaseRunStatus.error
-                )
-                case_title = ""
-                if isinstance(pre_result.api_case, dict):
-                    case_title = pre_result.api_case.get("title", "")
-
-                try:
-                    await ApiCaseRunRecord.create(
-                        api_case_id=case_id,
-                        interface_id=iface.id,
-                        run_type=CaseRunType.debug,
-                        environment_id=environment_id,
-                        triggered_by_id=user.id,
-                        case_name=case_title or f"用例-{case_id}",
-                        status=run_status,
-                        case_snapshot=pre_result.api_case if isinstance(pre_result.api_case, dict) else None,
-                        error_message=pre_result.error,
-                        start_time=_dt.now(timezone.utc),
-                        end_time=_dt.now(timezone.utc),
-                        duration_ms=0,
-                        api_requests_info=er if isinstance(er, dict) else None,
-                    )
-                except Exception as exc:
-                    logger.warning("[预执行] 创建主用例测试记录失败 case_id=%s: %s", case_id, exc)
-
-            # 为前置操作用例创建测试记录
-            if precondition_map:
-                # 从预执行结果中收集 per-step 数据
-                pre_step_data_all: dict[str, dict] = {}
-                for pre_result in pre_run_results:
-                    er = pre_result.exec_result or {}
-                    if isinstance(er, dict) and "cases" in er:
-                        cases_list = er.get("cases") or []
-                        er = cases_list[0] if cases_list else {}
-                    if isinstance(er, dict):
-                        for ps in (er.get("precondition_results") or []):
-                            t = (ps.get("title") or "").strip()
-                            if t:
-                                pre_step_data_all[t] = ps
-
-                for dep_name, pre_id in precondition_map.items():
-                    step = pre_step_data_all.get(dep_name, {})
-                    sc = step.get("status_code", "")
-                    pre_status = (
-                        CaseRunStatus.success if str(sc).startswith("2")
-                        else CaseRunStatus.fail if sc
-                        else CaseRunStatus.error
-                    )
-                    try:
-                        await ApiCaseRunRecord.create(
-                            api_case_id=pre_id,
-                            interface_id=iface.id,
-                            run_type=CaseRunType.debug,
-                            environment_id=environment_id,
-                            triggered_by_id=user.id,
-                            case_name=dep_name,
-                            status=pre_status,
-                            case_snapshot=step or None,
-                            start_time=_dt.now(timezone.utc),
-                            end_time=_dt.now(timezone.utc),
-                            duration_ms=0,
-                            api_requests_info=step if step else None,
-                        )
-                    except Exception as exc:
-                        logger.warning("[预执行] 创建前置用例测试记录失败 pre_id=%s: %s", pre_id, exc)
-
-            # 更新 session 为完成状态
+            # Phase 1 完成：标记 session 为 success，前端可关闭弹窗
             session.output_payload["confirm_result"] = {
                 "created_base_case_ids": created_base_ids,
                 "created_case_ids": created_case_ids,
-                "run_errors": run_errors,
+                "run_errors": [],
                 "created_interface_id": created_interface_id,
                 "created_precondition_ids": list(precondition_map.values()) if precondition_map else [],
             }
             session.output_payload["confirm_progress"]["completed"] = len(selected_items)
+            session.output_payload["confirm_progress"]["stage"] = "structuring_done"
             session.status = SessionStatus.success
             session.finished_at = datetime.now(timezone.utc)
             await session.save(update_fields=["status", "output_payload", "finished_at"])
-            logger.info(
-                "[预执行] session=%s 完成, created_cases=%d, errors=%d",
-                session.id, len(created_case_ids), len(run_errors),
-            )
+            logger.info("[confirm] session=%s Phase1 完成, cases=%d, 状态=success", session.id, len(created_case_ids))
+
+            # ═══════════════════════════════════════════════════════
+            # Phase 2: 异步预执行（仅在有环境时）
+            # ═══════════════════════════════════════════════════════
+            if environment_id and created_case_ids:
+                asyncio.create_task(
+                    cls._execute_cases_async(
+                        case_ids=created_case_ids,
+                        environment_id=environment_id,
+                        user_id=user.id,
+                    )
+                )
+                logger.info("[confirm] session=%s Phase2: 已启动异步预执行 %d 个用例", session.id, len(created_case_ids))
 
         except Exception as exc:
             logger.exception("后台预执行失败 session=%s", session.id)
@@ -1312,6 +1123,166 @@ class ApiCaseGenerationService:
             cases = json.loads(cases)
         return cases if isinstance(cases, list) else []
 
+    @staticmethod
+    def _align_variable_names(
+        ai_precondition_map: dict[str, dict],
+        pre_run_results: list,
+    ) -> None:
+        """后处理：对齐主用例中的变量引用与前置依赖中保存的变量名。
+
+        分布式 LLM 生成时，不同批次可能对同一变量使用不同命名（如 reg_phone vs reg_mobile）。
+        匹配策略：利用 API 参数名作为上下文 —— 如果两个变量都被用在同一个 API 参数上
+        （如 phone 参数），则它们一定是同一变量，无需同义词枚举。
+        """
+        if not ai_precondition_map:
+            return
+
+        var_pattern = re.compile(r'\$\{([^}]+)\}')
+
+        # ── 1. 从前置依赖中提取：变量名 → 使用该变量的 API 参数名集合 ──
+        #    例如 reg_phone → {"phone"}  (因为 request.data.phone = ${reg_phone})
+        saved_var_contexts: dict[str, set[str]] = {}
+        for title, pre in ai_precondition_map.items():
+            # 提取 setup_script 中保存的变量
+            script = pre.get("setup_script") or ""
+            saved_in_this = set()
+            for m in re.finditer(r'test\.save_env_variable\s*\(\s*["\']([^"\']+)["\']', script):
+                saved_in_this.add(m.group(1))
+
+            # 提取 request 中引用这些变量的参数名
+            request = pre.get("request") or {}
+            for section in ("data", "params", "json"):
+                body = request.get(section)
+                if not isinstance(body, dict):
+                    continue
+                for param_name, param_value in body.items():
+                    if not isinstance(param_value, str):
+                        continue
+                    for ref in var_pattern.findall(param_value):
+                        if ref in saved_in_this:
+                            saved_var_contexts.setdefault(ref, set()).add(param_name.lower())
+
+            # headers 中的引用也记录
+            headers = pre.get("headers") or {}
+            if isinstance(headers, dict):
+                for header_name, header_value in headers.items():
+                    if isinstance(header_value, str):
+                        for ref in var_pattern.findall(header_value):
+                            if ref in saved_in_this:
+                                saved_var_contexts.setdefault(ref, set()).add(
+                                    f"header:{header_name.lower()}"
+                                )
+
+        if not saved_var_contexts:
+            logger.info("[变量对齐] 前置依赖中未找到带上下文的变量，跳过")
+            return
+
+        logger.info(
+            "[变量对齐] 前置依赖变量上下文: %s",
+            {k: list(v) for k, v in saved_var_contexts.items()},
+        )
+
+        # ── 2. 遍历每个主用例，对未匹配的引用按参数上下文查找对应的已保存变量 ──
+        total_replacements = 0
+
+        for result in pre_run_results:
+            case = result.api_case if hasattr(result, 'api_case') else None
+            if not isinstance(case, dict):
+                continue
+
+            # 收集此用例本地的变量（自身 setup_script 保存的）
+            local_vars: set[str] = set()
+            for sf in ('setup_script', 'teardown_script'):
+                for m in re.finditer(
+                    r'test\.save_env_variable\s*\(\s*["\']([^"\']+)["\']',
+                    case.get(sf) or "",
+                ):
+                    local_vars.add(m.group(1))
+
+            all_known = set(saved_var_contexts.keys()) | local_vars
+
+            # 扫描 request 中的参数引用
+            request = case.get("request") or {}
+            for section in ("data", "params", "json"):
+                body = request.get(section)
+                if not isinstance(body, dict):
+                    continue
+                for param_name, param_value in body.items():
+                    if not isinstance(param_value, str):
+                        continue
+                    refs = var_pattern.findall(param_value)
+                    for ref in refs:
+                        if ref in all_known:
+                            continue
+                        # 用参数名作为上下文去匹配（仅精确匹配，避免 phone_code 误匹配到 phone）
+                        ctx = param_name.lower()
+                        best_match = None
+                        for saved_var, saved_ctxs in saved_var_contexts.items():
+                            if ctx in saved_ctxs:
+                                best_match = saved_var
+                                break
+                        if best_match and best_match != ref:
+                            old = "${" + ref + "}"
+                            new = "${" + best_match + "}"
+                            body[param_name] = param_value.replace(old, new)
+                            total_replacements += 1
+                            logger.info(
+                                "[变量对齐] 用例 '%s' 参数 %s: %s → %s",
+                                case.get("title", "?"), param_name, old, new,
+                            )
+
+            # 扫描 headers
+            headers = case.get("headers") or {}
+            if isinstance(headers, dict):
+                for header_name, header_value in list(headers.items()):
+                    if not isinstance(header_value, str):
+                        continue
+                    refs = var_pattern.findall(header_value)
+                    for ref in refs:
+                        if ref in all_known:
+                            continue
+                        ctx = f"header:{header_name.lower()}"
+                        for saved_var, saved_ctxs in saved_var_contexts.items():
+                            if ctx in saved_ctxs:
+                                old = "${" + ref + "}"
+                                new = "${" + saved_var + "}"
+                                headers[header_name] = header_value.replace(old, new)
+                                total_replacements += 1
+                                logger.info(
+                                    "[变量对齐] 用例 '%s' header %s: %s → %s",
+                                    case.get("title", "?"), header_name, old, new,
+                                )
+                                break
+
+            # 扫描 setup_script / teardown_script 中的引用（无参数上下文，仅做精确匹配补充）
+            for sf in ('setup_script', 'teardown_script'):
+                script = case.get(sf) or ""
+                for ref in var_pattern.findall(script):
+                    if ref in all_known:
+                        continue
+                    # 无上下文时，尝试基于变量名部分匹配（回退到简单拆分）
+                    ref_parts = set(re.split(r'[_\-]', ref.lower()))
+                    for saved_var, saved_ctxs in saved_var_contexts.items():
+                        known_parts = set(re.split(r'[_\-]', saved_var.lower()))
+                        common = ref_parts & known_parts
+                        meaningful = {p for p in common if len(p) >= 3}
+                        if meaningful and len(meaningful) >= len(ref_parts) * 0.5:
+                            old = "${" + ref + "}"
+                            new = "${" + saved_var + "}"
+                            script = script.replace(old, new)
+                            total_replacements += 1
+                            logger.info(
+                                "[变量对齐] 用例 '%s' %s: %s → %s",
+                                case.get("title", "?"), sf, old, new,
+                            )
+                            break
+                case[sf] = script
+
+        if total_replacements > 0:
+            logger.info("[变量对齐] 共替换 %d 处变量引用", total_replacements)
+        else:
+            logger.info("[变量对齐] 无需替换")
+
     @classmethod
     async def _pre_run_selected_base_cases(
         cls,
@@ -1323,6 +1294,7 @@ class ApiCaseGenerationService:
         project_id: int,
         test_env_data: dict | None = None,
         progress_callback=None,
+        skip_execution: bool = False,
     ):
         if api_test_gen_use_mock():
             return [
@@ -1346,6 +1318,7 @@ class ApiCaseGenerationService:
 
         indices = [idx for idx, _ in selected_items]
         base_cases = [base for _, base in selected_items]
+
         return await asyncio.to_thread(
             concurrent_pre_run_base_cases,
             base_cases,
@@ -1357,7 +1330,56 @@ class ApiCaseGenerationService:
             test_env_data=test_env_data,
             additional_info=build_default_additional_info(),
             progress_callback=progress_callback,
+            skip_execution=skip_execution,
+            max_workers=None,
         )
+
+    @classmethod
+    async def _execute_cases_async(
+        cls,
+        *,
+        case_ids: list[int],
+        environment_id: int,
+        user_id: int,
+    ) -> None:
+        """Phase 2: 异步并发执行已保存的用例，更新 exec_status。
+
+        使用 asyncio.Semaphore 控制并发数（MAX_BATCH_SIZE），
+        所有用例同时发起执行，但最多只有 MAX_BATCH_SIZE 个在运行。
+        """
+        from service.api_test.models import ApiTestCase
+        from service.api_test.shared.runner_gateway import RunnerGateway
+        from config.settings import MAX_BATCH_SIZE
+        from service.core.enums import ExecStatus
+
+        logger.info("[Phase2] 开始异步并发执行 %d 个用例, max_workers=%d", len(case_ids), MAX_BATCH_SIZE)
+        sem = asyncio.Semaphore(MAX_BATCH_SIZE)
+
+        async def _run_one(case_id: int):
+            async with sem:
+                try:
+                    record = await RunnerGateway.run_case_debug(
+                        case_id=case_id,
+                        environment_id=environment_id,
+                        triggered_by_id=user_id,
+                    )
+                    if record.status == CaseRunStatus.success:
+                        new_status = ExecStatus.success
+                    elif record.status == CaseRunStatus.fail:
+                        new_status = ExecStatus.fail
+                    else:
+                        new_status = ExecStatus.error
+                    await ApiTestCase.filter(id=case_id).update(exec_status=new_status)
+                    logger.info("[Phase2] case_id=%d 执行完成, status=%s", case_id, new_status.value)
+                except Exception as exc:
+                    logger.warning("[Phase2] case_id=%d 执行失败: %s", case_id, exc)
+                    try:
+                        await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.error)
+                    except Exception:
+                        pass
+
+        await asyncio.gather(*[_run_one(cid) for cid in case_ids])
+        logger.info("[Phase2] 全部用例执行完毕, count=%d", len(case_ids))
 
     # ==================== v2-Q3: generation-status 轮询 ====================
 
@@ -1392,10 +1414,10 @@ class ApiCaseGenerationService:
             base_cases_out = [
                 BaseCasePreviewItem(
                     index=i,
-                    name=str(c.get("name") or f"用例-{i + 1}"),
-                    steps=list(c.get("steps") or []),
-                    dependencies=list(c.get("dependencies") or []),
-                    expected=list(c.get("expected") or []),
+                    name=str(c.get("name") or f"用例-{i + 1}") if isinstance(c, dict) else str(c) or f"用例-{i + 1}",
+                    steps=list(c.get("steps") or []) if isinstance(c, dict) else [],
+                    dependencies=list(c.get("dependencies") or []) if isinstance(c, dict) else [],
+                    expected=list(c.get("expected") or []) if isinstance(c, dict) else [],
                 )
                 for i, c in enumerate(raw_cases)
             ]

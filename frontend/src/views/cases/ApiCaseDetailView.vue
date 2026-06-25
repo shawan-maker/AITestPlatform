@@ -41,7 +41,7 @@
               @click="selectCase(item)"
             >
               <span class="item-status-dot" :class="dotClass(item.exec_status)"></span>
-              <span class="item-name">{{ item.title || item.name }}</span>
+              <span class="item-name">{{ stripTitleSuffix(item.title || item.name) }}</span>
               <div class="item-actions">
                 <el-button text size="small" @click.stop><el-icon><Clock /></el-icon></el-button>
                 <el-button text size="small" @click.stop="deleteCase(item)"><el-icon><Delete /></el-icon></el-button>
@@ -68,7 +68,7 @@
               @click="selectCase(item)"
             >
               <span class="item-status-dot" :class="dotClass(item.exec_status)"></span>
-              <span class="item-name">{{ item.title || item.name }}</span>
+              <span class="item-name">{{ stripTitleSuffix(item.title || item.name) }}</span>
             </div>
             <el-empty v-if="!filteredMainCases.length" description="" :image-size="40" />
           </div>
@@ -227,7 +227,6 @@ async function onPreconditionIdsUpdate(newIds) {
     if (res.data.data && res.data.data.case_payload) {
       caseDetail.value.case_payload = res.data.data.case_payload
     }
-    ElMessage.success(t('common.saved'))
   } catch (err) {
     ElMessage.error(err.message || '保存失败')
   }
@@ -343,6 +342,11 @@ function formatTime(isoStr) {
   }
 }
 
+function stripTitleSuffix(title) {
+  if (!title) return ''
+  return title.replace(/[（(][^）)]*[）)]$/, '').trim() || title
+}
+
 function selectCase(item) {
   selectedCaseId.value = item.id
   if (item.id !== caseId.value) {
@@ -351,34 +355,42 @@ function selectCase(item) {
 }
 
 async function loadCaseDetail() {
+  // 如果用例列表已加载且当前 caseId 不在任何列表中（可能被删除），跳过请求
+  var allCases = mainCases.value.concat(preconditionCases.value)
+  if (allCases.length > 0) {
+    var exists = allCases.some(function (c) { return c.id === caseId.value })
+    if (!exists) {
+      var firstCase = mainCases.value[0] || preconditionCases.value[0]
+      if (firstCase) {
+        router.replace({ path: '/cases/api/cases/' + firstCase.id, query: route.query })
+      } else {
+        caseDetail.value = null
+      }
+      return
+    }
+  }
+
   loading.value = true
-  // 重置响应面板，避免切换用例时残留上一个用例的响应数据
-  execResult.value = null
-  responseHeaders.value = {}
-  requestHeaders.value = {}
-  extractResultData.value = []
-  assertResultData.value = []
-  logData.value = []
-  // 重置请求表单，避免切换用例时残留上一个用例的请求数据
-  bodyContent.value = ''
-  bodyType.value = 'json'
-  urlencodedRows.value = []
-  formDataRows.value = []
-  headersData.value = []
-  queryParamsData.value = []
-  pathParamsData.value = []
-  extractData.value = []
-  assertionsData.value = []
-  preOpsData.value = []
-  setupScriptText.value = ''
-  teardownScriptText.value = ''
+  // 重置请求行（不影响表单数据，避免闪屏）
   debugForm.method = 'POST'
   debugForm.base_url = ''
   debugForm.path = ''
   try {
-    var res = await getApiCase(caseId.value)
-    caseDetail.value = res.data.data
-    selectedCaseId.value = caseId.value
+    try {
+      var res = await getApiCase(caseId.value)
+      caseDetail.value = res.data.data
+      selectedCaseId.value = caseId.value
+    } catch (loadErr) {
+      // 用例不存在（404）或加载失败，清空详情并退出
+      caseDetail.value = null
+      execResult.value = null
+      responseHeaders.value = {}
+      requestHeaders.value = {}
+      extractResultData.value = []
+      assertResultData.value = []
+      logData.value = []
+      return
+    }
 
     var payload = caseDetail.value ? (caseDetail.value.case_payload || {}) : {}
     /* 填充调试表单 — 兼容 AI 嵌套格式和扁平格式 */
@@ -544,6 +556,14 @@ async function loadCaseDetail() {
       preconditionCases.value = []
       mainCases.value = []
     }
+
+    // 切换用例后清空响应面板（上一个用例的执行结果不保留）
+    execResult.value = null
+    responseHeaders.value = {}
+    requestHeaders.value = {}
+    extractResultData.value = []
+    assertResultData.value = []
+    logData.value = []
 
     var recRes = await getApiCaseRunRecords(caseId.value)
     runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
@@ -1023,6 +1043,7 @@ watch(caseId, function (newId) {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
 }
 
 .request-config-bar {

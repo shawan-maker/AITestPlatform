@@ -55,6 +55,7 @@ class APIState(TypedDict):
     exec_result: dict  # 执行结果（传递给 output_runcase 输出）
     review_status: str # 生成的用例是否可执行
     generator_count: int # 生成用例的次数
+    skip_execution: bool  # 为 True 时跳过执行阶段，仅做结构化
 
 
 def _resolve_test_env_data(state: APIState) -> dict:
@@ -292,6 +293,10 @@ class APIRuncaseGeneratorWorkflow:
         api_case = state.get("api_case")
         review_status = state.get("review_status")
         exec_result = state.get("api_case_run_result") or {}
+        # skip_execution 模式下，没有执行结果，review_status 设为 init
+        if state.get("skip_execution"):
+            review_status = "init"
+            exec_result = {}
         # 2、返回用例结果
         api_case.setdefault("review_status", review_status)
         writer(f"最终生成的接口用例为：{api_case},可执行状态：{review_status}")
@@ -312,6 +317,12 @@ class APIRuncaseGeneratorWorkflow:
         else:
             return "output_runcase"
 
+    def route_after_structure(self, state: APIState):
+        """结构化完成后路由：skip_execution=True 时直接输出，否则进入执行阶段"""
+        if state.get("skip_execution"):
+            return "output_runcase"
+        return "api_case_run"
+
     def create_runcase_workflow(self):
         """创建可运行的接口用例生成工作流"""
         # 1、创建工作流节点
@@ -325,12 +336,14 @@ class APIRuncaseGeneratorWorkflow:
         # 2、流程编排
         builder.add_edge(START,"get_test_env_data")
         builder.add_edge("get_test_env_data","structure_runcase_generator")
-        builder.add_edge("structure_runcase_generator","api_case_run")
+        builder.add_conditional_edges("structure_runcase_generator", self.route_after_structure, {"api_case_run": "api_case_run", "output_runcase": "output_runcase"})
         builder.add_conditional_edges("api_case_run",self.check_generator_count)
         builder.add_edge("re_structure_runcase_generator","api_case_run")
         builder.add_edge("output_runcase",END)
         # 3、返回工作流
         return builder.compile(checkpointer=checkpointer)
+
+
 
 if __name__ == '__main__':
     import sys

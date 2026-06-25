@@ -24,20 +24,20 @@ RAG_API_KEY=os.getenv("RAG_API_KEY")
 
 # 调用ChatOpenAI接口生成大模型对象
 # request_timeout: 单次 LLM API 请求超时(秒)，防止 agent.stream() 永久阻塞
-# max_tokens: 单次 LLM 最大输出 token 数（接口文档解析等长输出场景需足够大）
+# max_tokens: 单次 LLM 最大输出 token 数（reasoning 模型需要足够大，含思考链 + 实际输出）
 # max_retries: 自动重试次数
 llm = ChatOpenAI(
     model=os.getenv("LLM_MODEL", "gpt-4o"),
     api_key=os.getenv("LLM_BINDING_API_KEY"),
     base_url=os.getenv("LLM_BINDING_HOST"),
     request_timeout=int(os.getenv("LLM_REQUEST_TIMEOUT", "120")),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "4096")),
+    max_tokens=int(os.getenv("LLM_MAX_TOKENS", "16384")),
     max_retries=int(os.getenv("LLM_MAX_RETRIES", "2")),
 )
 
 # 配置生成可执行接口用例的最大重试次数
 MAX_GENERATOR_COUNT = 3
-# 配置生成可执行接口用例的批次大小
+# 配置预执行的批次大小（并发 HTTP 请求数，结构化阶段不限制）
 MAX_BATCH_SIZE = 5
 # 基础用例覆盖率不足时，complete_basecase 最大补充生成次数
 MAX_BASECASE_REGENERATE_COUNT = 1

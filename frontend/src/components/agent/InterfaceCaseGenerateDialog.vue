@@ -29,27 +29,19 @@
       </div>
       <el-alert v-else-if="sessionError" type="error" :title="sessionError" show-icon :closable="false" />
       <template v-else>
-        <!-- v2-Q3: 轮询中显示进度 -->
-        <div v-if="pollingStatus === 'running'" class="polling-status">
-          <el-progress :percentage="pollingProgress" :stroke-width="10" :color="'var(--el-color-primary)'" />
-          <span class="polling-status-text">
-            {{ pollingStage === 'structuring' ? '正在生成结构化接口用例...' : '正在预执行接口用例...' }}
-            ({{ pollingCompleted }}/{{ pollingTotal }})
-          </span>
-          <div v-if="pollingStage === 'structuring'" class="polling-stage-hint">
+        <!-- 轮询中显示结构化进度 -->
+        <div v-if="pollingStatus === 'running'" ref="pollingStatusRef" class="structuring-status">
+          <div class="structuring-header">
             <el-icon class="is-loading" color="var(--el-color-primary)"><Loading /></el-icon>
-            AI 正在将基础用例转换为可执行的 HTTP 请求参数，请稍候...
+            <span class="structuring-title">正在生成结构化接口用例...</span>
+            <span class="structuring-count">({{ pollingCompleted }}/{{ pollingTotal }})</span>
           </div>
-          <div v-if="pollingItems.length" class="polling-items">
-            <div v-for="item in pollingItems" :key="item.index" class="polling-item" :class="item.status">
-              <span class="polling-item-name">{{ item.name || `用例 ${item.index + 1}` }}</span>
-              <el-tag v-if="item.status === 'success'" type="success" size="small">通过</el-tag>
-              <el-tag v-else-if="item.status === 'warning'" type="warning" size="small">警告</el-tag>
-              <el-tag v-else-if="item.status === 'error'" type="danger" size="small">失败</el-tag>
-              <el-tag v-else type="info" size="small">等待中</el-tag>
-              <span v-if="item.error" class="polling-item-error">{{ item.error }}</span>
-            </div>
-          </div>
+          <el-progress
+            :percentage="pollingProgress"
+            :stroke-width="12"
+            :color="'var(--el-color-primary)'"
+          />
+          <div class="structuring-hint">AI 正在将基础用例转换为可执行的 HTTP 请求参数，请稍候...</div>
         </div>
         <div v-if="baseCases.length" class="table-toolbar">
           <div class="table-toolbar-left"></div>
@@ -133,7 +125,7 @@
 </template>
 
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
@@ -173,6 +165,7 @@ const pollingCompleted = ref(0)
 const pollingTotal = ref(0)
 const pollingItems = ref([])
 const pollingStage = ref('structuring')
+const pollingStatusRef = ref(null)
 let pollTimer = null
 let previewPollTimer = null
 
@@ -299,6 +292,14 @@ function startPolling() {
   pollingCompleted.value = 0
   pollingTotal.value = selectedIndexes.value.length || baseCases.value.length
 
+  // 自动滚动到顶部进度条
+  nextTick(() => {
+    const el = pollingStatusRef.value
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  })
+
   pollTimer = setInterval(async () => {
     try {
       const res = await getGenerationStatus(props.interfaceId, sessionId.value)
@@ -311,18 +312,11 @@ function startPolling() {
         if (status === 'success') {
           pollingProgress.value = 100
           pollingCompleted.value = pollingTotal.value
-          // 检查预执行是否有错误
           const confirmResult = statusData.confirm_result
-          const runErrors = confirmResult?.run_errors || []
           const savedCount = confirmResult?.created_case_ids?.length || pollingTotal.value
-          if (runErrors.length) {
-            const errorDetail = runErrors.map(function (e, i) { return (i + 1) + '. ' + e }).join('\n')
-            ElMessage({
-              type: 'warning',
-              message: `已保存 ${savedCount} 条用例，${runErrors.length} 条预验证未通过`,
-              duration: 5000,
-            })
-            console.warn('[预验证未通过详情]', errorDetail)
+          const hasEnv = !!confirmEnvId.value
+          if (hasEnv) {
+            ElMessage.success(`已保存 ${savedCount} 条用例，正在后台执行预验证...`)
           } else {
             ElMessage.success(t('page.agent.saved'))
           }
@@ -443,13 +437,7 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-.case-preview-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.polling-status {
+.structuring-status {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -458,84 +446,35 @@ onUnmounted(() => {
   background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-5);
   margin-bottom: 8px;
-
-  :deep(.el-progress-bar__inner) {
-    background: linear-gradient(90deg, var(--el-color-primary) 0%, var(--el-color-success) 100%);
-    transition: width 0.6s ease;
-  }
 }
 
-.polling-status-text {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--el-text-color-primary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-
-  &::before {
-    content: '';
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--el-color-primary);
-    animation: polling-pulse 1.5s ease-in-out infinite;
-  }
-}
-
-.polling-stage-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  padding: 4px 0;
-}
-
-@keyframes polling-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.8); }
-}
-
-.polling-items {
-  max-height: 200px;
-  overflow-y: auto;
-  border-radius: 6px;
-  background: var(--el-bg-color);
-  padding: 8px;
-}
-
-.polling-item {
+.structuring-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+}
+
+.structuring-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--el-text-color-primary);
+}
+
+.structuring-count {
+  font-size: 13px;
+  color: var(--el-color-primary);
+  font-weight: 600;
+}
+
+.structuring-hint {
   font-size: 12px;
-  border-radius: 4px;
-  margin-bottom: 2px;
-  transition: background-color 0.3s ease;
+  color: var(--el-text-color-secondary);
+}
 
-  &.success { background-color: var(--el-color-success-light-9); }
-  &.warning { background-color: var(--el-color-warning-light-9); }
-  &.error { background-color: var(--el-color-danger-light-9); }
-
-  .polling-item-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .polling-item-error {
-    color: var(--el-color-danger);
-    font-size: 11px;
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.case-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .table-toolbar {

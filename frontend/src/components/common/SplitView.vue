@@ -145,6 +145,9 @@ onBeforeUnmount(onMouseUp)
 .split-view__right {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 8px 16px;

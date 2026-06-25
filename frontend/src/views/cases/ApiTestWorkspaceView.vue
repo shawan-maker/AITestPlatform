@@ -145,7 +145,6 @@
               <el-collapse-item name="pre">
                 <template #title>
                   <span class="collapse-title">{{ t('page.apiCases.preconditionCases') }}</span>
-                  <span v-if="lastViewedMainCaseTitle && linkedPreconditionCases.length" class="collapse-subtitle">（{{ lastViewedMainCaseTitle }}）</span>
                   <el-badge :value="filteredPreconditionCases.length" type="info" class="collapse-badge" />
                   <el-button size="small" type="primary" plain @click.stop="showReusePre = true" style="margin-left: 8px">复用用例</el-button>
                 </template>
@@ -155,7 +154,7 @@
                     <template #default="{ $index }">{{ $index + 1 }}</template>
                   </el-table-column>
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
+                    <template #default="{ row }">{{ stripTitleSuffix(row.title || row.name || '-') }}</template>
                   </el-table-column>
                   <el-table-column prop="updated_at" :label="t('page.apiCases.updateTime')" width="170">
                     <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
@@ -193,7 +192,7 @@
                     <template #default="{ $index }">{{ $index + 1 }}</template>
                   </el-table-column>
                   <el-table-column prop="title" :label="t('page.apiCases.caseName')" min-width="200" show-overflow-tooltip>
-                    <template #default="{ row }">{{ row.title || row.name || '-' }}</template>
+                    <template #default="{ row }">{{ stripTitleSuffix(row.title || row.name || '-') }}</template>
                   </el-table-column>
                   <el-table-column :label="t('page.apiCases.preconditionCases')" min-width="180" show-overflow-tooltip>
                     <template #default="{ row }">
@@ -970,11 +969,11 @@ function displayFileLabel(item) {
 // ==================== 前置/后置操作模板插入方法 ====================
 function insertPreTemplate(templateType) {
   const templates = {
-    'env': "\n# 设置临时变量 \ntest.save_env_variable('var_name',var_value)",
-    'global': "\n# 设置环境变量 \ntest.save_global_variable('var_name',var_value)",
+    'env': "\n# 保存环境（临时）变量 \ntest.save_env_variable('var_name',var_value)",
+    'global': "\n# 保存全局变量 \ntest.save_global_variable('var_name',var_value)",
     'sql': "\n# 执行sql语句 \nvar_name = db.服务器名称.execute_all('sql语句')",
-    'get_env': "\n# 获取临时变量 \nvar_name = test.get_env_variable('var_name', default_value)",
-    'get_global': "\n# 获取环境变量 \nvar_name = test.get_global_variable('var_name', default_value)",
+    'get_env': "\n# 获取环境（临时）变量 \nvar_name = test.get_env_variable('var_name')",
+    'get_global': "\n# 获取全局变量 \nvar_name = test.get_global_variable('var_name')",
     'request': "\n# 发送HTTP请求 \ntest.request(method, url, **kwargs)",
     'sleep': "\n# 等待 \ntest.sleep(seconds)",
     'call_func': "\n# 执行自定义函数\nresult = global_func.方法名()\n# 如需保存结果到变量：\n# test.save_env_variable('var_name', result)",
@@ -991,8 +990,8 @@ function insertPostTemplate(templateType) {
     're_res': "\n# 正则表达式方式提取单个数据 \nvar_name = test.re_extract(响应体数据,正则表达式)",
     're_all': "\n# 正则表达式方式提取一组数据 \nvar_name = test.re_extract_list(响应体数据,正则表达式)",
     'assert': "\n# 对响应结果进行断言 \ntest.assertion('比较方式',预期结果,实际结果)",
-    'env': "\n# 设置临时变量 \ntest.save_env_variable('var_name',var_value)",
-    'global': "\n# 设置环境变量 \ntest.save_global_variable('var_name',var_value)",
+    'env': "\n# 保存环境（临时）变量 \ntest.save_env_variable('var_name',var_value)",
+    'global': "\n# 保存全局变量 \ntest.save_global_variable('var_name',var_value)",
     'delete_global': "\n# 删除全局变量 \ntest.del_global_variable('var_name')",
     'sql': "\n# 执行sql语句 \nvar_name = db.服务器名称.execute_all('sql语句')",
     'save_file': "\n# 保存到文件 \ntest.save_to_file(filename, content)",
@@ -1176,6 +1175,12 @@ function flattenResponseSchema(obj, parentPath) {
     }
   }
   return rows
+}
+
+// 去掉用例名称末尾的括号后缀（如 "（缺失必填参数verifycode）"）
+function stripTitleSuffix(title) {
+  if (!title) return '-'
+  return title.replace(/[（(][^）)]*[）)]$/, '').trim() || title
 }
 
 function formatTime(isoStr) {
@@ -1508,6 +1513,23 @@ function loadMoreCatalogInterfaces(catalogId) {
 // ==================== 模板/用例/依赖/文档 加载 ====================
 
 /** 从 payload 字典填充调试表单各字段 */
+function resetDebugForm() {
+  debugMethod.value = 'POST'
+  debugPath.value = ''
+  headerRows.value = [{ name: 'Content-Type', value: 'application/json', desc: '' }]
+  queryParamRows.value = [{ name: '', value: '', desc: '' }]
+  pathParamRows.value = [{ name: '', value: '', desc: '' }]
+  bodyType.value = 'json'
+  requestJson.value = '{}'
+  urlencodedRows.value = [{ name: '', value: '', desc: '' }]
+  formDataRows.value = [{ name: '', type: 'string', value: '', fileId: null, desc: '' }]
+  extractRows.value = [{ name: '', expression: '', desc: '' }]
+  assertRows.value = [{ target: '', method: 'eq', expected: '' }]
+  assertionsJson.value = '[]'
+  preOpsCode.value = '# 前置操作代码\n'
+  postOpsCode.value = '# 后置操作代码\n'
+}
+
 function populateFormFromPayload(payload) {
   if (!payload || typeof payload !== 'object') return
   // 方法 & 路径
@@ -1567,16 +1589,14 @@ function populateFormFromPayload(payload) {
 
 async function loadTemplate() {
   if (!selectedInterfaceId.value) return
+  resetDebugForm()
   var res = await getDebugTemplate(selectedInterfaceId.value).catch(function () { return null })
   var tpl = res && res.data ? res.data.data : {}
-  // tpl 是 DebugTemplateOut: { interface_id, payload, default_file_id, updated_at }
   var payload = tpl.payload || null
   if (payload) {
     populateFormFromPayload(payload)
   } else {
-    // 无已保存的模板，用接口默认值
-    requestJson.value = '{}'
-    assertionsJson.value = '[]'
+    // 无已保存的模板，用接口文档默认值
     var iface = findSelectedIface() || fallbackInterface.value
     if (iface) {
       debugMethod.value = iface.method ? iface.method.toUpperCase() : 'POST'
@@ -1661,10 +1681,17 @@ async function loadLinkedPreconditions() {
       preIds = mainCase.case_payload.precondition_ids || []
     } else {
       // 主用例不在当前接口，通过 API 获取
-      var res = await getApiCase(Number(caseId))
-      var data = res.data.data
-      if (data && data.case_payload) {
-        preIds = data.case_payload.precondition_ids || []
+      try {
+        var res = await getApiCase(Number(caseId), { silent: true })
+        var data = res.data.data
+        if (data && data.case_payload) {
+          preIds = data.case_payload.precondition_ids || []
+        }
+      } catch (e) {
+        // 用例已删除，忽略 404 并清理缓存
+        sessionStorage.removeItem('lastViewedMainCaseId_' + ifaceId)
+        sessionStorage.removeItem('lastViewedMainCaseTitle_' + ifaceId)
+        preIds = []
       }
     }
     if (!preIds.length) {
@@ -2135,7 +2162,7 @@ watch(selectedCatalogId, function () {
 })
 
 watch(selectedInterfaceId, function () {
-  // 切换接口时清空响应区域
+  // 切换接口时先清空响应区域，再尝试加载最新调试记录
   responseResult.value = null
   responseDataInfo.value = null
   requestInfo.value = null
@@ -2150,8 +2177,25 @@ watch(selectedInterfaceId, function () {
     loadCases()
     loadDeps()
     loadDocPreview()
+    loadLatestDebugResult()
   }
 })
+
+async function loadLatestDebugResult() {
+  if (!selectedInterfaceId.value) return
+  try {
+    var res = await listDebugRecords(selectedInterfaceId.value, { page: 1, page_size: 1 })
+    var items = res.data.data?.items || []
+    if (items.length > 0 && items[0].api_requests_info) {
+      var raw = items[0].api_requests_info
+      // 将 _debug_detail 中的数据提升到顶层，供 parseDebugResponse 使用
+      var detail = raw._debug_detail || raw
+      parseDebugResponse(detail)
+    }
+  } catch (e) {
+    // 静默失败，响应区域保持为空
+  }
+}
 
 onMounted(async function () {
   await loadTree()
@@ -2215,6 +2259,7 @@ onUnmounted(function () {
   flex-direction: column;
   overflow: hidden;
   padding: 0;
+  min-height: 0;
 }
 
 .detail-nav-tabs {
@@ -2365,24 +2410,6 @@ onUnmounted(function () {
   margin-bottom: 12px;
   flex-wrap: wrap;
   flex-shrink: 0;
-}
-
-.debug-sub-tabs {
-  flex-shrink: 0;
-  height: 340px;
-  overflow: hidden;
-  :deep(.el-tabs__header) {
-    margin-bottom: 0;
-    background: var(--fill-color-blank);
-  }
-  :deep(.el-tabs__content) {
-    height: calc(100% - 40px);
-    overflow: hidden;
-  }
-  :deep(.el-tab-pane) {
-    height: 100%;
-    overflow: auto;
-  }
 }
 
 .sub-tab-content {

@@ -112,13 +112,14 @@ class ConfigItemCreateRequest(BaseModel):
 
 
 class ConfigItemUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
     config_type: ConfigType | None = None
     value: str | None = None
     remark: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def at_least_one(self):
-        if self.config_type is None and self.value is None and self.remark is None:
+        if self.name is None and self.config_type is None and self.value is None and self.remark is None:
             raise ValueError("至少提供一个可更新字段")
         return self
 

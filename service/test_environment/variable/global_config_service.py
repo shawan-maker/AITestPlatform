@@ -70,6 +70,14 @@ class ProjectGlobalConfigService:
             config.value = cls._encrypt_if_needed(config.config_type, data.value)
         if data.remark is not None:
             config.remark = data.remark
+        if data.name is not None:
+            existing = await ProjectGlobalConfig.get_or_none(
+                project_id=config.project_id,
+                name=data.name,
+            )
+            if existing and existing.id != config.id:
+                raise AppException("同名全局变量已存在", 400)
+            config.name = data.name
         await config.save()
         return cls._to_out(config)
 

@@ -46,8 +46,8 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
      "headers": {{ "Authorization": "Bearer ${{token}}" }}
      ```
 
-4. **测试数据的变量化引用规范**  
-   - 所有测试数据中提供的字段，如 `username` 和 `password`，在http请求中请统一使用$大括号格式引用，例如：  
+4. **测试数据的变量化引用规范**
+   - 所有测试数据中提供的字段，如 `username` 和 `password`，在http请求中请统一使用$大括号格式引用，例如：
      ```json
             "request": {{
                 "data": {{
@@ -57,8 +57,21 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
                 }}
             }}
      ```
-    - 测试执行准备的测试数据如下：  
+    - 测试执行准备的测试数据如下：
         {test_data}
+
+   **★ 变量引用优先级规则（极其重要，必须严格遵守）：**
+   在生成用例参数值时，必须按照以下优先级决定数据来源：
+   - **第一优先级：引用已有测试数据变量** —— 分析接口中每个请求参数的语义含义，与测试数据（环境变量+全局变量）中的变量名进行语义匹配。如果测试数据中已存在含义匹配的变量，必须直接使用 `${{变量名}}` 引用，禁止在setup_script中重新生成。
+     - 语义匹配示例：接口参数 `img_code`（图片验证码）→ 测试数据中有 `img_code` 变量 → 直接使用 `${{img_code}}`
+     - 语义匹配示例：接口参数 `phone_code`/`sms_code`（手机验证码）→ 测试数据中有 `phone_code` 变量 → 直接使用 `${{phone_code}}`
+     - 语义匹配示例：接口参数 `captcha`（验证码）→ 测试数据中有 `captcha`/`img_code`/`verify_code` 等相关变量 → 直接使用 `${{对应变量名}}`
+   - **第二优先级：前置接口提取** —— 如果参数值需要从前置依赖接口的响应中提取，通过extract提取并用 `${{变量名}}` 引用
+   - **第三优先级：代码生成新数据** —— 只有以下情况才允许在setup_script中通过工具函数生成新数据：
+     - 注册用的手机号/邮箱（每次注册必须是不重复的新账号）
+     - 测试用例明确要求的随机数、随机字符串
+     - 测试数据中确实没有对应变量，且无法从前置接口获取的参数
+   - **禁止**：对于验证码（图片验证码、短信验证码等）、已有配置值等测试数据中已提供的变量，不可以在setup_script中用代码重新生成
 
 5. **multipart/form-data 类型接口的处理方式**  
    - 若请求体类型为 `multipart/form-data`，请将请求体正文数据放入 `data` 字段，文件放入"files"字段，结构如下：  
@@ -95,9 +108,14 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
      {test_files}
 
 6. **前置脚本setup_script说明**
-   - 可以在setup_script字段中(基于python语言)编写用例执行的前置脚本，主要用来做一些前置数据的准备工作，比如生成对于不可重用字段生成测试数据   
-   - 如果要实现的一些工作，前置脚本中没有提供的工具函数，则需要编写python代码实现   
-   - 前后置脚本中禁止使用 return 语句  
+   - 可以在setup_script字段中(基于python语言)编写用例执行的前置脚本，主要用来做一些前置数据的准备工作，比如生成对于不可重用字段生成测试数据
+   - 如果要实现的一些工作，前置脚本中没有提供的工具函数，则需要编写python代码实现
+   - 前后置脚本中禁止使用 return 语句
+   ** 严禁复制示例代码：**
+      - setup_script 中**只写当前步骤实际需要的逻辑**，不要将下方提供的工具函数用法示例全部复制进去
+      - 如果当前步骤不需要生成动态数据、不需要执行SQL、不需要保存变量，则 setup_script 应为空字符串 ""
+      - 不要写 print 语句用于调试输出，不要写与当前测试场景无关的代码
+      - 下方列出的 test.save_global_variable、test.save_env_variable、db.execute_sql 等**仅为用法参考**，不是每个脚本都必须包含的内容
    ** 重要：**
       - 对于登录时要使用的已注册的账号，必须使用已准备的测试数据中包含的参数数据，或者是前置接口中提取的注册成功的数据，在http请求中直接使用${{变量名}}引用即可。
       - 对于登录时要使用的已注册的账号，不可以在前置脚本中使用随机数生成。
@@ -156,12 +174,56 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
             使用案例：比如要调用工具函数动态生成一个手机号码
             mobile = global_func.random_mobile()
    特别注意：setup_script中的python脚本后面会通过python的eval执行，要保证脚本的语法正确性
-   
+
+   **6.1 执行顺序说明（极其重要，必须严格遵守）**
+   用例各部分的执行顺序如下：
+       第1步：preconditions 中每个前置步骤**按顺序**执行（每个步骤内部顺序：setup_script → HTTP请求 → teardown_script → extract）
+       第2步：主用例 setup_script
+       第3步：主用例 HTTP请求
+       第4步：主用例 teardown_script
+       第5步：主用例 extract
+   **关键约束：preconditions 中的所有前置步骤在主用例 setup_script 之前执行。**
+   因此，如果 preconditions 中的某个前置步骤需要使用动态生成的变量（如随机手机号、随机邮箱等），该变量的生成逻辑**绝对不能**放在主用例的 setup_script 中，否则前置步骤执行时变量尚未生成，会导致请求失败。
+
+   **6.2 跨步骤变量依赖的处理规则（必须严格遵守）**
+   当前置步骤需要使用动态生成的变量时，**必须将变量生成逻辑放在真正需要该变量的第一个步骤的 setup_script 中**。
+   - **不要**将变量生成放在不需要该变量的步骤中，即使它执行得更早
+   - 如果多个步骤都需要使用同一个变量，则在**最先需要该变量的那个步骤**的 setup_script 中生成并保存为环境变量，后续步骤通过${{变量名}}引用即可
+   - **禁止**将前置步骤需要使用的变量放在主用例的 setup_script 中生成
+
+   示例 —— 注册接口用例（前置依赖：获取图片验证码、获取短信验证码，需要随机手机号）：
+
+   正确做法：
+       preconditions[0]: 获取图片验证码
+         setup_script: ""  （获取图片验证码不需要手机号，setup_script 为空）
+         HTTP请求（不需要${{reg_mobile}}）
+       preconditions[1]: 获取短信验证码
+         setup_script: "mobile = global_func.random_mobile()\ntest.save_env_variable('reg_mobile', mobile)"
+         HTTP请求（使用${{reg_mobile}}）  ← 在第一个真正需要 reg_mobile 的步骤中生成
+       主用例 setup_script: ""
+       主用例 HTTP请求: 注册（使用${{reg_mobile}}）
+
+   错误做法（严禁）：
+       preconditions[0]: 获取图片验证码
+         setup_script: "mobile = global_func.random_mobile()..."  ← 错误！此步骤不需要手机号
+       preconditions[1]: 获取短信验证码 → HTTP请求（需要${{reg_mobile}}）
+       主用例 setup_script: "mobile = global_func.random_mobile()"  ← 太晚了，前置步骤已经执行完毕！
+
 7. **后置脚本treadown_script说明**
-   - 可以在treadown_script字段中(基于python语言)编写用例执行的后置脚本，主要用来提取数据，以及对响应结果的断言   
+   - 可以在treadown_script字段中(基于python语言)编写用例执行的后置脚本，主要用来提取数据，以及对响应结果的断言
    - 对于preconditions中的依赖接口的treadown_script中不需要写断言的逻辑
-    - 如果要实现的一些工作，后置脚本中没有提供的工具函数，则需要编写python代码实现  
+    - 如果要实现的一些工作，后置脚本中没有提供的工具函数，则需要编写python代码实现
     - 前后置脚本中禁止使用 return 语句
+   ** 严禁复制示例代码：**
+      - teardown_script 中**只写当前步骤实际需要提取的变量和需要进行的断言**，不要将下方提供的工具函数用法示例全部复制进去
+      - 如果当前步骤不需要提取变量也不需要断言，则 teardown_script 应为空字符串 ""
+      - 不要写 print 语句用于调试输出，不要写与当前测试场景无关的代码
+      - preconditions 中前置步骤的 teardown_script **通常为空字符串 ""**，除非需要从该步骤的响应中提取变量供后续步骤使用
+      - 下方列出的 test.json_extract、test.re_extract、test.assertion 等**仅为用法参考**，不是每个脚本都必须包含的内容
+   ** 关于 session/cookie 管理：**
+      - 测试引擎内部使用 `requests.Session()` 自动管理会话和 Cookie，**不需要**在 teardown_script 中手动提取 Cookie 或 session_id
+      - **禁止**编写从 response.cookies 或 response.headers['Set-Cookie'] 中提取 JSESSIONID/session_id 并保存为环境变量的代码
+      - 如果后续步骤需要引用会话标识，直接使用引擎自动维护的会话即可，无需任何额外操作
 
    - 后置脚本中内置可访问对象有：
         1、test对象：
@@ -334,6 +396,14 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
      - 如果 `content_type` 包含 `multipart`：使用 `request.data` 传参，`headers` 中设置 `Content-Type: multipart/form-data`
      - 如果 `content_type` 包含 `json` 或未指定：使用 `request.json` 传参，`headers` 中设置 `Content-Type: application/json`
    - `requestBody.body` 中的字段定义（`name`, `example`/`default`）应作为请求参数的键值对来源
+
+13. **★ 变量命名一致性规则（极其重要，必须严格遵守）**
+   - setup_script 中通过 `test.save_env_variable("变量名", 值)` 保存的变量名，必须与后续 HTTP 请求参数、headers、前置步骤中 `${{变量名}}` 引用的名称**完全一致（含大小写）**
+   - **禁止**在一个步骤中保存为 `session_id` 却在另一个步骤中引用 `${{JSESSIONID}}` 或 `${{jsessionid}}`
+   - **禁止**在前置步骤中保存为 `reg_phone` 却在主用例中引用 `${{reg_mobile}}`
+   - 如果从前置接口响应头中提取了 Cookie 中的会话标识，统一命名为 `session_id`，后续所有引用也统一使用 `${{session_id}}`
+   - 如果在前置步骤的 setup_script 中生成了随机手机号并保存为 `reg_phone`，后续所有引用必须使用 `${{reg_phone}}`
+   - 每个用例内部的所有变量名必须保持**同一套命名**，不允许同义不同名的情况
 ---
 
 ## 二、用户提供的输入信息：
@@ -487,3 +557,4 @@ output_format={
             }
         ]
     }
+

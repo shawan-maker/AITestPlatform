@@ -69,6 +69,7 @@ def concurrent_pre_run_base_cases(
     config: dict[str, Any] | RunnableConfig | None = None,
     max_workers: int | None = None,
     progress_callback=None,
+    skip_execution: bool = False,
 ) -> list[BaseCasePreRunResult]:
     """ThreadPoolExecutor 并发预执行基础用例（共享入口，供主工作流与 api_test confirm 复用）。
 
@@ -101,6 +102,7 @@ def concurrent_pre_run_base_cases(
                     "api_doc": api_doc,
                     "environment_id": environment_id,
                     "generator_count": generator_count,
+                    "skip_execution": skip_execution,
                 }
                 if precoditions_api_doc is not None:
                     invoke_input["precoditions_api_doc"] = precoditions_api_doc
@@ -167,8 +169,9 @@ def concurrent_pre_run_base_cases(
 
                 task_log = buf.getvalue()
                 if task_log.strip():
+                    phase_label = "结构化" if skip_execution else "预执行"
                     print(
-                        f"\n{'=' * 20} 预执行任务 {pos}/{len(future_list)} 输出 {'=' * 20}"
+                        f"\n{'=' * 20} {phase_label}任务 {pos}/{len(future_list)} 输出 {'=' * 20}"
                     )
                     print(task_log, end="")
     finally:

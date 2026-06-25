@@ -72,8 +72,8 @@ export function listApiCases(interfaceId, params = {}) {
   return request.get(`/api-test/interfaces/${interfaceId}/cases`, { params })
 }
 
-export function getApiCase(id) {
-  return request.get(`/api-test/cases/${id}`)
+export function getApiCase(id, opts) {
+  return request.get(`/api-test/cases/${id}`, opts?.silent ? { silentError: true } : undefined)
 }
 
 export function createApiCase(data) {
@@ -116,10 +116,7 @@ export function generateCasePreview(interfaceId, data) {
 }
 
 export function confirmCaseGeneration(interfaceId, data) {
-  // 预执行可能耗时较长，超时设为 5 分钟
-  return request.post(`/api-test/interfaces/${interfaceId}/cases/confirm`, data, {
-    timeout: 300000,
-  })
+  return request.post(`/api-test/interfaces/${interfaceId}/cases/confirm`, data)
 }
 
 // v2-Q3: AI预执行进度轮询

@@ -193,31 +193,32 @@ function insertTemplate(type, code) {
 }
 
 var preTemplates = [
-  { label: '设置临时变量', code: '# 设置临时变量\nset_temp_var("key", "value")' },
-  { label: '设置环境变量', code: '# 设置环境变量\nset_env_var("key", "value")' },
-  { label: '执行SQL', code: '# 执行SQL\nresult = execute_sql("db_name", "SELECT * FROM table LIMIT 1")' },
-  { label: '获取临时变量', code: '# 获取临时变量\nval = get_temp_var("key")' },
-  { label: '获取环境变量', code: '# 获取环境变量\nval = get_env_var("key")' },
-  { label: '发送请求', code: '# 发送请求\nresp = send_request("POST", "/api/path", {"key": "value"})' },
-  { label: '等待', code: '# 等待\nimport time\ntime.sleep(1)' },
-  { label: '执行自定义函数', code: '# 调用自定义函数\nresult = custom_func("param")' },
+  { label: '保存环境（临时）变量', code: '# 保存环境（临时）变量\ntest.save_env_variable("变量名", "变量值")' },
+  { label: '保存全局变量', code: '# 保存全局变量\ntest.save_global_variable("变量名", "变量值")' },
+  { label: '执行SQL', code: '# 执行SQL\nresult = db.服务器名称.execute_all("SELECT * FROM table LIMIT 1")' },
+  { label: '获取环境（临时）变量', code: '# 获取环境（临时）变量\nval = test.get_env_variable("变量名")' },
+  { label: '获取全局变量', code: '# 获取全局变量\nval = test.get_global_variable("变量名")' },
+  { label: '发送请求', code: '# 发送HTTP请求\nresp = test.request("POST", "/api/path", json={"key": "value"})' },
+  { label: '等待', code: '# 等待\ntest.sleep(1)' },
+  { label: '执行自定义函数', code: '# 调用自定义函数\nresult = global_func.方法名()' },
 ]
 
 var postTemplates = [
-  { label: '获取响应体', code: '# 获取响应体\nbody = get_response_body()' },
-  { label: '获取JSON响应', code: '# 获取JSON响应\njson_body = get_response_json()' },
-  { label: 'JSONPath提取单个', code: '# JSONPath提取单个值\nval = jsonpath_extract(body, "$.data.token")' },
-  { label: 'JSONPath提取列表', code: '# JSONPath提取列表\nvals = jsonpath_extract_all(body, "$.data[*].id")' },
-  { label: '正则提取单个', code: '# 正则提取单个\nval = regex_extract(text, r"pattern")' },
-  { label: '正则提取列表', code: '# 正则提取列表\nvals = regex_extract_all(text, r"pattern")' },
-  { label: '断言结果', code: '# 断言\nassert_equals(actual, expected)' },
-  { label: '设置临时变量', code: '# 设置临时变量\nset_temp_var("key", val)' },
-  { label: '设置环境变量', code: '# 设置环境变量\nset_env_var("key", val)' },
-  { label: '删除全局变量', code: '# 删除全局变量\ndelete_env_var("key")' },
-  { label: '执行SQL', code: '# 执行SQL\nresult = execute_sql("db_name", "SELECT * FROM table")' },
-  { label: '保存到文件', code: '# 保存到文件\nsave_to_file("data.json", body)' },
-  { label: '记录日志', code: '# 记录日志\nlog("debug message")' },
-  { label: '执行自定义函数', code: '# 调用自定义函数\nresult = custom_func("param")' },
+  { label: '获取响应体', code: '# 获取响应体\nbody = response.data' },
+  { label: '获取JSON响应', code: '# 获取JSON响应\njson_body = response.json()' },
+  { label: 'JSONPath提取单个', code: '# JSONPath提取单个值\nval = test.json_extract(json_body, "$.data.token")' },
+  { label: 'JSONPath提取列表', code: '# JSONPath提取列表\nvals = test.json_extract_list(json_body, "$.data[*].id")' },
+  { label: '正则提取单个', code: '# 正则提取单个\nval = test.re_extract(body, r"pattern")' },
+  { label: '正则提取列表', code: '# 正则提取列表\nvals = test.re_extract_list(body, r"pattern")' },
+  { label: '断言结果', code: '# 断言\ntest.assertion("eq", expected, actual)' },
+  { label: '保存环境（临时）变量', code: '# 保存环境（临时）变量\ntest.save_env_variable("变量名", val)' },
+  { label: '保存全局变量', code: '# 保存全局变量\ntest.save_global_variable("变量名", val)' },
+  { label: '删除环境（临时）变量', code: '# 删除环境（临时）变量\ntest.del_evn_variable("变量名")' },
+  { label: '删除全局变量', code: '# 删除全局变量\ntest.del_global_variable("变量名")' },
+  { label: '执行SQL', code: '# 执行SQL\nresult = db.服务器名称.execute_all("SELECT * FROM table")' },
+  { label: '保存到文件', code: '# 保存到文件\ntest.save_to_file("data.json", body)' },
+  { label: '记录日志', code: '# 记录日志\ntest.log("debug message")' },
+  { label: '执行自定义函数', code: '# 调用自定义函数\nresult = global_func.方法名()' },
 ]
 
 var formColumns = [
@@ -261,24 +262,28 @@ var formColumns = [
 }
 
 .debug-sub-tabs {
-  flex-shrink: 0;
-  height: 340px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 
   :deep(.el-tabs__header) {
     margin-bottom: 0;
     padding: 0 16px;
     background: var(--el-fill-color-blank);
+    flex-shrink: 0;
   }
 
   :deep(.el-tabs__content) {
-    height: calc(100% - 40px);
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
 
   :deep(.el-tab-pane) {
     height: 100%;
-    overflow: auto;
+    overflow-y: auto;
     padding: 10px 16px;
   }
 }
@@ -307,12 +312,13 @@ var formColumns = [
 .prepost-container {
   display: flex;
   gap: 16px;
-  height: calc(100% - 20px);
+  height: 100%;
 }
 
 .prepost-code {
   flex: 1;
   min-width: 0;
+  flex-shrink: 0;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   overflow: hidden;
@@ -323,6 +329,9 @@ var formColumns = [
   flex-shrink: 0;
   border-left: 1px solid var(--el-border-color-lighter);
   padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 
   .template-header {
     font-size: 14px;
@@ -331,12 +340,16 @@ var formColumns = [
     border-bottom: 1px solid var(--el-border-color-lighter);
     padding-bottom: 6px;
     margin-bottom: 8px;
+    flex-shrink: 0;
   }
 
   .template-list {
     display: flex;
     flex-direction: column;
     gap: 2px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .template-item {
