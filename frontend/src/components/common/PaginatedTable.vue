@@ -95,6 +95,8 @@ watch(
   () => layout.scheduleLayout(),
   { deep: true },
 )
+
+defineExpose({ tableRef })
 </script>
 
 <style scoped lang="scss">

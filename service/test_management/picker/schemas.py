@@ -24,7 +24,7 @@ class FunctionalCasePickerOut(BaseModel):
     module_id: int | None
     module_name: str | None = None
     catalog_id: int | None
-    priority: str | None = None
+    priority: int | None = None
 
 
 class PaginatedFunctionalCasePicker(Paginated[FunctionalCasePickerOut]):

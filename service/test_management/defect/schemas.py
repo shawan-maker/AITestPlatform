@@ -56,6 +56,7 @@ class DefectUpdateRequest(BaseModel):
 class DefectTransitionRequest(BaseModel):
     status: DefectStatus
     assignee_id: int | None = Field(default=None, ge=1)
+    comment: str | None = Field(default=None, min_length=1)
 
 
 class DefectCommentCreateRequest(BaseModel):

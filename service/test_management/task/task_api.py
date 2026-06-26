@@ -28,6 +28,8 @@ async def list_tasks(
     q: str | None = Query(default=None),
     status: str | None = Query(default=None),
     type: str | None = Query(default=None),
+    result: str | None = Query(default=None),
+    triggered_by: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     user: User = Depends(get_current_active_user),
@@ -39,6 +41,8 @@ async def list_tasks(
         q=q,
         status=RunStatus(status) if status else None,
         type=TaskSuiteType(type) if type else None,
+        result=result,
+        triggered_by=triggered_by,
         page=page,
         page_size=page_size,
     )

@@ -74,10 +74,10 @@
           <el-button size="small" @click="loadHistory">{{ t('common.refresh') || '刷新' }}</el-button>
         </div>
         <AppTable :data="history">
+          <AppTableColumn prop="id" variant="fixed" label="ID" :width="70" />
           <AppTableColumn prop="suite_name" variant="content" :label="t('page.test.suites.suiteName')" min-width="120">
             <template #default>{{ suite?.suite_name || '-' }}</template>
           </AppTableColumn>
-          <AppTableColumn prop="id" variant="fixed" label="ID" :width="70" />
           <AppTableColumn variant="fixed" :label="t('page.test.relatedTask')" :width="120">
             <template #default="{ row }">{{ row.task_name || '-' }}</template>
           </AppTableColumn>
@@ -117,16 +117,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 报告 Drawer -->
-    <el-drawer v-model="reportVisible" :title="t('page.test.report')" size="70%">
-      <ReportSummary v-if="report" :report="report" :can-edit="canEdit" @view-log="openLog" @linked="reloadReport" @create-defect="openDefectFromReport" />
-    </el-drawer>
-
-    <!-- 用例执行日志 Drawer -->
-    <CaseRunLogDrawer v-model="logVisible" :case-run-id="logCaseRunId" />
-
-    <!-- 从报告创建缺陷对话框 -->
-    <DefectCreateDialog v-model="showDefectDialog" :case-run-id="defectCaseRunId" :default-title="defectDefaultTitle" :default-steps="defectDefaultSteps" :loading="defectSaving" @submit="submitDefectFromReport" />
+    <!-- 报告跳转由此处 viewReport 处理 -->
 
     <!-- 编辑套件对话框 -->
     <el-dialog :close-on-click-modal="false" v-model="showEdit" :title="t('page.test.suites.editSuite')" width="560px">
@@ -161,11 +152,10 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getSuite, listSuiteCases, updateSuite, appendSuiteCases, deleteSuiteCases, reorderSuiteCases, patchSuiteCaseFlags } from '@/api/testManagement'
 import { batchGetApiCases } from '@/api/apiTest'
-import { runSuite, getSuiteProgress, getSuiteReport, getSuiteHistory, createDefectFromRun, getCaseRunLog } from '@/api/testExecution'
+import { runSuite, getSuiteProgress, getSuiteHistory } from '@/api/testExecution'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import { useRunExecution } from '@/composables/useRunExecution'
-import { useReportViewer } from '@/composables/useReportViewer'
 import { RUN_STATUS_MAP, SUITE_TYPE_MAP, RUN_MODE_MAP } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import AppTable from '@/components/common/AppTable.vue'
@@ -174,9 +164,6 @@ import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
-import ReportSummary from '@/components/execution/ReportSummary.vue'
-import CaseRunLogDrawer from '@/components/execution/CaseRunLogDrawer.vue'
-import DefectCreateDialog from '@/components/execution/DefectCreateDialog.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 import ReuseCaseDialog from '@/components/api-test/ReuseCaseDialog.vue'
 
@@ -232,87 +219,9 @@ const { running, activeRun, progress, isRunning, run, stopRun, resumePolling } =
   onComplete: () => { loadHistory(); load(true) },
 })
 
-// Shared: report viewer
-const { reportVisible, report, reportRunId, viewReport, reloadReport } = useReportViewer(getSuiteReport)
-
-// Log drawer
-const logVisible = ref(false)
-const logCaseRunId = ref(null)
-function openLog(row) { logCaseRunId.value = row.id; logVisible.value = true }
-
-// Defect from report
-const showDefectDialog = ref(false)
-const defectCaseRunId = ref(null)
-const defectDefaultTitle = ref('')
-const defectDefaultSteps = ref('')
-const defectSaving = ref(false)
-
-function buildDefectSteps(logData) {
-  var parts = []
-  var data = logData?.api_requests_info
-  if (data) {
-    var detail = data._debug_detail || data
-    var ri = detail.response_info || data.response_info || {}
-    var reqInfo = detail.request_info || data.request_info || {}
-    // 1. Request content
-    var reqParts = []
-    var method = reqInfo.method || data.method || ''
-    var url = reqInfo.url || data.url || ''
-    if (method || url) reqParts.push(method.toUpperCase() + ' ' + url)
-    var reqHeaders = reqInfo.headers || data.request_headers || {}
-    var ct = reqHeaders['Content-Type'] || reqHeaders['content-type'] || ''
-    if (ct) reqParts.push('Content-Type: ' + ct)
-    var reqBody = reqInfo.body || data.request_body
-    if (reqBody) reqParts.push(typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody, null, 2))
-    if (reqParts.length) parts.push('1、请求内容\n' + reqParts.join('\n'))
-    // 2. Response content
-    var resParts = []
-    if (ri.status_code != null) resParts.push('Status: ' + ri.status_code)
-    var resBody = ri.body || data.response_body
-    if (resBody) {
-      var body = typeof resBody === 'string' ? resBody : JSON.stringify(resBody, null, 2)
-      if (body.length > 2000) body = body.substring(0, 2000) + '\n...(truncated)'
-      resParts.push(body)
-    }
-    if (resParts.length) parts.push('2、响应内容\n' + resParts.join('\n'))
-  }
-  // 3. Assertion error log
-  var logLines = []
-  if (data) {
-    var detail2 = data._debug_detail || data
-    logLines = detail2.log_data || data.log_data || []
-  }
-  var log = Array.isArray(logLines) ? logLines.map(function (l) { return Array.isArray(l) ? l.join(' ') : String(l) }).join('\n') : (logData?.log_data || '')
-  var errMsg = logData?.error_message || ''
-  var errorContent = log || errMsg
-  if (errorContent) parts.push('3、断言错误日志\n' + errorContent)
-  return parts.join('\n\n')
-}
-
-async function openDefectFromReport(row) {
-  defectCaseRunId.value = row.id
-  defectDefaultTitle.value = row.case_name || ''
-  defectDefaultSteps.value = ''
-  // Fetch run log BEFORE opening dialog so steps are pre-filled
-  try {
-    var res = await getCaseRunLog(row.id)
-    defectDefaultSteps.value = buildDefectSteps(res.data.data)
-  } catch (e) {
-    // silent — steps will just be empty
-  }
-  showDefectDialog.value = true
-}
-
-async function submitDefectFromReport(payload) {
-  defectSaving.value = true
-  try {
-    await createDefectFromRun({ ...payload, source_type: 'api_case', source_run_id: reportRunId.value, case_run_id: defectCaseRunId.value })
-    ElMessage.success(t('common.saved'))
-    showDefectDialog.value = false
-    reloadReport()
-  } finally {
-    defectSaving.value = false
-  }
+// Navigate to report page
+function viewReport(row) {
+  router.push(`/test/suites/${suiteId.value}/report/${row.id}`)
 }
 
 // Case search

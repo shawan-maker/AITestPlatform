@@ -80,7 +80,7 @@ class TaskService:
         return counts.get(task.id, 0)
 
     @classmethod
-    def _to_out(cls, task: TestTask, *, case_count: int, last_run: LastRunBrief) -> TaskOut:
+    def _to_out(cls, task: TestTask, *, case_count: int, last_run: LastRunBrief, environment_name: str | None = None) -> TaskOut:
         return TaskOut(
             id=task.id,
             project_id=task.project_id,
@@ -89,12 +89,24 @@ class TaskService:
             type=task.type,
             module_id=task.module_id,
             environment_id=task.environment_id,
+            environment_name=environment_name,
             run_mode=task.run_mode,
             case_count=case_count,
             last_run=last_run,
             created_at=task.created_at,
             updated_at=task.updated_at,
         )
+
+    @classmethod
+    async def _resolve_env_names(cls, task_ids: list[int]) -> dict[int, str]:
+        """Batch resolve environment names for tasks."""
+        tasks = await TestTask.filter(id__in=task_ids, environment_id__isnull=False).values("id", "environment_id")
+        env_ids = list({t["environment_id"] for t in tasks if t["environment_id"]})
+        if not env_ids:
+            return {}
+        envs = await TestEnvironment.filter(id__in=env_ids).values("id", "env_name")
+        env_map = {e["id"]: e["env_name"] for e in envs}
+        return {t["id"]: env_map.get(t["environment_id"]) for t in tasks if t["environment_id"]}
 
     @classmethod
     async def list(cls, user: User, query: TaskListQuery) -> PaginatedTasks:
@@ -107,12 +119,19 @@ class TaskService:
         if query.status is not None:
             task_ids = await cls._filter_task_ids_by_last_run_status(query.project_id, query.status)
             qs = qs.filter(id__in=task_ids or [-1])
+        if query.result is not None:
+            task_ids = await cls._filter_task_ids_by_result(query.project_id, query.result)
+            qs = qs.filter(id__in=task_ids or [-1])
+        if query.triggered_by:
+            task_ids = await cls._filter_task_ids_by_executor(query.project_id, query.triggered_by)
+            qs = qs.filter(id__in=task_ids or [-1])
         qs = qs.order_by("-updated_at", "-id")
         total, items = await paginate(qs, query.page, query.page_size)
         task_ids = [t.id for t in items]
         func_counts = await count_task_functional_cases(task_ids)
         api_counts = await count_task_api_cases(task_ids)
         last_runs = await fetch_task_last_runs(task_ids)
+        env_names = await cls._resolve_env_names(task_ids)
         out_items = []
         for t in items:
             case_count = (
@@ -127,6 +146,7 @@ class TaskService:
                     last_run=LastRunBrief(
                         **last_run_brief_from_task_run(last_runs.get(t.id))
                     ),
+                    environment_name=env_names.get(t.id),
                 )
             )
         return PaginatedTasks(
@@ -141,6 +161,43 @@ class TaskService:
         task_ids = [t["id"] for t in tasks]
         last_runs = await fetch_task_last_runs(task_ids)
         return [tid for tid, run in last_runs.items() if run.status == status]
+
+    @classmethod
+    async def _filter_task_ids_by_result(
+        cls, project_id: int, result: str
+    ) -> list[int]:
+        """Filter tasks by execution result: 'success' or 'fail'."""
+        tasks = await TestTask.filter(project_id=project_id).values("id")
+        task_ids = [t["id"] for t in tasks]
+        last_runs = await fetch_task_last_runs(task_ids)
+        matched = []
+        for tid, run in last_runs.items():
+            if result == "success":
+                if run.status == RunStatus.completed and run.total_cases > 0 and run.passed_cases == run.total_cases:
+                    matched.append(tid)
+            elif result == "fail":
+                if run.status == RunStatus.failed:
+                    matched.append(tid)
+                elif run.status == RunStatus.completed and run.total_cases > 0 and run.passed_cases < run.total_cases:
+                    matched.append(tid)
+        return matched
+
+    @classmethod
+    async def _filter_task_ids_by_executor(
+        cls, project_id: int, keyword: str
+    ) -> list[int]:
+        """Filter tasks by executor username keyword."""
+        users = await User.filter(username__icontains=keyword.strip()).values("id")
+        user_ids = [u["id"] for u in users]
+        if not user_ids:
+            return []
+        tasks = await TestTask.filter(project_id=project_id).values("id")
+        task_ids = [t["id"] for t in tasks]
+        last_runs = await fetch_task_last_runs(task_ids)
+        return [
+            tid for tid, run in last_runs.items()
+            if run.triggered_by_id in user_ids
+        ]
 
     @classmethod
     async def create(cls, user: User, data: TaskCreateRequest) -> TaskDetailOut:
@@ -170,10 +227,12 @@ class TaskService:
         await ensure_tm_viewer(task.project_id, user)
         case_count = await cls._get_case_count(task)
         last_runs = await fetch_task_last_runs([task.id])
+        env_names = await cls._resolve_env_names([task.id])
         base = cls._to_out(
             task,
             case_count=case_count,
             last_run=LastRunBrief(**last_run_brief_from_task_run(last_runs.get(task.id))),
+            environment_name=env_names.get(task.id),
         )
         suites: list[TaskSuiteBrief] = []
         if task.type != TaskSuiteType.functional:

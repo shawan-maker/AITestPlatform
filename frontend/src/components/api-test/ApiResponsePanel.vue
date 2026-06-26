@@ -15,7 +15,7 @@
         <el-tab-pane :label="t('page.apiCases.assertInfo')" name="assertInfo" />
         <el-tab-pane label="日志信息" name="logInfo" />
       </el-tabs>
-      <el-button link type="primary" :icon="Clock" @click="$emit('toggleRecords')">{{ t('page.apiCases.testRecord') }}</el-button>
+      <el-button v-if="showRecords" link type="primary" :icon="Clock" @click="$emit('toggleRecords')">{{ t('page.apiCases.testRecord') }}</el-button>
     </div>
 
     <div class="response-body">

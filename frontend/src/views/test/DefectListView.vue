@@ -26,7 +26,9 @@
       </FilterBar>
       <PaginatedTable v-model:page="page" v-model:page-size="pageSize" :data="items" :loading="loading" :total="total" row-key="id" @page-change="load" @selection-change="onSelectionChange">
         <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
-        <AppTableColumn prop="id" variant="fixed" label="ID" :width="70" />
+        <AppTableColumn variant="fixed" label="ID" :width="140">
+          <template #default="{ row }">{{ row.defect_code || ('#' + row.id) }}</template>
+        </AppTableColumn>
         <AppTableColumn prop="title" variant="content" :label="t('page.defects.title')" />
         <AppTableColumn variant="fixed" :label="t('page.defects.severity')" :width="90">
           <template #default="{ row }"><el-tag :type="severityType(row.severity)" size="small">{{ DEFECT_SEVERITY_MAP[row.severity] || row.severity }}</el-tag></template>
@@ -49,9 +51,11 @@
         <AppTableColumn variant="fixed" :label="t('page.defects.submitTime')" :width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </AppTableColumn>
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="80">
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="220">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/defects/${row.id}`)">{{ t('common.view') }}</el-button>
+            <el-button link type="primary" @click="router.push(`/test/defects/${row.id}?edit=1`)">{{ t('common.edit') }}</el-button>
+            <el-button v-if="canEdit" link type="primary" @click="openTransition(row)">{{ t('page.defects.transition') }}</el-button>
           </template>
         </AppTableColumn>
       </PaginatedTable>
@@ -96,6 +100,13 @@
         <el-button type="primary" :loading="saving" @click="create">{{ t('common.save') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 处理缺陷对话框 -->
+    <TransitionDefectDialog
+      v-model="showTransitionDialog"
+      :current-status="transitionCurrentStatus"
+      @submit="doTransition"
+    />
   </div>
 </template>
 
@@ -104,7 +115,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { batchDeleteDefects, createDefect, listDefects } from '@/api/testManagement'
+import { batchDeleteDefects, createDefect, listDefects, transitionDefect } from '@/api/testManagement'
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
@@ -116,6 +127,7 @@ import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import DefectStatusTag from '@/components/defect/DefectStatusTag.vue'
+import TransitionDefectDialog from '@/components/defect/TransitionDefectDialog.vue'
 import UserSearchPicker from '@/components/picker/UserSearchPicker.vue'
 
 const { t } = useI18n()
@@ -130,6 +142,9 @@ const showCreate = ref(false)
 const saving = ref(false)
 const createForm = reactive({ title: '', defect_category: 'other', severity: 'normal', priority: 'medium', steps: '', root_cause: '', assignee_id: null, comment: '' })
 const selectedIds = ref([])
+const transitionTargetId = ref(null)
+const transitionCurrentStatus = ref('init')
+const showTransitionDialog = ref(false)
 
 function severityType(s) {
   if (s === 'critical') return 'danger'
@@ -197,6 +212,23 @@ async function batchRemove() {
     else if (data?.deleted_ids?.length) ElMessage.success(t('common.batchDeleteSuccess', { count: data.deleted_ids.length }))
     load()
   } catch (e) { if (e !== 'cancel') ElMessage.error(e?.response?.data?.message || e.message) }
+}
+
+function openTransition(row) {
+  transitionTargetId.value = row.id
+  transitionCurrentStatus.value = row.status || 'init'
+  showTransitionDialog.value = true
+}
+
+async function doTransition(data) {
+  try {
+    await transitionDefect(transitionTargetId.value, data)
+    ElMessage.success(t('common.saved'))
+    showTransitionDialog.value = false
+    load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  }
 }
 
 onMounted(load)

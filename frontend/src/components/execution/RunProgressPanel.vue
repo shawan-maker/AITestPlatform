@@ -1,7 +1,7 @@
 <template>
   <el-alert v-if="progress" :title="progress.status" type="info" show-icon>
     <template #default>
-      {{ progress.completed_count ?? 0 }} / {{ progress.total_count ?? 0 }}
+      {{ progress.finished ?? 0 }} / {{ progress.total ?? 0 }}
     </template>
   </el-alert>
 </template>

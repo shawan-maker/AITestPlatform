@@ -340,6 +340,17 @@ class DefectService:
             old_status=old_status,
             new_status=data.status.value,
         )
+        if data.comment and data.comment.strip():
+            comment_obj = await TestDefectComment.create(
+                defect_id=defect.id,
+                content=data.comment.strip(),
+                created_by_id=user.id,
+            )
+            defect.updated_by_id = user.id
+            await defect.save(update_fields=["updated_by_id", "updated_at"])
+            await DefectHistoryWriter.record_comment_added(
+                defect.id, user, comment_id=comment_obj.id, content=data.comment.strip()
+            )
         return await cls.get_detail(user, defect_id)
 
     @classmethod
@@ -356,7 +367,7 @@ class DefectService:
         defect.updated_by_id = user.id
         await defect.save(update_fields=["updated_by_id", "updated_at"])
         await DefectHistoryWriter.record_comment_added(
-            defect.id, user, comment_id=comment.id
+            defect.id, user, comment_id=comment.id, content=comment.content
         )
         return await cls.get_detail(user, defect_id)
 

@@ -1,5 +1,5 @@
 <template>
-  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.defects.transition')" width="420px">
+  <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.defects.transition')" width="520px">
     <el-form label-width="100px">
       <el-form-item :label="t('common.status')">
         <el-select v-model="form.status">
@@ -9,6 +9,12 @@
       <el-form-item :label="t('page.defects.assignee')">
         <UserSearchPicker v-model="form.assignee_id" />
         <span class="optional-hint">{{ t('page.defects.assigneeOptional') }}</span>
+      </el-form-item>
+      <el-form-item v-if="form.status === 'resolved'" :label="t('page.defects.rootCause')" required>
+        <el-input v-model="form.root_cause" type="textarea" :rows="2" />
+      </el-form-item>
+      <el-form-item :label="t('page.defects.comment')">
+        <el-input v-model="form.comment" type="textarea" :rows="3" :placeholder="t('page.defects.transitionCommentPlaceholder')" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -40,19 +46,29 @@ const validStatuses = computed(() => {
   return DEFECT_ALLOWED_TRANSITIONS[props.currentStatus] || []
 })
 
-const form = reactive({ status: '', assignee_id: null })
+const form = reactive({ status: '', assignee_id: null, root_cause: '', comment: '' })
 
 watch(visible, (v) => {
   if (v) {
     var targets = validStatuses.value
     form.status = targets[0] || ''
     form.assignee_id = null
+    form.root_cause = ''
+    form.comment = ''
   }
 })
 
 function submit() {
   if (!form.status) return
-  emit('submit', { status: form.status, assignee_id: form.assignee_id || undefined })
+  if (form.status === 'resolved' && !form.root_cause?.trim()) {
+    return
+  }
+  emit('submit', {
+    status: form.status,
+    assignee_id: form.assignee_id || undefined,
+    root_cause: form.root_cause?.trim() || undefined,
+    comment: form.comment?.trim() || undefined,
+  })
 }
 </script>
 

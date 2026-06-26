@@ -58,11 +58,13 @@ class DefectHistoryWriter:
         operator: User,
         *,
         comment_id: int,
+        content: str = "",
     ) -> None:
         await TestDefectHistory.create(
             defect_id=defect_id,
             action=DefectHistoryAction.comment_added,
-            field_name="comment_id",
-            new_value=str(comment_id),
+            field_name="comment",
+            old_value=None,
+            new_value=content or str(comment_id),
             operator_id=operator.id,
         )

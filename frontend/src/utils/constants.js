@@ -64,6 +64,13 @@ export const DEFECT_SEVERITY_MAP = { minor: '轻微', normal: '一般', serious:
 export const DEFECT_PRIORITY_MAP = { high: '高', medium: '中', low: '低' }
 export const DEFECT_CATEGORY_MAP = { functional: '功能', performance: '性能', ui: '界面', compatibility: '兼容', security: '安全', other: '其他' }
 
+export const DEFECT_HISTORY_ACTION_MAP = {
+  created: '创建缺陷',
+  status_change: '状态变更',
+  field_update: '字段修改',
+  comment_added: '添加备注',
+}
+
 export const RUN_STATUS = ['pending', 'running', 'completed', 'failed', 'cancelled']
 
 export const RUN_STATUS_MAP = {

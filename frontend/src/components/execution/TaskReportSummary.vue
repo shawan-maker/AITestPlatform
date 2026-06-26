@@ -1,27 +1,27 @@
 <template>
-  <div v-if="report" class="report-summary">
+  <div v-if="report" class="task-report-summary">
     <!-- 结果统计：左右结构 -->
-    <SectionPanel :title="t('execution.reportResultStats')" class="report-summary__stats-panel">
-      <div class="report-summary__top">
-        <div class="report-summary__basic">
+    <SectionPanel :title="t('execution.reportResultStats')" class="task-report__stats-panel">
+      <div class="task-report__top">
+        <div class="task-report__basic">
           <el-descriptions :column="1" border>
-            <el-descriptions-item :label="t('page.test.suites.suiteName')">{{ report.suite_name || '-' }}</el-descriptions-item>
-            <el-descriptions-item :label="t('page.test.relatedTask')">{{ report.task_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.test.tasks.taskName')">{{ report.task_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.test.tabSuites')">{{ suiteNames || '-' }}</el-descriptions-item>
             <el-descriptions-item :label="t('execution.duration')">{{ durationDisplay }}</el-descriptions-item>
             <el-descriptions-item :label="t('execution.startTime')">{{ formatTime(summary.start_time) }}</el-descriptions-item>
             <el-descriptions-item :label="t('page.test.successRate')">
-              <span class="report-summary__rate">{{ successRateDisplay }}</span>
+              <span class="task-report__rate">{{ successRateDisplay }}</span>
             </el-descriptions-item>
           </el-descriptions>
         </div>
-        <div class="report-summary__stats">
-          <div class="report-summary__result-row">
-            <div class="report-summary__result-tag">
+        <div class="task-report__stats">
+          <div class="task-report__result-row">
+            <div class="task-report__result-tag">
               <span style="margin-right: 8px; font-weight: 500">{{ t('execution.execResult') }}：</span>
               <el-tag v-if="resultTagType" :type="resultTagType" size="small">{{ resultLabel }}</el-tag>
               <StatusTag v-else :status="summary.status" :map="RUN_STATUS_MAP" />
             </div>
-            <div class="report-summary__count-badges">
+            <div class="task-report__count-badges">
               <el-tag type="info" effect="plain" size="small">{{ t('page.test.totalCases') }}: {{ totalCount }}</el-tag>
               <el-tag type="success" effect="plain" size="small">{{ t('execution.passed') }}: {{ passedCount }}</el-tag>
               <el-tag type="danger" effect="plain" size="small">{{ t('execution.failed') }}: {{ failedCount + errorCount }}</el-tag>
@@ -29,33 +29,68 @@
               <el-tag effect="plain" size="small">{{ t('execution.notStarted') }}: {{ notStartedCount }}</el-tag>
             </div>
           </div>
-          <div class="report-summary__charts">
-            <div ref="passRateRef" class="report-summary__chart" />
-            <div ref="defectRef" class="report-summary__chart" />
+          <div class="task-report__charts">
+            <div ref="passRateRef" class="task-report__chart" />
+            <div ref="defectRef" class="task-report__chart" />
           </div>
         </div>
       </div>
     </SectionPanel>
 
-    <!-- 测试结果 — 占主体高度，可滚动+分页 -->
-    <SectionPanel :title="t('execution.reportTestResults')" class="report-summary__results-section">
-      <div class="report-summary__results-scroll">
-        <ReportCaseTable
-          v-if="cases.length"
-          :cases="paginatedCases"
-          :suite-name="report.suite_name"
-          :can-edit="canEdit"
-          @view-log="$emit('view-log', $event)"
-          @linked="$emit('linked')"
-          @create-defect="$emit('create-defect', $event)"
-        />
-        <div v-else class="report-summary__no-cases">{{ t('execution.noData') || '暂无用例数据' }}</div>
+    <!-- 测试结果 — 套件级列表，行内展开用例，可滚动+分页 -->
+    <SectionPanel :title="t('execution.reportTestResults')" class="task-report__results-section">
+      <div class="task-report__suite-toolbar">
+        <el-input v-model="suiteSearch" :placeholder="t('page.test.suites.suiteName')" clearable style="width: 260px" />
       </div>
-      <div v-if="cases.length" class="report-summary__pagination">
+      <div class="task-report__results-scroll">
+        <AppTable :data="paginatedSuites" row-key="suite_run_id">
+          <AppTableColumn type="expand" variant="fixed" :width="50">
+            <template #default="{ row }">
+              <div class="task-report__expand-cases">
+                <ReportCaseTable
+                  v-if="row.cases && row.cases.length"
+                  :cases="row.cases"
+                  :suite-name="row.suite_name"
+                  :can-edit="canEdit"
+                  @view-log="$emit('view-log', $event)"
+                  @linked="$emit('linked')"
+                  @create-defect="$emit('create-defect', $event)"
+                />
+                <div v-else class="task-report__no-cases">{{ t('execution.noData') || '暂无用例数据' }}</div>
+              </div>
+            </template>
+          </AppTableColumn>
+          <AppTableColumn prop="suite_id" variant="fixed" label="ID" :width="70" />
+          <AppTableColumn prop="suite_name" variant="content" :label="t('page.test.suites.suiteName')" />
+          <AppTableColumn variant="fixed" :label="t('page.test.caseCount')" :width="80">
+            <template #default="{ row }">{{ row.summary?.total ?? (row.cases ? row.cases.length : 0) }}</template>
+          </AppTableColumn>
+          <AppTableColumn variant="fixed" :label="t('execution.execResult')" :width="100">
+            <template #default="{ row }">
+              <template v-if="getSuiteResult(row)">
+                <el-tag :type="getSuiteResult(row).type" size="small">{{ getSuiteResult(row).label }}</el-tag>
+              </template>
+              <StatusTag v-else :status="row.summary?.status" :map="RUN_STATUS_MAP" />
+            </template>
+          </AppTableColumn>
+          <AppTableColumn variant="fixed" :label="t('page.test.successRate')" :width="120">
+            <template #default="{ row }">{{ calcSuiteSuccessRate(row) }}</template>
+          </AppTableColumn>
+          <AppTableColumn variant="fixed" :label="t('execution.duration')" :width="100">
+            <template #default="{ row }">
+              {{ row.summary?.duration_ms != null ? ((row.summary.duration_ms < 1000 ? row.summary.duration_ms + 'ms' : (row.summary.duration_ms / 1000).toFixed(1) + 's')) : '-' }}
+            </template>
+          </AppTableColumn>
+          <AppTableColumn variant="fixed" :label="t('execution.startTime')" :width="170">
+            <template #default="{ row }">{{ row.summary?.start_time ? formatTime(row.summary.start_time) : '-' }}</template>
+          </AppTableColumn>
+        </AppTable>
+      </div>
+      <div v-if="filteredSuites.length" class="task-report__pagination">
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :total="cases.length"
+          :total="filteredSuites.length"
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next"
           small
@@ -77,6 +112,8 @@ import { RUN_STATUS_MAP, DEFECT_SEVERITY_MAP } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import SectionPanel from '@/components/common/SectionPanel.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
+import AppTable from '@/components/common/AppTable.vue'
+import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import ReportCaseTable from './ReportCaseTable.vue'
 
 echarts.use([PieChart, TooltipComponent, LegendComponent, CanvasRenderer])
@@ -95,8 +132,10 @@ let passChart = null
 let defectChart = null
 
 const summary = computed(() => props.report?.summary ?? props.report)
-const cases = computed(() => props.report?.cases ?? [])
+const suites = computed(() => props.report?.suites ?? [])
 const defectChartData = computed(() => props.report?.defect_chart ?? [])
+
+const suiteNames = computed(() => suites.value.map(s => s.suite_name).join('、') || '-')
 
 const totalCount = computed(() => summary.value?.total ?? 0)
 const passedCount = computed(() => summary.value?.passed ?? 0)
@@ -106,7 +145,6 @@ const skippedCount = computed(() => summary.value?.skipped ?? 0)
 const executedCount = computed(() => passedCount.value + failedCount.value + errorCount.value)
 const notStartedCount = computed(() => Math.max(0, totalCount.value - executedCount.value - skippedCount.value))
 
-// Success rate display
 const successRateDisplay = computed(() => {
   var total = totalCount.value
   var passed = passedCount.value
@@ -138,16 +176,51 @@ const resultLabel = computed(() => {
   return RUN_STATUS_MAP[s]?.label || s
 })
 
-// Pagination for cases
+// Suite search + pagination
+const suiteSearch = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
-const paginatedCases = computed(() => {
-  var start = (currentPage.value - 1) * pageSize.value
-  return cases.value.slice(start, start + pageSize.value)
+
+const filteredSuites = computed(() => {
+  if (!suiteSearch.value) return suites.value
+  var kw = suiteSearch.value.toLowerCase()
+  return suites.value.filter(s => (s.suite_name || '').toLowerCase().includes(kw))
 })
 
-watch(() => props.report, () => { currentPage.value = 1 })
+const paginatedSuites = computed(() => {
+  var start = (currentPage.value - 1) * pageSize.value
+  return filteredSuites.value.slice(start, start + pageSize.value)
+})
 
+watch([() => props.report, suiteSearch], () => { currentPage.value = 1 })
+
+function getSuiteResult(row) {
+  var s = row.summary?.status
+  if (!s) return null
+  if (s === 'completed') {
+    var fc = row.summary?.failed ?? 0
+    var ec = row.summary?.error ?? 0
+    if (fc === 0 && ec === 0) return { type: 'success', label: t('page.test.resultSuccess') || '成功' }
+    return { type: 'danger', label: t('page.test.resultFail') || '失败' }
+  }
+  if (s === 'failed') return { type: 'danger', label: t('page.test.resultFail') || '失败' }
+  if (s === 'cancelled') return { type: 'info', label: t('page.test.resultCancelled') || '已停止' }
+  return null
+}
+
+function calcSuiteSuccessRate(row) {
+  var s = row.summary
+  if (!s) return '-'
+  var total = s.total ?? 0
+  var passed = s.passed ?? 0
+  if (!total) return '-'
+  var done = (s.passed ?? 0) + (s.failed ?? 0) + (s.error ?? 0)
+  if (!done) return '-'
+  var pct = passed / total * 100
+  return pct.toFixed(1) + '% (' + passed + '/' + total + ')'
+}
+
+// Charts
 function renderCharts() {
   if (passRateRef.value) {
     passChart?.dispose()
@@ -203,17 +276,17 @@ onBeforeUnmount(function () {
 </script>
 
 <style scoped lang="scss">
-.report-summary__stats-panel {
+.task-report__stats-panel {
   flex-shrink: 0;
 }
 
-.report-summary__top {
+.task-report__top {
   display: flex;
   gap: 0;
   align-items: stretch;
 }
 
-.report-summary__basic {
+.task-report__basic {
   flex: 0 0 400px;
   min-width: 0;
   padding-right: 24px;
@@ -237,7 +310,7 @@ onBeforeUnmount(function () {
   }
 }
 
-.report-summary__stats {
+.task-report__stats {
   flex: 1;
   min-width: 0;
   padding-left: 24px;
@@ -247,41 +320,41 @@ onBeforeUnmount(function () {
   gap: 16px;
 }
 
-.report-summary__result-row {
+.task-report__result-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
 }
 
-.report-summary__result-tag {
+.task-report__result-tag {
   display: flex;
   align-items: center;
 }
 
-.report-summary__count-badges {
+.task-report__count-badges {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.report-summary__rate {
+.task-report__rate {
   font-weight: 600;
   color: var(--el-color-primary);
 }
 
-.report-summary__charts {
+.task-report__charts {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
 
-.report-summary__chart {
+.task-report__chart {
   height: 180px;
   min-width: 0;
 }
 
-.report-summary__results-section {
+.task-report__results-section {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -295,13 +368,25 @@ onBeforeUnmount(function () {
   }
 }
 
-.report-summary__results-scroll {
+.task-report__suite-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.task-report__results-scroll {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
+
+  // Nested expand table should not overflow the scroll container
+  :deep(.el-table__expanded-cell) {
+    overflow-x: auto;
+  }
 }
 
-.report-summary__pagination {
+.task-report__pagination {
   display: flex;
   justify-content: flex-end;
   padding-top: 12px;
@@ -309,10 +394,13 @@ onBeforeUnmount(function () {
   flex-shrink: 0;
 }
 
-.report-summary__no-cases {
+.task-report__expand-cases {
+  padding: 12px 16px;
+}
+
+.task-report__no-cases {
   color: var(--el-text-color-secondary);
   font-size: 13px;
-  padding: 24px 0;
-  text-align: center;
+  padding: 12px 0;
 }
 </style>

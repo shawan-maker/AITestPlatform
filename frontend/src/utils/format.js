@@ -39,26 +39,50 @@ export function summarizePayload(text, maxLen = 120) {
 
 /**
  * Format duration in ms to human-readable string.
- * e.g. 61397 → "1m 1s 397ms" (en) or "1分1秒397毫秒" (zh)
+ * @param {number} ms - Duration in milliseconds
+ * @param {string} locale - 'zh' or 'en'
+ * @param {boolean} showMs - Whether to show milliseconds (default: false)
  */
-export function formatDuration(ms, locale = 'zh') {
+export function formatDuration(ms, locale = 'zh', showMs = false) {
   if (ms == null || ms < 0) return '-'
-  if (ms === 0) return locale === 'zh' ? '0毫秒' : '0ms'
-  const h = Math.floor(ms / 3600000)
+  if (ms === 0) return locale === 'zh' ? '0秒' : '0s'
+  const d = Math.floor(ms / 86400000)
+  const h = Math.floor((ms % 86400000) / 3600000)
   const m = Math.floor((ms % 3600000) / 60000)
   const s = Math.floor((ms % 60000) / 1000)
   const remainder = ms % 1000
   const parts = []
   if (locale === 'zh') {
+    if (d) parts.push(d + '天')
     if (h) parts.push(h + '时')
     if (m) parts.push(m + '分')
     if (s) parts.push(s + '秒')
-    if (remainder) parts.push(remainder + '毫秒')
+    if (showMs && remainder) parts.push(remainder + '毫秒')
   } else {
+    if (d) parts.push(d + 'd')
     if (h) parts.push(h + 'h')
     if (m) parts.push(m + 'm')
     if (s) parts.push(s + 's')
-    if (remainder) parts.push(remainder + 'ms')
+    if (showMs && remainder) parts.push(remainder + 'ms')
   }
-  return parts.join(locale === 'zh' ? '' : ' ')
+  return parts.length ? parts.join(locale === 'zh' ? '' : ' ') : (locale === 'zh' ? '0秒' : '0s')
+}
+
+/**
+ * Calculate time-in-state for each status_timeline entry.
+ * Adds duration_ms (time spent in that status) and prev_status (for transition display).
+ * Last entry gets duration_ms=null (still in that state).
+ */
+export function calcStatusDurations(timeline) {
+  if (!timeline?.length) return []
+  return timeline.map(function (item, i) {
+    var prev = i > 0 ? timeline[i - 1].status : null
+    var durationMs = null
+    if (i < timeline.length - 1) {
+      var at = new Date(item.at).getTime()
+      var nextAt = new Date(timeline[i + 1].at).getTime()
+      durationMs = Math.max(0, nextAt - at)
+    }
+    return Object.assign({}, item, { duration_ms: durationMs, prev_status: prev })
+  })
 }

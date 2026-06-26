@@ -12,6 +12,8 @@ class TaskListQuery(PaginationParams):
     q: str | None = None
     status: RunStatus | None = None
     type: TaskSuiteType | None = None
+    result: str | None = None
+    triggered_by: str | None = None
 
 
 class TaskCaseItemIn(BaseModel):
@@ -44,6 +46,7 @@ class TaskOut(BaseModel):
     type: TaskSuiteType
     module_id: int | None
     environment_id: int | None
+    environment_name: str | None = None
     run_mode: RunMode | None
     case_count: int = 0
     last_run: LastRunBrief

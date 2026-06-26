@@ -39,6 +39,25 @@ async def resolve_source_brief(defect: TestDefect) -> DefectSourceBrief:
     run_label: str | None = None
     unreachable = False
 
+    # --- Resolve run_label: suite name or task name ---
+    if defect.source_run_id:
+        suite_run = await TestSuiteRun.get_or_none(id=defect.source_run_id)
+        if suite_run:
+            await suite_run.fetch_related("suite")
+            if suite_run.suite:
+                run_label = suite_run.suite.suite_name
+                if suite_run.suite.project_id != defect.project_id:
+                    unreachable = True
+        else:
+            task_run = await TestTaskRun.get_or_none(id=defect.source_run_id)
+            if task_run:
+                await task_run.fetch_related("task")
+                if task_run.task:
+                    run_label = task_run.task.task_name
+                    if task_run.task.project_id != defect.project_id:
+                        unreachable = True
+
+    # --- Resolve case_name: direct lookup first ---
     if defect.source_type == DefectSourceType.api_case and defect.source_case_id:
         from service.api_test.models import ApiTestCase
 
@@ -57,35 +76,36 @@ async def resolve_source_brief(defect: TestDefect) -> DefectSourceBrief:
             if case.project_id != defect.project_id:
                 unreachable = True
 
-    if defect.source_run_id:
-        suite_run = await TestSuiteRun.get_or_none(id=defect.source_run_id)
-        if suite_run:
-            run_label = f"套件执行 #{suite_run.id}"
-            await suite_run.fetch_related("suite")
-            if suite_run.suite and suite_run.suite.project_id != defect.project_id:
-                unreachable = True
-        else:
-            task_run = await TestTaskRun.get_or_none(id=defect.source_run_id)
-            if task_run:
-                run_label = f"任务执行 #{task_run.id}"
-                await task_run.fetch_related("task")
-                if task_run.task and task_run.task.project_id != defect.project_id:
-                    unreachable = True
-
-    if not case_name and defect.source_case_id:
-        record = await ApiCaseRunRecord.filter(
-            defect_id=defect.id, api_case_id=defect.source_case_id
-        ).first()
+    # --- Fallback: get case_name from run records linked to this defect ---
+    if not case_name:
+        # Try by defect_id first (linked records)
+        record = await ApiCaseRunRecord.filter(defect_id=defect.id).first()
         if record:
             case_name = record.case_name
         else:
             frecord = await FunctionalCaseRunRecord.filter(
-                defect_id=defect.id, functional_case_id=defect.source_case_id
+                defect_id=defect.id
             ).first()
             if frecord:
                 await frecord.fetch_related("functional_case")
                 if frecord.functional_case:
                     case_name = frecord.functional_case.case_name
+
+    # --- Second fallback: by source_case_id if still not found ---
+    if not case_name and defect.source_case_id:
+        record2 = await ApiCaseRunRecord.filter(
+            api_case_id=defect.source_case_id
+        ).order_by("-id").first()
+        if record2:
+            case_name = record2.case_name
+        else:
+            frecord2 = await FunctionalCaseRunRecord.filter(
+                functional_case_id=defect.source_case_id
+            ).order_by("-id").first()
+            if frecord2:
+                await frecord2.fetch_related("functional_case")
+                if frecord2.functional_case:
+                    case_name = frecord2.functional_case.case_name
 
     return DefectSourceBrief(
         source_type=defect.source_type,

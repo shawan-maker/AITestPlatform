@@ -57,6 +57,12 @@ class TaskRunner:
             total_failed += suite_run.failed_cases
             total_error += suite_run.error_cases
             total_skipped += suite_run.skipped_cases
+            # Incremental save so progress is visible during execution
+            task_run.passed_cases = total_passed
+            task_run.failed_cases = total_failed
+            task_run.error_cases = total_error
+            task_run.skipped_cases = total_skipped
+            await task_run.save()
             if suite_run.status == RunStatus.cancelled:
                 cancelled = True
                 break
