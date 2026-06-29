@@ -53,7 +53,8 @@
         <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="180">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/tasks/${row.id}`)">{{ t('common.view') }}</el-button>
-            <el-button v-if="canEdit && isRowRunning(row)" link type="danger" @click="stopTaskRow(row)">{{ t('page.test.stopRun') }}</el-button>
+            <el-button v-if="canEdit && isRowRunning(row) && row.type !== 'functional'" link type="danger" @click="stopTaskRow(row)">{{ t('page.test.stopRun') }}</el-button>
+            <el-button v-else-if="canEdit && row.type === 'functional'" link type="primary" @click="router.push(`/test/tasks/${row.id}?tab=records&execute=1`)">{{ t('page.test.run') }}</el-button>
             <el-button v-else-if="canEdit && row.type !== 'manual' && row.type !== 'functional'" link type="primary" @click="runTaskRow(row)">{{ t('page.test.run') }}</el-button>
             <ConfirmDelete v-if="canEdit" @confirm="remove(row)">
               <el-button link type="danger">{{ t('common.delete') }}</el-button>

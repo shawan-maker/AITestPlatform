@@ -8,6 +8,7 @@ from service.ai_generation.schemas import (
     ApiGenerateFromDocRequest,
     ApiGenerateFromInterfaceRequest,
     ApiSessionPreviewUpdateRequest,
+    SaveBaseCasesRequest,
 )
 from service.ai_generation.session_schemas import AgentMessageRequest, SessionRenameRequest
 from service.core.deps import get_current_active_user
@@ -50,6 +51,15 @@ async def api_post_message(
     body: AgentMessageRequest,
     user: User = Depends(get_current_active_user),
 ):
+    # Detect pipeline mode: if session has mode != "single", use pipeline
+    from service.ai_generation.models import AIGenerationSession
+    session = await AIGenerationSession.get_or_none(id=session_id)
+    if session and session.output_payload:
+        mode = session.output_payload.get("mode")
+        if mode in ("from_interfaces", "from_doc"):
+            stream = ApiAgentService.stream_pipeline(user, session_id, body)
+            return StreamingResponse(stream, media_type="text/event-stream")
+    # Fallback to legacy agent flow
     stream = ApiAgentService.stream_message(user, session_id, body)
     return StreamingResponse(stream, media_type="text/event-stream")
 
@@ -132,3 +142,18 @@ async def api_delete_session(
     from service.ai_generation.session_lifecycle import SessionLifecycleService
     data = await SessionLifecycleService.delete_session(user, session_id=session_id)
     return success(data=data, message="会话已删除")
+
+
+# ---------- Multi-interface pipeline endpoints ----------
+
+@router.post(
+    "/sessions/{session_id}/save-base-cases",
+    summary="保存编辑后的基础用例并触发结构化+预执行",
+)
+async def api_save_base_cases(
+    session_id: int,
+    body: SaveBaseCasesRequest,
+    user: User = Depends(get_current_active_user),
+):
+    stream = ApiAgentService.save_base_cases_and_continue(user, session_id, body)
+    return StreamingResponse(stream, media_type="text/event-stream")

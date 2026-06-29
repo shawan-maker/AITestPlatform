@@ -20,6 +20,9 @@ class ManualCaseDetailOut(BaseModel):
     expected_result: str | None = None
     exec_result: FunctionalExecResult | None = None
     remark: str | None = None
+    record_id: int | None = None
+    triggered_by_name: str | None = None
+    exec_time: datetime | None = None
 
 
 class ManualRunContextOut(BaseModel):
@@ -27,6 +30,7 @@ class ManualRunContextOut(BaseModel):
     task_name: str
     status: RunStatus
     tree: list[TaskCaseTreeNode]
+    module_map: dict[int, str] = {}
 
 
 class ManualCaseUpdateRequest(BaseModel):

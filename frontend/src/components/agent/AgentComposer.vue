@@ -56,23 +56,19 @@
           />
         </el-select>
         <span>{{ t('page.agent.composeApiMiddle') }}</span>
-        <el-select
-          v-model="selectedInterfaceId"
-          class="agent-composer__inline-select agent-composer__inline-select--interface"
-          filterable
-          clearable
-          popper-class="agent-composer-select-dropdown"
-          :placeholder="t('page.agent.selectInterface')"
-          :loading="loadingOptions"
-        >
-          <el-option
-            v-for="item in interfaceOptions"
-            :key="item.id"
-            :label="item.label"
-            :value="item.id"
-          />
-        </el-select>
+        <InterfaceMultiSelect
+          v-model="selectedInterfaceIds"
+          :project-id="localProjectId"
+        />
       </template>
+    </div>
+
+    <div v-if="!hidePromptRow && agentType === 'api'" class="agent-composer__env-row">
+      <EnvironmentSelect
+        v-model="selectedEnvironmentId"
+        :placeholder="t('page.agent.selectEnvironment')"
+        class="agent-composer__env-select"
+      />
     </div>
 
     <textarea
@@ -124,10 +120,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Folder, Loading, Promotion } from '@element-plus/icons-vue'
-import { listInterfaces } from '@/api/apiTest'
 import { listDocuments } from '@/api/knowledge'
 import { useProjectStore } from '@/stores/project'
 import { usePermissionStore } from '@/stores/permission'
+import InterfaceMultiSelect from './InterfaceMultiSelect.vue'
+import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 
 const props = defineProps({
   agentType: { type: String, default: 'functional' },
@@ -148,9 +145,9 @@ const permissionStore = usePermissionStore()
 const draft = ref('')
 const localProjectId = ref(projectStore.currentProjectId)
 const selectedDocumentKey = ref('')
-const selectedInterfaceId = ref(null)
+const selectedInterfaceIds = ref([])
+const selectedEnvironmentId = ref(null)
 const documentOptions = ref([])
-const interfaceOptions = ref([])
 const loadingOptions = ref(false)
 const textareaRef = ref(null)
 
@@ -171,12 +168,8 @@ const selectedDocument = computed(() =>
 const canSend = computed(() => {
   if (props.hidePromptRow) return Boolean(draft.value.trim())
   if (!localProjectId.value) return false
-  /* SIT-F7: Allow sending without selecting document/interface (empty conversation) */
-  if (draft.value.trim()) return true
-  if (props.agentType === 'functional') {
-    return Boolean(selectedDocumentKey.value)
-  }
-  return Boolean(selectedInterfaceId.value)
+  // project selected is enough to send (interfaces and textarea are both optional)
+  return true
 })
 
 async function loadDocumentOptions(projectId) {
@@ -201,34 +194,14 @@ async function loadDocumentOptions(projectId) {
   }
 }
 
-async function loadInterfaceOptions(projectId) {
-  if (!projectId) {
-    interfaceOptions.value = []
-    return
-  }
-  loadingOptions.value = true
-  try {
-    const res = await listInterfaces({ project_id: projectId, page: 1, page_size: 200 })
-    interfaceOptions.value = (res.data.data?.items ?? []).map((item) => ({
-      id: item.id,
-      label: `${item.method || '—'} ${item.summary || item.path || item.id}`,
-    }))
-  } catch {
-    interfaceOptions.value = []
-  } finally {
-    loadingOptions.value = false
-  }
-}
-
 async function onProjectChange(projectId) {
   projectStore.setCurrent(projectId)
   await permissionStore.loadRoleForProject(projectId)
   selectedDocumentKey.value = ''
-  selectedInterfaceId.value = null
+  selectedInterfaceIds.value = []
+  selectedEnvironmentId.value = null
   if (props.agentType === 'functional') {
     await loadDocumentOptions(projectId)
-  } else {
-    await loadInterfaceOptions(projectId)
   }
   emit('project-change', projectId)
 }
@@ -284,11 +257,13 @@ async function submit() {
     } else {
       payload.userPrompt = content || undefined
     }
-  } else if (selectedInterfaceId.value) {
-    payload.interfaceId = selectedInterfaceId.value
-    payload.userPrompt = content || undefined
   } else {
-    payload.apiDocText = content
+    // API agent: multi-interface mode
+    payload.interfaceIds = selectedInterfaceIds.value.length ? selectedInterfaceIds.value : undefined
+    payload.environmentId = selectedEnvironmentId.value || undefined
+    payload.userPrompt = content || undefined
+    // mode: 'from_interfaces' if interfaces selected, 'from_prompt' otherwise
+    payload.mode = selectedInterfaceIds.value.length ? 'from_interfaces' : 'from_prompt'
   }
 
   emit('send', payload)
@@ -310,9 +285,8 @@ watch(
     if (!projectId) return
     if (type === 'functional') {
       await loadDocumentOptions(projectId)
-    } else {
-      await loadInterfaceOptions(projectId)
     }
+    // API agent: InterfaceMultiSelect loads its own data
   },
   { immediate: true },
 )
@@ -368,13 +342,31 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 16px; /* 加倍：从 6px 8px 改为 12px 16px */
-  margin-bottom: 24px; /* 加倍：从 12px 改为 24px */
-  padding-bottom: 24px; /* 与 textarea 之间的分隔线间距 */
-  font-size: 24px; /* 比tab字号(28px)小两号 */
+  gap: 12px 16px;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  font-size: 24px;
   color: var(--el-text-color-primary);
-  line-height: 48px; /* 调整行高以适应24px字体 */
-  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5); /* 选择器行与输入框之间的分隔线 */
+  line-height: 48px;
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+}
+
+.agent-composer__env-row {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+}
+
+.agent-composer__env-select {
+  width: 320px;
+
+  :deep(.el-select__wrapper) {
+    box-shadow: none !important;
+    border: 2px solid var(--el-border-color);
+    border-radius: 12px;
+    min-height: 48px;
+    padding: 0 16px;
+  }
 }
 
 .agent-composer__inline-select {

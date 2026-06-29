@@ -75,6 +75,7 @@ class SuiteCaseRelationOut(BaseModel):
     case_order: int
     use_dependency: bool
     case_name: str | None = None
+    interface_id: int | None = None
     interface_name: str | None = None
     interface_path: str | None = None
     interface_method: str | None = None

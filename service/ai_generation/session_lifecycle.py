@@ -141,16 +141,36 @@ class SessionLifecycleService:
         project_id: int,
         module_id: int | None,
         interface_id: int | None,
+        interface_ids: list[int] | None = None,
         api_doc_text: str | None,
         user_prompt: str | None,
+        environment_id: int | None = None,
         title: str | None,
+        mode: str | None = None,
     ) -> AIGenerationSessionOut:
         await cls._validate_module(project_id, module_id)
         input_ref_type = None
         input_ref_id = None
         source_text = ""
 
-        if interface_id is not None:
+        # Determine mode
+        if mode is None:
+            if interface_ids and len(interface_ids) > 1:
+                mode = "from_interfaces"
+            elif interface_id:
+                mode = "single"
+            elif api_doc_text and api_doc_text.strip():
+                mode = "from_doc"
+            elif interface_ids and len(interface_ids) == 1:
+                mode = "single"
+                interface_id = interface_ids[0]
+
+        if mode == "from_interfaces" and interface_ids:
+            # Multi-interface mode
+            input_ref_type = InputRefType.multi_interface
+            source_text = f"multi_interface:{','.join(str(i) for i in interface_ids)}"
+
+        elif interface_id is not None:
             from service.api_test.interface.interface_service import InterfaceService
             from service.api_test.shared.interface_doc import interface_to_doc_json
 
@@ -165,7 +185,9 @@ class SessionLifecycleService:
             source_text = api_doc_text.strip()
             input_ref_type = InputRefType.api_doc
         else:
-            raise AppException("interface_id 或 api_doc_text 至少提供一个", 400)
+            # Allow empty input for pipeline mode (user just selects interfaces)
+            source_text = user_prompt or ""
+            input_ref_type = InputRefType.multi_interface
 
         await cls.enforce_fifo(
             project_id=project_id,
@@ -185,13 +207,22 @@ class SessionLifecycleService:
             title=title or cls._default_title(source_text),
             created_by_id=user.id,
         )
-        extra: dict = {"api_doc": source_text}
-        if interface_id:
-            from service.api_test.dependency.resolver_service import DependencyResolverService
 
+        extra: dict = {"mode": mode or "single"}
+        if mode == "from_interfaces" and interface_ids:
+            extra["interface_ids"] = interface_ids
+        elif mode == "from_doc" and api_doc_text:
+            extra["api_doc"] = api_doc_text
+        elif interface_id:
+            extra["api_doc"] = source_text
+            from service.api_test.dependency.resolver_service import DependencyResolverService
             resolved = await DependencyResolverService.resolve(interface_id)
             extra["precoditions_api_doc"] = resolved.precoditions_api_doc
             extra["precoditions"] = resolved.precoditions_summaries
+
+        if environment_id:
+            extra["environment_id"] = environment_id
+
         session.output_payload = extra
         await session.save(update_fields=["output_payload"])
         return session_to_out(session)

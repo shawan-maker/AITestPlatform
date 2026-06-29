@@ -43,13 +43,23 @@ class TaskCaseRelationService:
     @classmethod
     async def _build_case_out(cls, rel: TaskCaseRelation) -> TaskCaseRelationOut:
         case = await FunctionalCase.get_or_none(id=rel.case_id)
+        module_name = None
+        if case and case.module_id:
+            from service.project.models import ProjectModule
+            mod = await ProjectModule.get_or_none(id=case.module_id)
+            if mod:
+                module_name = mod.name
         return TaskCaseRelationOut(
             id=rel.id,
             case_id=rel.case_id,
             case_order=rel.case_order,
             case_name=case.case_name if case else None,
+            case_no=case.case_no if case else None,
+            priority=case.priority if case else None,
+            case_category=case.case_category if case else None,
             catalog_id=case.catalog_id if case else None,
             module_id=case.module_id if case else None,
+            module_name=module_name,
         )
 
     @classmethod

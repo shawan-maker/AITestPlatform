@@ -232,6 +232,7 @@ class InputRefType(str, Enum):
     requirement = "requirement"
     interface = "interface"
     api_doc = "api_doc"
+    multi_interface = "multi_interface"
 
 
 class SessionStatus(str, Enum):

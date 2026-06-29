@@ -94,6 +94,15 @@ export function confirmApiGeneration(data) {
   return request.post('/ai-generation/api/confirm', data)
 }
 
+export function streamSaveBaseCases(sessionId, data, handlers, signal) {
+  return postEventStream(
+    `/ai-generation/api/sessions/${sessionId}/save-base-cases`,
+    data,
+    handlers,
+    signal,
+  )
+}
+
 // --- SIT-F7: Session management ---
 
 export function renameApiSession(sessionId, title) {

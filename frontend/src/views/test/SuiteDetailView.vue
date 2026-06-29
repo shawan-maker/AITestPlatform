@@ -141,7 +141,7 @@
     </el-dialog>
 
     <!-- 用例选择器（复用接口用例目录树组件） -->
-    <ReuseCaseDialog v-model="showCasePicker" mode="select" :pre-selected-ids="existingCaseIds" @confirmed="addCasesConfirmed" />
+    <ReuseCaseDialog v-model="showCasePicker" mode="select" :pre-selected-ids="existingCaseIds" :pre-selected-case-map="existingCaseMap" @confirmed="addCasesConfirmed" />
   </div>
 </template>
 
@@ -236,6 +236,11 @@ const editForm = reactive({ suite_name: '', description: '', environment_id: nul
 // Case picker
 const showCasePicker = ref(false)
 const existingCaseIds = computed(() => cases.value.map((c) => c.case_id))
+const existingCaseMap = computed(() => {
+  var map = {}
+  cases.value.forEach(function (c) { if (c.interface_id) map[c.case_id] = c.interface_id })
+  return map
+})
 
 // --- Load ---
 function recoverRunningState() {

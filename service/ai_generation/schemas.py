@@ -40,10 +40,13 @@ class FunctionalCreateSessionRequest(BaseModel):
 class ApiCreateSessionRequest(BaseModel):
     project_id: int = Field(..., ge=1)
     interface_id: int | None = Field(default=None, ge=1)
+    interface_ids: list[int] | None = None
     api_doc_text: str | None = None
     user_prompt: str | None = None
+    environment_id: int | None = Field(default=None, ge=1)
     module_id: int | None = Field(default=None, ge=1)
     title: str | None = Field(default=None, max_length=200)
+    mode: str | None = None  # "from_doc" | "from_interfaces" | None (legacy single)
 
 
 class FunctionalGenerateRequest(BaseModel):
@@ -75,6 +78,31 @@ class ApiGenerateFromDocRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
 
 
+# ---------- Multi-interface pipeline schemas ----------
+
+class InterfaceBaseCasesEdit(BaseModel):
+    index: int
+    selected_indexes: list[int] = Field(..., min_length=0)
+    edited_cases: list[dict] | None = None
+
+
+class SaveBaseCasesRequest(BaseModel):
+    environment_id: int | None = Field(default=None, ge=1)
+    interfaces: list[InterfaceBaseCasesEdit]
+
+
+class PhaseInfo(BaseModel):
+    id: int
+    name: str
+    status: str
+
+
+class PipelineProgressOut(BaseModel):
+    current_phase: int
+    phases: list[PhaseInfo]
+    summary: dict | None = None
+
+
 # Backward-compatible aliases
 GenerationSessionOut = AIGenerationSessionOut
 ApiGenerationSessionOut = AIGenerationSessionOut
@@ -99,5 +127,8 @@ __all__ = [
     "GeneratePreviewResult",
     "GenerationSaveResult",
     "GenerationSessionOut",
+    "InterfaceBaseCasesEdit",
+    "PipelineProgressOut",
     "PromptTemplateItem",
+    "SaveBaseCasesRequest",
 ]

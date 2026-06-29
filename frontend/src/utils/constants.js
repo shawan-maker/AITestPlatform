@@ -74,7 +74,7 @@ export const DEFECT_HISTORY_ACTION_MAP = {
 export const RUN_STATUS = ['pending', 'running', 'completed', 'failed', 'cancelled']
 
 export const RUN_STATUS_MAP = {
-  pending: { type: 'info', label: '未执行' },
+  pending: { type: 'info', label: '待执行' },
   running: { type: 'warning', label: '执行中' },
   completed: { type: 'success', label: '已完成' },
   failed: { type: 'danger', label: '已失败' },
@@ -89,7 +89,7 @@ export const SUITE_TYPE_MAP = {
 
 export const TASK_TYPE_MAP = {
   api: { type: 'primary', label: 'API' },
-  functional: { type: 'success', label: '功能' },
+  functional: { type: 'success', label: '手工' },
   manual: { type: 'info', label: '手工' },
   ui: { type: 'warning', label: 'UI' },
 }

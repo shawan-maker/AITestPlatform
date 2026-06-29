@@ -55,8 +55,45 @@
             @open-case-list="handleOpenCaseList"
           >
             <template #after-messages>
+              <!-- Pipeline interface cards (multi-interface mode) -->
+              <div v-if="pipelineInterfaces.length && !hasAgentResponse" class="pipeline-interfaces">
+                <div
+                  v-for="(iface, idx) in pipelineInterfaces"
+                  :key="idx"
+                  class="pipeline-interface-card"
+                >
+                  <div class="pipeline-interface-card__header">
+                    <el-tag :type="methodTagType(iface.method)" size="small">{{ iface.method }}</el-tag>
+                    <span class="pipeline-interface-card__summary">{{ iface.summary || iface.path }}</span>
+                    <span class="pipeline-interface-card__path">{{ iface.path }}</span>
+                  </div>
+                  <div class="pipeline-interface-card__cases">
+                    <div v-for="(bc, ci) in (iface.base_cases || [])" :key="ci" class="pipeline-base-case">
+                      <el-checkbox
+                        :model-value="(iface.selected_indexes || []).includes(ci)"
+                        @change="(val) => toggleBaseCase(idx, ci, val)"
+                      />
+                      <span class="pipeline-base-case__name">{{ bc.name }}</span>
+                      <span class="pipeline-base-case__count">{{ (bc.steps || []).length }} steps</span>
+                    </div>
+                  </div>
+                  <div class="pipeline-interface-card__footer">
+                    <span>{{ (iface.selected_indexes || []).length }} / {{ (iface.base_cases || []).length }} {{ t('page.agent.selectedCases') }}</span>
+                  </div>
+                </div>
+                <div v-if="!streaming && pipelineInterfaces.length" class="pipeline-actions">
+                  <el-button type="primary" @click="openEditDialog">
+                    {{ t('page.agent.editBaseCases') }}
+                  </el-button>
+                </div>
+              </div>
+
+              <!-- Pipeline summary -->
+              <ApiPipelineSummary v-if="pipelineSummary" :summary="pipelineSummary" />
+
+              <!-- Legacy single-interface payload card -->
               <AgentPayloadCard
-                v-if="sessionDetail?.output_payload?.base_cases?.length && !hasAgentResponse"
+                v-if="sessionDetail?.output_payload?.base_cases?.length && !hasAgentResponse && !pipelineInterfaces.length"
                 gen-type="api_base"
                 :payload="sessionDetail.output_payload"
                 :can-edit="canEdit"
@@ -97,6 +134,13 @@
       :project-id="projectId"
       @save="saveCasesFromDialog"
     />
+
+    <!-- Interface case edit dialog (multi-interface pipeline) -->
+    <InterfaceCaseEditDialog
+      v-model="showEditDialog"
+      :interfaces="pipelineInterfaces"
+      @save="onSaveEditedBaseCases"
+    />
   </div>
 </template>
 
@@ -113,6 +157,7 @@ import {
   listApiMessages,
   listApiSessions,
   streamApiMessage,
+  streamSaveBaseCases,
 } from '@/api/aiGeneration'
 import { getApiCatalogTree } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
@@ -126,6 +171,8 @@ import AgentWelcomeHeader from '@/components/agent/AgentWelcomeHeader.vue'
 import AgentTypeTabs from '@/components/agent/AgentTypeTabs.vue'
 import ApiAgentConfirmDialog from '@/components/agent/ApiAgentConfirmDialog.vue'
 import AgentCaseListDialog from '@/components/agent/AgentCaseListDialog.vue'
+import InterfaceCaseEditDialog from '@/components/agent/InterfaceCaseEditDialog.vue'
+import ApiPipelineSummary from '@/components/agent/ApiPipelineSummary.vue'
 
 const props = defineProps({
   autoNew: { type: Boolean, default: false },
@@ -163,6 +210,15 @@ const sharedActiveTab = ref('api')
 // Case list dialog state
 const caseListVisible = ref(false)
 const caseListPayload = ref(null)
+
+// Interface case edit dialog state (multi-interface pipeline)
+const showEditDialog = ref(false)
+const pipelineInterfaces = computed(() =>
+  sessionDetail.value?.output_payload?.interfaces || []
+)
+const pipelineSummary = computed(() =>
+  sessionDetail.value?.output_payload?.summary || null
+)
 
 let abortController = null
 let tempMsgId = 0
@@ -301,8 +357,11 @@ async function createSessionFromComposer(payload) {
     const body = {
       ...params,
       interface_id: payload.interfaceId,
+      interface_ids: payload.interfaceIds,
       api_doc_text: payload.apiDocText,
       user_prompt: payload.userPrompt,
+      environment_id: payload.environmentId,
+      mode: payload.mode,
     }
     const res = await createApiSession(body)
     const session = res?.data?.data
@@ -385,6 +444,8 @@ async function sendMessage(content) {
     }
 
     stageLogLines.value = []
+    let payloadUpdatedResolve = null
+    const payloadUpdatedPromise = new Promise(r => { payloadUpdatedResolve = r })
 
     await streamApiMessage(
       activeSessionId.value,
@@ -393,6 +454,10 @@ async function sendMessage(content) {
         stage: (data) => {
           hasStageProgress.value = true
           if (data?.name) {
+            // Mark previous running stages as done
+            agentResponse.stages.forEach(s => {
+              if (s.status === 'running' && s.name !== data.name) s.status = 'done'
+            })
             const stage = getStage(data.name)
             stage.text = data.text || ''
             stage.status = data.status || 'running'
@@ -414,10 +479,35 @@ async function sendMessage(content) {
           if (data?.name) _addLog(data.name, `调用工具: ${data.name}`)
           else _addLog('default', '工具调用')
         },
+        interface_progress: (data) => {
+          // Update per-interface progress in payload
+          if (agentResponse.payload?.interfaces && data?.interface_index != null) {
+            const iface = agentResponse.payload.interfaces[data.interface_index]
+            if (iface) {
+              if (data.case_count != null) iface.base_case_count = data.case_count
+              if (data.structured_count != null) iface.structured_case_count = data.structured_count
+              if (data.exec_results) iface.exec_results = data.exec_results
+            }
+          }
+        },
+        pipeline_progress: (data) => {
+          // Update overall pipeline progress
+          if (agentResponse.payload) {
+            agentResponse.payload.pipeline_progress = data
+          }
+        },
         payload_updated: async () => {
           _addLog('default', '结果已保存到会话')
           await refreshSession()
           agentResponse.payload = sessionDetail.value?.output_payload || null
+          if (payloadUpdatedResolve) payloadUpdatedResolve()
+        },
+        summary: (data) => {
+          // Store summary in agentResponse
+          if (agentResponse.payload) {
+            agentResponse.payload.summary = data
+          }
+          _addLog('default', `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
         },
         error: (data) => {
           const errorMsg = data?.message || t('common.requestFailed')
@@ -425,6 +515,9 @@ async function sendMessage(content) {
           _addLog('default', `[错误] ${errorMsg}`)
         },
         done: async () => {
+          abortController?.abort()
+          // Wait for payload_updated to complete first
+          await payloadUpdatedPromise
           agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
           agentResponse.isStreaming = false
           _addLog('default', '执行完成')
@@ -461,10 +554,7 @@ async function sendMessage(content) {
 
 async function handleComposerSend(payload) {
   if (streaming.value || creating.value) return
-  if (!payload.interfaceId && !payload.apiDocText) {
-    ElMessage.warning(t('page.agent.apiBindingRequired'))
-    return
-  }
+  // Multi-interface mode: allow sending with just a project (no interface/doc required)
   const session = await createSessionFromComposer(payload)
   if (!session) return
   await sendMessage(payload.content || '')
@@ -493,6 +583,132 @@ async function sendMessageForComposer(payload) {
 function handleOpenCaseList(payload) {
   caseListPayload.value = payload
   caseListVisible.value = true
+}
+
+/* ========== Multi-interface pipeline helpers ========== */
+
+function methodTagType(method) {
+  const m = (method || '').toUpperCase()
+  if (m === 'GET') return 'success'
+  if (m === 'POST') return 'primary'
+  if (m === 'PUT' || m === 'PATCH') return 'warning'
+  if (m === 'DELETE') return 'danger'
+  return 'info'
+}
+
+function toggleBaseCase(ifaceIndex, caseIndex, checked) {
+  const payload = sessionDetail.value?.output_payload
+  if (!payload?.interfaces?.[ifaceIndex]) return
+  const iface = payload.interfaces[ifaceIndex]
+  const selected = iface.selected_indexes || []
+  if (checked && !selected.includes(caseIndex)) {
+    iface.selected_indexes = [...selected, caseIndex]
+  } else if (!checked) {
+    iface.selected_indexes = selected.filter(i => i !== caseIndex)
+  }
+}
+
+function openEditDialog() {
+  showEditDialog.value = true
+}
+
+async function onSaveEditedBaseCases(editedInterfaces) {
+  if (!activeSessionId.value) return
+  confirming.value = true
+  try {
+    // Get environment ID from session payload
+    const envId = sessionDetail.value?.output_payload?.environment_id || null
+
+    // Trigger Phase 4-5 via SSE stream
+    abortController = new AbortController()
+    streaming.value = true
+
+    // Create a new agent response for the structuring phase
+    const agentResponse = reactive({
+      id: `agent-structure-${Date.now()}`,
+      role: 'agent',
+      isStreaming: true,
+      stages: [],
+      finalText: '',
+      payload: null,
+      streamingText: '',
+    })
+    messages.value = [...messages.value, agentResponse]
+
+    const getStage = (name) => {
+      let stage = agentResponse.stages.find(s => s.name === name)
+      if (!stage) {
+        stage = { name, status: 'running', text: '', logs: [] }
+        agentResponse.stages = [...agentResponse.stages, stage]
+      }
+      return stage
+    }
+
+    const _addLog = (stageName, line) => {
+      const stage = getStage(stageName)
+      const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+      stage.logs = [...stage.logs.slice(-29), `[${time}] ${line}`]
+    }
+
+    let payloadUpdatedResolve = null
+    const payloadUpdatedPromise = new Promise(r => { payloadUpdatedResolve = r })
+
+    await streamSaveBaseCases(
+      activeSessionId.value,
+      { environment_id: envId, interfaces: editedInterfaces },
+      {
+        stage: (data) => {
+          if (data?.name) {
+            agentResponse.stages.forEach(s => {
+              if (s.status === 'running' && s.name !== data.name) s.status = 'done'
+            })
+            const stage = getStage(data.name)
+            stage.text = data.text || ''
+            stage.status = data.status || 'running'
+          }
+        },
+        custom: (data) => {
+          const text = String(data)
+          const stageName = detectStageFromText(text)
+          _addLog(stageName, text)
+        },
+        interface_progress: (data) => {
+          // handled by payload_updated
+        },
+        payload_updated: async () => {
+          await refreshSession()
+          agentResponse.payload = sessionDetail.value?.output_payload || null
+          if (payloadUpdatedResolve) payloadUpdatedResolve()
+        },
+        summary: (data) => {
+          _addLog('default', `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
+        },
+        error: (data) => {
+          ElMessage.error(data?.message || t('common.requestFailed'))
+          _addLog('default', `[错误] ${data?.message || ''}`)
+        },
+        done: async () => {
+          abortController?.abort()
+          await payloadUpdatedPromise
+          agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
+          agentResponse.isStreaming = false
+          await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+          if (!agentResponse.payload) {
+            agentResponse.payload = sessionDetail.value?.output_payload || null
+          }
+        },
+      },
+      abortController.signal,
+    )
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      ElMessage.error(err.message || t('common.requestFailed'))
+    }
+  } finally {
+    confirming.value = false
+    streaming.value = false
+    abortController = null
+  }
 }
 
 /* Save from case list dialog */
@@ -638,5 +854,73 @@ onMounted(async () => {
 .api-agent-panel__landing-spacer {
   flex: 1;
   min-height: 40px;
+}
+
+/* Pipeline interface cards */
+.pipeline-interfaces {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pipeline-interface-card {
+  padding: 12px 16px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.pipeline-interface-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.pipeline-interface-card__summary {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.pipeline-interface-card__path {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.pipeline-interface-card__cases {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pipeline-base-case {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.pipeline-base-case__name {
+  flex: 1;
+  font-size: 13px;
+}
+
+.pipeline-base-case__count {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.pipeline-interface-card__footer {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  text-align: right;
+}
+
+.pipeline-actions {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
 }
 </style>

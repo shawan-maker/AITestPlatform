@@ -82,10 +82,12 @@ class PickerService:
             FunctionalCasePickerOut(
                 id=c.id,
                 case_name=c.case_name,
+                case_no=c.case_no,
                 module_id=c.module_id,
                 module_name=modules.get(c.module_id) if c.module_id else None,
                 catalog_id=c.catalog_id,
                 priority=c.priority,
+                case_category=c.case_category,
             )
             for c in items
         ]

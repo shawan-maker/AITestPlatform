@@ -202,6 +202,7 @@ def generate_base_cases(
     api_document: str,
     config: RunnableConfig,
     precoditions: list | None = None,
+    user_prompt: str | None = None,
 ):
     """仅生成 api_basecase_workflow 基础用例，写入 session output_payload。"""
     writer = get_stream_writer()
@@ -212,7 +213,7 @@ def generate_base_cases(
         writer("  → 接口文档解析完成，正在调用工作流生成用例...")
         base_workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         base_state = base_workflow.invoke(
-            {"api_doc": api_doc, "precoditions": precoditions or []},
+            {"api_doc": api_doc, "precoditions": precoditions or [], "user_prompt": user_prompt},
             config=config,
         )
         base_cases = base_state.get("api_cases") or []

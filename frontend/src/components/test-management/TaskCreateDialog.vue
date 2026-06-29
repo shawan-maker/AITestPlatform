@@ -71,16 +71,27 @@
         <div class="association-toolbar">
           <span class="association-label">{{ t('page.test.tabCases') }}</span>
           <div class="association-actions">
-            <el-button type="primary" size="small" @click="showCasePicker = true">{{ t('page.test.addCases') }}</el-button>
-            <el-button v-if="selectedCaseRows.length" type="danger" size="small" @click="batchRemoveCases">{{ t('common.batchDelete') }} ({{ selectedCaseRows.length }})</el-button>
+            <el-button type="primary" size="small" @click="openCasePicker">{{ t('page.test.addCases') }}</el-button>
           </div>
         </div>
-        <el-table :data="associatedCases" size="small" border max-height="300" @selection-change="onCaseRowSelect">
-          <el-table-column type="selection" :width="40" />
-          <el-table-column prop="id" label="ID" :width="60" />
-          <el-table-column prop="case_name" :label="t('page.functional.caseName')" />
-          <el-table-column prop="module_name" :label="t('page.knowledge.module')" :width="120" />
-          <el-table-column :label="t('common.actions')" :width="100">
+        <el-table :data="associatedCases" size="small" border max-height="300">
+          <el-table-column prop="case_no" :label="t('page.functional.caseNo')" :width="130" show-overflow-tooltip />
+          <el-table-column prop="case_name" :label="t('page.functional.caseName')" min-width="150" show-overflow-tooltip />
+          <el-table-column :label="t('page.functional.priority')" :width="80">
+            <template #default="{ row }">
+              <PriorityTag v-if="row.priority" :value="row.priority" />
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('page.functional.caseCategory')" :width="100">
+            <template #default="{ row }">
+              {{ row.case_category ? t('page.functional.cat' + row.case_category.charAt(0).toUpperCase() + row.case_category.slice(1)) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="module_name" :label="t('page.knowledge.module')" :width="120">
+            <template #default="{ row }">{{ row.module_name || '-' }}</template>
+          </el-table-column>
+          <el-table-column :label="t('common.actions')" :width="80">
             <template #default="{ row }">
               <el-button link type="danger" @click="removeCase(row)">{{ t('common.delete') }}</el-button>
             </template>
@@ -109,20 +120,14 @@
       </template>
     </el-dialog>
 
-    <!-- 用例选择弹窗 -->
-    <el-dialog v-model="showCasePicker" :title="t('page.test.addCases')" width="700px" append-to-body>
-      <el-input v-model="caseSearch" :placeholder="t('page.functional.caseName')" clearable size="small" style="width: 260px; margin-bottom: 12px" @change="loadCasePicker" />
-      <PaginatedTable v-model:page="cpPage" v-model:page-size="cpPageSize" :data="casePickerItems" :loading="casePickerLoading" :total="casePickerTotal" row-key="id" @page-change="loadCasePicker" @selection-change="onCasePickerSelect">
-        <el-table-column type="selection" :width="40" />
-        <el-table-column prop="id" label="ID" :width="60" />
-        <el-table-column prop="case_name" :label="t('page.functional.caseName')" />
-        <el-table-column prop="module_name" :label="t('page.knowledge.module')" :width="120" />
-      </PaginatedTable>
-      <template #footer>
-        <el-button @click="showCasePicker = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" @click="addCases">{{ t('common.confirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <!-- 用例选择弹窗 (目录树+列表) -->
+    <FunctionalCasePickerDialog
+      v-model="showCasePicker"
+      :project-id="projectId"
+      :pre-selected-ids="associatedCases.map(c => c.id)"
+      :pre-selected-case-map="associatedCaseMap"
+      @confirmed="onCasePickerConfirmed"
+    />
   </el-dialog>
 </template>
 
@@ -130,11 +135,13 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
-import { createTask, replaceTaskSuites, replaceTaskCases, pickSuites, pickFunctionalCases } from '@/api/testManagement'
+import { createTask, replaceTaskSuites, replaceTaskCases, pickSuites } from '@/api/testManagement'
 import { usePagination } from '@/composables/usePagination'
 import { useProjectScope } from '@/composables/useProjectScope'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
+import PriorityTag from '@/components/tags/PriorityTag.vue'
+import FunctionalCasePickerDialog from '@/components/functional/FunctionalCasePickerDialog.vue'
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -206,36 +213,22 @@ function addSuites() {
 
 // --- Case association ---
 const associatedCases = ref([])
-const selectedCaseRows = ref([])
-const caseSearch = ref('')
 const showCasePicker = ref(false)
-const casePickerItems = ref([])
-const casePickerLoading = ref(false)
-const casePickerTotal = ref(0)
-const casePickerSelected = ref([])
-const { page: cpPage, pageSize: cpPageSize } = usePagination()
+const associatedCaseMap = computed(() => {
+  var map = {}
+  associatedCases.value.forEach(function (c) { if (c.catalog_id) map[c.id] = c.catalog_id })
+  return map
+})
 
-function onCaseRowSelect(rows) { selectedCaseRows.value = rows.map(r => r.id) }
 function removeCase(row) { associatedCases.value = associatedCases.value.filter(c => c.id !== row.id) }
-function batchRemoveCases() { associatedCases.value = associatedCases.value.filter(c => !selectedCaseRows.value.includes(c.id)); selectedCaseRows.value = [] }
 
-async function loadCasePicker() {
-  if (!props.projectId) return
-  casePickerLoading.value = true
-  try {
-    var res = await pickFunctionalCases({ project_id: props.projectId, q: caseSearch.value || undefined, page: cpPage.value, page_size: cpPageSize.value })
-    casePickerItems.value = res.data.data?.items ?? []
-    casePickerTotal.value = res.data.data?.total ?? 0
-  } finally { casePickerLoading.value = false }
-}
-function onCasePickerSelect(rows) { casePickerSelected.value = rows }
-function addCases() {
+function openCasePicker() { showCasePicker.value = true }
+
+function onCasePickerConfirmed(selectedIds, selectedCases) {
   var existingIds = new Set(associatedCases.value.map(c => c.id))
-  casePickerSelected.value.forEach(c => {
-    if (!existingIds.has(c.id)) associatedCases.value.push(c)
-  })
+  // Replace with full selection from picker (includes previously associated + newly added)
+  associatedCases.value = selectedCases || []
   showCasePicker.value = false
-  casePickerSelected.value = []
 }
 
 // --- Save ---
@@ -275,16 +268,13 @@ function onClosed() {
   associatedSuites.value = []
   associatedCases.value = []
   selectedSuiteRows.value = []
-  selectedCaseRows.value = []
   suiteSearch.value = ''
-  caseSearch.value = ''
 }
 
 // Auto-load picker when dialog opens
 watch(visible, (v) => {
   if (v && props.projectId) {
     loadSuitePicker()
-    loadCasePicker()
   }
 })
 </script>
@@ -320,5 +310,10 @@ watch(visible, (v) => {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+.picker-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 </style>

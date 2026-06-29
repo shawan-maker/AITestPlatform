@@ -5,9 +5,8 @@
     <div class="task-actions">
       <el-button @click="router.push('/test/tasks')">{{ t('common.back') }}</el-button>
       <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
-      <el-button v-if="canEdit && isRunning" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
+      <el-button v-if="canEdit && isRunning && !isManual" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
       <el-button v-else-if="canEdit && !isManual" type="primary" :loading="running" @click="run(taskId)">{{ t('page.test.run') }}</el-button>
-      <el-button v-if="canEdit && isManual" type="warning" @click="startManualRun">{{ t('page.test.manualRun') }}</el-button>
     </div>
 
     <el-tabs v-model="activeTab">
@@ -60,8 +59,22 @@
         </div>
         <AppTable :data="taskCases" @selection-change="onCaseSelectionChange">
           <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
-          <AppTableColumn prop="case_id" variant="fixed" label="ID" :width="70" />
+          <AppTableColumn prop="case_no" variant="fixed" :label="t('page.functional.caseNo')" :width="130" />
           <AppTableColumn prop="case_name" variant="content" :label="t('page.functional.caseName')" />
+          <AppTableColumn variant="fixed" :label="t('page.functional.priority')" :width="80">
+            <template #default="{ row }">
+              <PriorityTag v-if="row.priority" :value="row.priority" />
+              <span v-else>-</span>
+            </template>
+          </AppTableColumn>
+          <AppTableColumn variant="fixed" :label="t('page.functional.caseCategory')" :width="100">
+            <template #default="{ row }">
+              {{ row.case_category ? t('page.functional.cat' + row.case_category.charAt(0).toUpperCase() + row.case_category.slice(1)) : '-' }}
+            </template>
+          </AppTableColumn>
+          <AppTableColumn prop="module_name" variant="fixed" :label="t('page.knowledge.module')" :width="120">
+            <template #default="{ row }">{{ row.module_name || '-' }}</template>
+          </AppTableColumn>
           <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="100">
             <template #default="{ row }">
               <ConfirmDelete @confirm="removeCase(row)"><el-button link type="danger">{{ t('common.delete') }}</el-button></ConfirmDelete>
@@ -70,8 +83,61 @@
         </AppTable>
       </el-tab-pane>
 
-      <!-- 执行历史 -->
-      <el-tab-pane :label="t('page.test.tabHistory')" name="history">
+      <!-- 执行记录 (手工任务) -->
+      <el-tab-pane v-if="isManual" :label="t('page.test.execRecords')" name="records">
+        <!-- Inline execution layout (auto-shown when manual run is active) -->
+        <div v-if="manualRunId && execTree.length" class="exec-layout">
+          <div class="exec-left">
+            <el-tree :data="execTree" node-key="id" :props="{ label: 'name', children: 'children' }" highlight-current @node-click="onCatalogNodeClick" />
+          </div>
+          <div class="exec-right">
+            <el-table :data="filteredExecCases" size="small" border>
+              <el-table-column prop="case_no" variant="fixed" :label="t('page.functional.caseNo')" :width="130" show-overflow-tooltip />
+              <el-table-column prop="case_name" variant="content" :label="t('page.functional.caseName')" min-width="150" show-overflow-tooltip />
+              <el-table-column variant="fixed" :label="t('page.functional.priority')" :width="70">
+                <template #default="{ row }">
+                  <PriorityTag v-if="row.priority" :value="row.priority" />
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column variant="fixed" :label="t('page.functional.caseCategory')" :width="80">
+                <template #default="{ row }">
+                  {{ row.case_category ? t('page.functional.cat' + row.case_category.charAt(0).toUpperCase() + row.case_category.slice(1)) : '-' }}
+                </template>
+              </el-table-column>
+              <el-table-column variant="fixed" :label="t('page.knowledge.module')" :width="100">
+                <template #default="{ row }">{{ execModuleMap[row.module_id] || '-' }}</template>
+              </el-table-column>
+              <el-table-column variant="fixed" :label="t('page.test.execResult')" :width="90">
+                <template #default="{ row }">
+                  <el-tag v-if="row.exec_result && row.exec_result !== 'pending'" :type="execResultType(row.exec_result)" size="small">{{ execResultLabel(row.exec_result) }}</el-tag>
+                  <span v-else>-</span>
+                </template>
+              </el-table-column>
+              <el-table-column variant="fixed" :label="t('execution.linkDefect')" :width="110">
+                <template #default="{ row }">{{ row.defect_code || '-' }}</template>
+              </el-table-column>
+              <el-table-column variant="fixed" :label="t('page.test.executor')" :width="90">
+                <template #default="{ row }">{{ row.triggered_by_name || '-' }}</template>
+              </el-table-column>
+              <el-table-column variant="fixed" :label="t('page.test.execTime')" :width="150">
+                <template #default="{ row }">{{ row.exec_time ? formatTime(row.exec_time) : '-' }}</template>
+              </el-table-column>
+              <el-table-column actions variant="fixed" :label="t('common.actions')" :width="150">
+                <template #default="{ row }">
+                  <el-button link type="primary" @click="openMarkDrawer(row)">{{ t('page.test.markResult') }}</el-button>
+                  <el-button v-if="row.exec_result === 'failed'" link type="danger" @click="openDefectDialog(row)">{{ t('execution.linkDefect') }}</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+        <el-empty v-else-if="manualRunId" :description="t('page.test.tabCases') + ' - ' + t('page.defects.noComments')" :image-size="60" />
+        <el-skeleton v-else :rows="6" animated />
+      </el-tab-pane>
+
+      <!-- 执行历史 (API任务) -->
+      <el-tab-pane v-else :label="t('page.test.tabHistory')" name="history">
         <div style="margin-bottom: 8px">
           <el-button size="small" @click="loadHistory">{{ t('common.refresh') || '刷新' }}</el-button>
         </div>
@@ -156,36 +222,123 @@
       </template>
     </el-dialog>
 
-    <!-- 用例选择器 (手工任务) -->
-    <el-dialog v-model="showCasePicker" :title="t('page.test.addCases')" width="700px">
-      <el-input v-model="casePickerSearch" :placeholder="t('common.keyword')" clearable style="width: 240px; margin-bottom: 12px" @change="loadCasePicker" />
-      <PaginatedTable v-model:page="cpPage" v-model:page-size="cpPageSize" :data="casePickerItems" :loading="casePickerLoading" :total="casePickerTotal" row-key="id" @page-change="loadCasePicker" @selection-change="onCasePickerSelectionChange">
-        <AppTableColumn type="selection" variant="fixed" :width="50" />
-        <AppTableColumn prop="id" variant="fixed" label="ID" :width="70" />
-        <AppTableColumn prop="title" variant="content" :label="t('page.functional.caseName')" />
-      </PaginatedTable>
-      <template #footer>
-        <el-button @click="showCasePicker = false">{{ t('common.cancel') }}</el-button>
-        <el-button type="primary" :loading="casePickerSaving" @click="addCases">{{ t('common.save') }}</el-button>
-      </template>
-    </el-dialog>
+    <!-- 用例选择器 (手工任务 - 目录树+列表) -->
+    <FunctionalCasePickerDialog
+      v-model="showCasePicker"
+      :project-id="task?.project_id"
+      :pre-selected-ids="[...existingCaseIds]"
+      :pre-selected-case-map="existingCaseMap"
+      @confirmed="onCasePickerConfirmed"
+    />
 
-    <!-- 手工执行 Drawer -->
+    <!-- 手工执行 Drawer (保留用于兼容性) -->
     <ManualRunDrawer v-model="manualDrawerVisible" :task-id="taskId" :run-id="manualRunId" />
+
+    <!-- 用例标记 Drawer -->
+    <el-drawer v-model="markDrawerVisible" :title="markCase?.case_name || t('page.test.markResult')" size="55%">
+      <div v-if="markCaseDetail" class="mark-drawer-body">
+        <!-- 用例基本信息 (from full case detail) -->
+        <section v-if="markCaseFullDetail" class="mark-section">
+          <h4 class="mark-section-title">{{ t('page.functional.basicInfo') }}</h4>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item :label="t('page.functional.caseNo')">{{ markCaseFullDetail.case_no || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.functional.caseName')">{{ markCaseFullDetail.case_name }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.functional.priority')">
+              <PriorityTag :value="markCaseFullDetail.priority" />
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('page.functional.caseCategory')">
+              {{ markCaseFullDetail.case_category ? t('page.functional.cat' + markCaseFullDetail.case_category.charAt(0).toUpperCase() + markCaseFullDetail.case_category.slice(1)) : '-' }}
+            </el-descriptions-item>
+            <el-descriptions-item v-if="markCaseFullDetail.dimension" :label="t('page.functional.dimension')">{{ markCaseFullDetail.dimension }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.knowledge.module')">{{ markCaseFullDetail.module_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.functional.source')">
+              {{ markCaseFullDetail.source === 'ai' ? t('page.functional.sourceAI') : markCaseFullDetail.source === 'manual' ? t('page.functional.sourceManual') : (markCaseFullDetail.source || '-') }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </section>
+
+        <!-- 测试步骤与预期结果 -->
+        <section class="mark-section">
+          <h4 class="mark-section-title">{{ t('page.functional.stepsAndExpected') }}</h4>
+          <div class="mark-field-block" v-if="markCaseDetail.preconditions">
+            <label>{{ t('page.functional.precondition') }}</label>
+            <pre class="mark-field-content">{{ markCaseDetail.preconditions }}</pre>
+          </div>
+          <div class="mark-field-block">
+            <label>{{ t('page.functional.testSteps') }}</label>
+            <pre class="mark-field-content">{{ markCaseDetail.test_steps || '-' }}</pre>
+          </div>
+          <div class="mark-field-block" v-if="markCaseFullDetail && markCaseFullDetail.test_data">
+            <label>{{ t('page.functional.testData') }}</label>
+            <pre class="mark-field-content">{{ markCaseFullDetail.test_data }}</pre>
+          </div>
+          <div class="mark-field-block">
+            <label>{{ t('page.functional.expectedResult') }}</label>
+            <pre class="mark-field-content">{{ markCaseDetail.expected_result || '-' }}</pre>
+          </div>
+        </section>
+
+        <!-- 已保存的执行结果记录 (read-only, only show if previously saved) -->
+        <section v-if="markSavedRecord.exec_result" class="mark-section">
+          <h4 class="mark-section-title">{{ t('page.test.execResultRecord') }}</h4>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item :label="t('page.test.execResult')">
+              <el-tag :type="execResultType(markSavedRecord.exec_result)" size="small">{{ execResultLabel(markSavedRecord.exec_result) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="markSavedRecord.remark" :label="t('page.defects.comment')">{{ markSavedRecord.remark }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.test.executor')">{{ markSavedRecord.triggered_by_name || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('page.test.execTime')">{{ markSavedRecord.exec_time ? formatTime(markSavedRecord.exec_time) : '-' }}</el-descriptions-item>
+          </el-descriptions>
+        </section>
+
+        <!-- 执行结果与备注 (editable, at bottom) -->
+        <section class="mark-section">
+          <h4 class="mark-section-title">{{ t('page.test.execResult') }}</h4>
+          <el-form label-width="100px">
+            <el-form-item :label="t('page.test.execResult')">
+              <el-radio-group v-model="markForm.exec_result">
+                <el-radio value="passed">{{ t('page.test.execResultPassed') }}</el-radio>
+                <el-radio value="failed">{{ t('page.test.execResultFailed') }}</el-radio>
+                <el-radio value="blocked">{{ t('page.test.execResultBlocked') }}</el-radio>
+                <el-radio value="skipped">{{ t('page.test.execResultSkipped') }}</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item :label="t('page.defects.comment')">
+              <el-input v-model="markForm.remark" type="textarea" :rows="3" />
+            </el-form-item>
+          </el-form>
+        </section>
+      </div>
+      <el-skeleton v-else :rows="4" animated />
+      <template #footer>
+        <el-button @click="markDrawerVisible = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" :loading="markSaving" @click="saveMarkResult">{{ t('common.save') }}</el-button>
+      </template>
+    </el-drawer>
+
+    <!-- 缺陷创建对话框 (复用 DefectCreateDialog 组件) -->
+    <DefectCreateDialog
+      v-model="defectDialogVisible"
+      :default-title="defectDefaultTitle"
+      :default-steps="defectDefaultSteps"
+      :loading="defectSaving"
+      @submit="saveDefect"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTask, updateTask, listTaskSuites, replaceTaskSuites, reorderTaskSuites, deleteTaskSuites, listTaskCases, replaceTaskCases, deleteTaskCases, pickSuites, pickFunctionalCases } from '@/api/testManagement'
-import { runTask, getTaskProgress, getTaskHistory, openManualRun } from '@/api/testExecution'
+import { getTask, updateTask, listTaskSuites, replaceTaskSuites, reorderTaskSuites, deleteTaskSuites, listTaskCases, replaceTaskCases, deleteTaskCases, pickSuites } from '@/api/testManagement'
+import { runTask, getTaskProgress, getTaskHistory, openManualRun, getManualContext, getManualCase, patchManualCase, createDefectFromRun } from '@/api/testExecution'
+import { getCase as getFunctionalCase } from '@/api/functional'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import { useRunExecution } from '@/composables/useRunExecution'
-import { RUN_STATUS_MAP, TASK_TYPE_MAP, RUN_MODE_MAP } from '@/utils/constants'
+import { RUN_STATUS_MAP, TASK_TYPE_MAP, RUN_MODE_MAP, DEFECT_SEVERITY_MAP, DEFECT_PRIORITY_MAP, DEFECT_CATEGORY_MAP, CASE_RESULT_MAP } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
@@ -195,6 +348,9 @@ import StatusTag from '@/components/common/StatusTag.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 import ManualRunDrawer from '@/components/execution/ManualRunDrawer.vue'
+import PriorityTag from '@/components/tags/PriorityTag.vue'
+import DefectCreateDialog from '@/components/execution/DefectCreateDialog.vue'
+import FunctionalCasePickerDialog from '@/components/functional/FunctionalCasePickerDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -251,18 +407,195 @@ const suiteNamesDisplay = computed(() => {
   return taskSuites.value.map(s => s.suite_name).join('、') || '-'
 })
 
-// Case picker
+// Case picker (uses FunctionalCasePickerDialog)
 const showCasePicker = ref(false)
-const casePickerSearch = ref('')
-const casePickerItems = ref([])
-const casePickerLoading = ref(false)
 const casePickerSaving = ref(false)
-const casePickerSelected = ref([])
-const { page: cpPage, pageSize: cpPageSize, total: casePickerTotal } = usePagination()
 
 // Manual run
 const manualDrawerVisible = ref(false)
 const manualRunId = ref(null)
+
+// Inline execution state (manual tasks)
+const execTree = ref([])
+const execModuleMap = ref({})
+const execAllCases = ref([])
+const selectedCatalogId = ref(null)
+
+const filteredExecCases = computed(() => {
+  if (!selectedCatalogId.value) return execAllCases.value
+  return execAllCases.value.filter(c => c.catalog_id === selectedCatalogId.value)
+})
+
+function onCatalogNodeClick(node) {
+  selectedCatalogId.value = node.id || null
+}
+
+function execResultLabel(r) {
+  var map = { passed: t('page.test.execResultPassed'), failed: t('page.test.execResultFailed'), blocked: t('page.test.execResultBlocked'), skipped: t('page.test.execResultSkipped') }
+  return map[r] || r
+}
+function execResultType(r) {
+  var map = { passed: 'success', failed: 'danger', blocked: 'warning', skipped: 'info' }
+  return map[r] || 'info'
+}
+
+async function startManualRun() {
+  try {
+    var res = await openManualRun(taskId.value)
+    manualRunId.value = res.data.data?.task_run_id ?? res.data.data?.id
+    activeTab.value = 'records'
+    await loadExecContext()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  }
+}
+
+async function loadExecContext() {
+  if (!manualRunId.value) return
+  try {
+    var res = await getManualContext(manualRunId.value)
+    var data = res.data.data
+    execTree.value = data.tree || []
+    execModuleMap.value = data.module_map || {}
+    // Flatten cases from tree, preserving exec_result and defect_code from API
+    var cases = []
+    function collectCases(nodes) {
+      for (var node of nodes) {
+        for (var c of (node.cases || [])) {
+          cases.push(Object.assign({}, c, { catalog_id: node.id }))
+        }
+        if (node.children) collectCases(node.children)
+      }
+    }
+    collectCases(execTree.value)
+    execAllCases.value = cases
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  }
+}
+
+// Mark result drawer
+const markDrawerVisible = ref(false)
+const markCase = ref(null)
+const markCaseDetail = ref(null)
+const markCaseFullDetail = ref(null)
+const markForm = reactive({ exec_result: '', remark: '' })
+const markSavedRecord = reactive({ exec_result: null, remark: null, triggered_by_name: null, exec_time: null })
+const markSaving = ref(false)
+
+async function openMarkDrawer(row) {
+  markCase.value = row
+  markCaseDetail.value = null
+  markCaseFullDetail.value = null
+  markSavedRecord.exec_result = null
+  markSavedRecord.remark = null
+  markSavedRecord.triggered_by_name = null
+  markSavedRecord.exec_time = null
+  markForm.exec_result = row.exec_result || ''
+  markForm.remark = ''
+  markDrawerVisible.value = true
+  try {
+    var res = await getManualCase(manualRunId.value, row.case_id)
+    markCaseDetail.value = res.data.data
+    // Store previously saved record for read-only display
+    if (markCaseDetail.value.exec_result) {
+      markSavedRecord.exec_result = markCaseDetail.value.exec_result
+      markSavedRecord.remark = markCaseDetail.value.remark || null
+      markSavedRecord.triggered_by_name = markCaseDetail.value.triggered_by_name || null
+      markSavedRecord.exec_time = markCaseDetail.value.exec_time || null
+    }
+    // Pre-fill the editable form
+    if (markCaseDetail.value.exec_result) markForm.exec_result = markCaseDetail.value.exec_result
+    if (markCaseDetail.value.remark) markForm.remark = markCaseDetail.value.remark
+  } catch (e) { /* case may not have detail yet */ }
+  // Fetch full case detail for display (reuse FunctionalCaseDetailDrawer data)
+  try {
+    var fullRes = await getFunctionalCase(row.case_id)
+    markCaseFullDetail.value = fullRes.data.data
+  } catch (e) { /* non-critical, basic info section will be hidden */ }
+}
+
+async function saveMarkResult() {
+  if (!markForm.exec_result) { ElMessage.warning(t('page.test.execResult')); return }
+  markSaving.value = true
+  try {
+    await patchManualCase(manualRunId.value, markCase.value.case_id, { exec_result: markForm.exec_result, remark: markForm.remark || undefined })
+    ElMessage.success(t('common.saved'))
+    markDrawerVisible.value = false
+    await loadExecContext()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  } finally {
+    markSaving.value = false
+  }
+}
+
+// Defect creation dialog (uses DefectCreateDialog component)
+const defectDialogVisible = ref(false)
+const defectDefaultTitle = ref('')
+const defectDefaultSteps = ref('')
+const defectSourceCaseId = ref(null)
+const defectRecordId = ref(null)
+const defectSaving = ref(false)
+
+async function openDefectDialog(row) {
+  defectDefaultTitle.value = row.case_name || ''
+  defectSourceCaseId.value = row.case_id
+  defectRecordId.value = null
+  defectDefaultSteps.value = ''
+  // Build steps from case detail if available
+  if (markCaseDetail.value && markCase.value?.case_id === row.case_id) {
+    var parts = []
+    if (markCaseDetail.value.preconditions) parts.push('前置条件:\n' + markCaseDetail.value.preconditions)
+    if (markCaseDetail.value.test_steps) parts.push('测试步骤:\n' + markCaseDetail.value.test_steps)
+    if (markCaseDetail.value.expected_result) parts.push('预期结果:\n' + markCaseDetail.value.expected_result)
+    defectDefaultSteps.value = parts.join('\n\n')
+    defectRecordId.value = markCaseDetail.value.record_id || null
+  } else {
+    // Fetch case detail to get record_id and build steps
+    try {
+      var res = await getManualCase(manualRunId.value, row.case_id)
+      var detail = res.data.data
+      if (detail) {
+        defectRecordId.value = detail.record_id || null
+        var parts2 = []
+        if (detail.preconditions) parts2.push('前置条件:\n' + detail.preconditions)
+        if (detail.test_steps) parts2.push('测试步骤:\n' + detail.test_steps)
+        if (detail.expected_result) parts2.push('预期结果:\n' + detail.expected_result)
+        defectDefaultSteps.value = parts2.join('\n\n')
+      }
+    } catch (e) { /* non-critical */ }
+  }
+  defectDialogVisible.value = true
+}
+
+async function saveDefect(formData) {
+  defectSaving.value = true
+  try {
+    await createDefectFromRun({
+      title: formData.title,
+      steps: formData.steps || undefined,
+      severity: formData.severity,
+      priority: formData.priority,
+      defect_category: formData.defect_category || undefined,
+      root_cause: formData.root_cause || undefined,
+      assignee_id: formData.assignee_id || undefined,
+      comment: formData.comment || undefined,
+      project_id: task.value?.project_id,
+      source_type: 'functional_case',
+      source_run_id: manualRunId.value,
+      source_case_id: defectSourceCaseId.value,
+      functional_run_id: defectRecordId.value || undefined,
+    })
+    ElMessage.success(t('common.saved'))
+    defectDialogVisible.value = false
+    await loadExecContext()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  } finally {
+    defectSaving.value = false
+  }
+}
 
 // --- Load ---
 function recoverRunningState() {
@@ -359,13 +692,28 @@ async function addSuites() {
 }
 
 // --- Case picker ---
-function openCasePicker() { showCasePicker.value = true; loadCasePicker() }
-async function loadCasePicker() { if (!task.value?.project_id) return; casePickerLoading.value = true; try { var res = await pickFunctionalCases({ project_id: task.value.project_id, q: casePickerSearch.value || undefined, page: cpPage.value, page_size: cpPageSize.value }); casePickerItems.value = res.data.data?.items ?? []; casePickerTotal.value = res.data.data?.total ?? 0 } finally { casePickerLoading.value = false } }
-function onCasePickerSelectionChange(rows) { casePickerSelected.value = rows.map((r) => r.id) }
-async function addCases() { if (!casePickerSelected.value.length) return; casePickerSaving.value = true; try { var all = taskCases.value.map((c) => c.case_id).concat(casePickerSelected.value); await replaceTaskCases(taskId.value, { case_ids: all }); ElMessage.success(t('common.saved')); showCasePicker.value = false; casePickerSelected.value = []; loadTaskCases() } finally { casePickerSaving.value = false } }
+const existingCaseIds = computed(() => new Set(taskCases.value.map(c => c.case_id)))
+const existingCaseMap = computed(() => {
+  var map = {}
+  taskCases.value.forEach(function (c) { if (c.catalog_id) map[c.case_id] = c.catalog_id })
+  return map
+})
+
+function openCasePicker() { showCasePicker.value = true }
+async function onCasePickerConfirmed(selectedIds) {
+  casePickerSaving.value = true
+  try {
+    await replaceTaskCases(taskId.value, { case_ids: selectedIds })
+    ElMessage.success(t('common.saved'))
+    showCasePicker.value = false
+    loadTaskCases()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || e.message)
+  } finally { casePickerSaving.value = false }
+}
 
 // --- Manual run ---
-async function startManualRun() { try { var res = await openManualRun(taskId.value); manualRunId.value = res.data.data?.task_run_id ?? res.data.data?.id; manualDrawerVisible.value = true } catch (e) { ElMessage.error(e.message) } }
+// startManualRun is defined above in the inline execution section
 
 // --- History helpers ---
 function calcProgress(row) {
@@ -417,12 +765,91 @@ async function rerunHistory() {
   }
 }
 
-onMounted(load)
+// Auto-start manual run when records tab is activated
+watch(activeTab, async (tab) => {
+  if (tab === 'records' && isManual.value && !manualRunId.value) {
+    await startManualRun()
+  }
+})
+
+onMounted(async () => {
+  await load()
+  // Handle query params: ?tab=records&execute=1
+  if (route.query.tab) activeTab.value = route.query.tab
+  // Auto-start manual run when entering a manual task's detail page
+  if (isManual.value && !manualRunId.value) {
+    activeTab.value = route.query.tab || 'records'
+    if (activeTab.value === 'records') {
+      await startManualRun()
+    }
+  }
+})
 </script>
 
 <style lang="scss" scoped>
 .task-detail-view {
   position: relative;
+}
+.exec-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.exec-layout {
+  display: flex;
+  gap: 16px;
+  min-height: 400px;
+}
+.exec-left {
+  width: 240px;
+  flex-shrink: 0;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 600px;
+}
+.exec-right {
+  flex: 1;
+  min-width: 0;
+}
+.mark-drawer-body {
+  padding: 0 4px;
+}
+.mark-section {
+  margin-bottom: 20px;
+}
+.mark-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 10px;
+  padding-left: 8px;
+  border-left: 3px solid var(--el-color-primary, #409eff);
+}
+.mark-field-block {
+  margin-bottom: 12px;
+
+  label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--el-text-color-secondary);
+    margin-bottom: 4px;
+  }
+
+  .mark-field-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 10px 12px;
+    background: var(--el-fill-color-lighter, #f5f7fa);
+    border-radius: 4px;
+    line-height: 1.6;
+    font-size: 14px;
+    color: var(--el-text-color-primary);
+    max-height: none;
+    margin: 0;
+  }
 }
 .task-actions {
   position: absolute;

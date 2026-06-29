@@ -44,9 +44,12 @@ class ApiAgentService:
             project_id=body.project_id,
             module_id=body.module_id,
             interface_id=body.interface_id,
+            interface_ids=body.interface_ids,
             api_doc_text=body.api_doc_text,
             user_prompt=body.user_prompt,
+            environment_id=body.environment_id,
             title=body.title,
+            mode=body.mode,
         )
 
     @classmethod
@@ -160,3 +163,74 @@ class ApiAgentService:
             raise AppException("生成会话不存在", 404)
         await ensure_agent_editor(session.project_id, user)
         return await ApiCaseGenerationService.confirm_session(user, body)
+
+    # ---------- Multi-interface pipeline methods ----------
+
+    @classmethod
+    async def stream_pipeline(
+        cls,
+        user: User,
+        session_id: int,
+        body: AgentMessageRequest,
+    ) -> AsyncIterator[str]:
+        """Run the multi-interface pipeline (Phase 1-3) as SSE stream."""
+        from service.ai_generation.pipeline import ApiAgentPipeline
+
+        session = await MessageService.ensure_session_access(session_id, user.id)
+        if session.gen_type != GenType.api_base:
+            raise AppException("非接口用例生成会话", 400)
+        await ensure_agent_viewer(session.project_id, user)
+
+        payload = session.output_payload or {}
+        mode = payload.get("mode", "from_interfaces")
+        interface_ids = payload.get("interface_ids")
+        api_doc_text = payload.get("api_doc") or payload.get("api_doc_text")
+        user_prompt = session.user_prompt or body.content
+
+        async for chunk in ApiAgentPipeline.run_phase_1_to_3(
+            session,
+            mode=mode,
+            user_prompt=user_prompt,
+            interface_ids=interface_ids,
+            api_doc_text=api_doc_text,
+        ):
+            yield chunk
+
+    @classmethod
+    async def save_base_cases_and_continue(
+        cls,
+        user: User,
+        session_id: int,
+        body,
+    ) -> AsyncIterator[str]:
+        """Save edited base cases and run Phase 4-5 as SSE stream."""
+        from service.ai_generation.pipeline import ApiAgentPipeline
+        from service.ai_generation.schemas import SaveBaseCasesRequest
+
+        session = await AIGenerationSession.get_or_none(id=session_id)
+        if session is None:
+            raise AppException("会话不存在", 404)
+        await ensure_agent_editor(session.project_id, user)
+
+        # Update payload with edited base cases
+        payload = dict(session.output_payload or {})
+        interfaces = payload.get("interfaces", [])
+
+        for edit in body.interfaces:
+            if 0 <= edit.index < len(interfaces):
+                iface = interfaces[edit.index]
+                iface["selected_indexes"] = edit.selected_indexes
+                if edit.edited_cases:
+                    # Merge edited cases into base_cases
+                    for i, edited in enumerate(edit.edited_cases):
+                        if i < len(iface.get("base_cases", [])):
+                            iface["base_cases"][i] = {**iface["base_cases"][i], **edited}
+
+        session.output_payload = payload
+        await session.save(update_fields=["output_payload"])
+
+        async for chunk in ApiAgentPipeline.run_phase_4_to_5(
+            session,
+            environment_id=body.environment_id,
+        ):
+            yield chunk

@@ -31,7 +31,7 @@ class RunDefectService:
                 return infer_category_from_functional(
                     test_point_type=test_point_type,
                     dimension=case.dimension,
-                    case_type=case.type,
+                    case_category=case.case_category,
                 )
         if data.source_type == DefectSourceType.api_case:
             return infer_category_from_api_case()

@@ -43,12 +43,13 @@ class CaseRelationService:
     @classmethod
     async def _build_case_out(cls, rel: SuiteCaseRelation) -> SuiteCaseRelationOut:
         case = await ApiTestCase.get_or_none(id=rel.case_id)
-        interface_name = interface_path = interface_method = None
+        interface_id = interface_name = interface_path = interface_method = None
         exec_status = None
         case_name = None
         if case:
             case_name = case.title
             exec_status = case.exec_status.value if case.exec_status else None
+            interface_id = case.interface_id
             if case.interface_id:
                 iface = await case.interface
                 if iface:
@@ -61,6 +62,7 @@ class CaseRelationService:
             case_order=rel.case_order,
             use_dependency=rel.use_dependency,
             case_name=case_name,
+            interface_id=interface_id,
             interface_name=interface_name,
             interface_path=interface_path,
             interface_method=interface_method,

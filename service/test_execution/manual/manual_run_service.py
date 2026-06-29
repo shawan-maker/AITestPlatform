@@ -60,12 +60,48 @@ class ManualRunService:
         records = await FunctionalCaseRunRecord.filter(task_run_id=task_run_id)
         record_map = {r.functional_case_id: r for r in records}
 
+        # Batch-resolve module names
+        all_module_ids = set()
+
+        def collect_module_ids(nodes):
+            for node in nodes:
+                for case in node.cases:
+                    if case.module_id:
+                        all_module_ids.add(case.module_id)
+                collect_module_ids(node.children)
+
+        collect_module_ids(tree)
+        module_map = {}
+        if all_module_ids:
+            from service.project.models import ProjectModule
+            modules = await ProjectModule.filter(id__in=list(all_module_ids))
+            module_map = {m.id: m.name for m in modules}
+
+        # Batch-resolve defect codes for records that have a defect linked
+        defect_ids = [r.defect_id for r in records if r.defect_id]
+        defect_code_map = {}
+        if defect_ids:
+            from service.test_execution.models import TestDefect
+            defects = await TestDefect.filter(id__in=defect_ids)
+            defect_code_map = {d.id: d.defect_code for d in defects}
+
+        # Batch-resolve executor names
+        user_ids = [r.triggered_by_id for r in records if r.triggered_by_id]
+        user_name_map = {}
+        if user_ids:
+            users = await User.filter(id__in=list(set(user_ids)))
+            user_name_map = {u.id: u.username for u in users}
+
         def attach_results(nodes):
             for node in nodes:
                 for case in node.cases:
                     rec = record_map.get(case.case_id)
                     if rec:
-                        case.case_name = f"{case.case_name} [{rec.exec_result.value}]"
+                        case.exec_result = rec.exec_result.value if rec.exec_result else None
+                        if rec.defect_id:
+                            case.defect_code = defect_code_map.get(rec.defect_id)
+                        case.triggered_by_name = user_name_map.get(rec.triggered_by_id)
+                        case.exec_time = rec.end_time
                 attach_results(node.children)
 
         attach_results(tree)
@@ -74,6 +110,7 @@ class ManualRunService:
             task_name=task.task_name,
             status=task_run.status,
             tree=tree,
+            module_map=module_map,
         )
 
     @classmethod
@@ -91,6 +128,14 @@ class ManualRunService:
         record = await FunctionalCaseRunRecord.get_or_none(
             task_run_id=task_run_id, functional_case_id=case_id
         )
+        triggered_by_name = None
+        exec_time = None
+        if record:
+            exec_time = record.end_time
+            if record.triggered_by_id:
+                tb_user = await User.get_or_none(id=record.triggered_by_id)
+                if tb_user:
+                    triggered_by_name = tb_user.username
         return ManualCaseDetailOut(
             case_id=case.id,
             case_name=case.case_name,
@@ -99,6 +144,9 @@ class ManualRunService:
             expected_result=case.expected_result,
             exec_result=record.exec_result if record else None,
             remark=record.remark if record else None,
+            record_id=record.id if record else None,
+            triggered_by_name=triggered_by_name,
+            exec_time=exec_time,
         )
 
     @classmethod
@@ -136,11 +184,6 @@ class ManualRunService:
             record.end_time = now
             record.triggered_by_id = user.id
             await record.save()
-
-        case = await FunctionalCase.get_or_none(id=case_id)
-        if case:
-            case.exec_result = data.exec_result
-            await case.save(update_fields=["exec_result", "updated_at"])
 
         await cls._maybe_complete_task_run(task_run_id)
 

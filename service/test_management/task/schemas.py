@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from service.core.enums import RunMode, RunStatus, TaskSuiteType
+from service.core.enums import CaseCategory, RunMode, RunStatus, TaskSuiteType
 from service.core.pagination import Paginated, PaginationParams
 from service.test_management.shared.schemas_common import LastRunBrief
 
@@ -99,8 +99,16 @@ class TaskCaseRelationOut(BaseModel):
     case_id: int
     case_order: int
     case_name: str | None = None
+    case_no: str | None = None
+    priority: int | None = None
+    case_category: CaseCategory | None = None
     catalog_id: int | None = None
     module_id: int | None = None
+    module_name: str | None = None
+    exec_result: str | None = None
+    defect_code: str | None = None
+    triggered_by_name: str | None = None
+    exec_time: datetime | None = None
 
 
 class PaginatedTaskCases(Paginated[TaskCaseRelationOut]):
