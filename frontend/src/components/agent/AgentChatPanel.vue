@@ -13,7 +13,10 @@
               <span class="chat-msg__role-name">{{ roleLabel('user') }}</span>
             </div>
             <div class="chat-msg__bubble chat-msg__bubble--user">
-              <div class="chat-msg__text">{{ msg.content }}</div>
+              <div v-if="parseContext(msg.content)" class="chat-msg__context">
+                <div v-for="(line, i) in parseContext(msg.content)" :key="i" class="chat-msg__context-line">{{ line }}</div>
+              </div>
+              <div class="chat-msg__text">{{ parseUserText(msg.content) }}</div>
             </div>
           </div>
         </template>
@@ -175,10 +178,10 @@
           </div>
         </div>
       </div>
-    </el-scrollbar>
 
-    <!-- Slot for embedded PayloadCard after messages (legacy) -->
-    <slot name="after-messages" />
+      <!-- Slot for embedded cards after messages (inside scrollbar for proper scrolling) -->
+      <slot name="after-messages" />
+    </el-scrollbar>
   </div>
 </template>
 
@@ -227,6 +230,12 @@ const STAGE_LABEL_MAP = {
   search_requirement: () => t('page.agent.stageSearch'),
   generate_testcases: () => t('page.agent.stageTestcases'),
   history: () => t('page.agent.stageHistory'),
+  search_api_document: () => t('page.agent.stageSearch'),
+  create_interfaces: () => t('page.agent.stageCreateInterfaces'),
+  generate_base_cases: () => t('page.agent.stageGenerateBaseCases'),
+  edit_base_cases: () => t('page.agent.stageEditBaseCases'),
+  structure_cases: () => t('page.agent.stageStructureCases'),
+  pre_run: () => t('page.agent.stagePreRun'),
 }
 
 function getStageLabel(name) {
@@ -311,6 +320,19 @@ function roleLabel(role) {
     agent: t('page.agent.roleAgent'),
   }
   return map[role] || role
+}
+
+/* 解析用户消息中的 [context] 区域 */
+const _ctxRe = /\[context\]\n([\s\S]*?)\n\[\/context\]\n?/
+function parseContext(content) {
+  if (!content) return null
+  const m = content.match(_ctxRe)
+  if (!m) return null
+  return m[1].split('\n').filter(Boolean)
+}
+function parseUserText(content) {
+  if (!content) return ''
+  return content.replace(_ctxRe, '').trim()
 }
 
 function isLongContent(content) {
@@ -476,6 +498,23 @@ watch(
   }
 }
 
+/* Context area in user messages */
+.chat-msg__context {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-regular);
+}
+
+.chat-msg__context-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Text content */
 .chat-msg__text {
   white-space: pre-wrap;
@@ -554,7 +593,7 @@ watch(
   }
 
   &.is-done {
-    border-left: 3px solid #67c23a;
+    box-shadow: inset 3px 0 0 #67c23a;
 
     .agent-stage-block__header {
       opacity: 0.85;

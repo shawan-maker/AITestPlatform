@@ -275,7 +275,7 @@
               :extract-info="extractInfo"
               :assert-info="assertInfo"
               :log-data="logData"
-              :show-records="showTestRecords"
+              :show-records="true"
               @toggle-records="showTestRecords = !showTestRecords"
             />
           </div>

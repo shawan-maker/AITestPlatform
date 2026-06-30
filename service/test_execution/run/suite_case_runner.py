@@ -39,9 +39,19 @@ class SuiteCaseRunner:
         # 构建主用例 payload，嵌入前置用例（合并为一次引擎调用）
         prepared_main = await prepare_case_payload(project_id, case.case_payload)
         if pre_cases:
+            from service.api_test.shared.payload_builder import _normalize_template_vars, _normalize_in_structure
             engine_preconditions = []
             for pc in pre_cases:
                 prepared_pc = await prepare_case_payload(project_id, pc.case_payload)
+                # 防御性归一化：确保 DB 中的 {var} 格式被转换为引擎识别的 ${var}
+                iface = prepared_pc.get("interface") or {}
+                if iface.get("url"):
+                    iface["url"] = _normalize_template_vars(iface["url"])
+                if prepared_pc.get("path"):
+                    prepared_pc["path"] = _normalize_template_vars(prepared_pc["path"])
+                req = prepared_pc.get("request") or {}
+                if req:
+                    prepared_pc["request"] = _normalize_in_structure(req)
                 engine_preconditions.append(prepared_pc)
             prepared_main["preconditions"] = engine_preconditions
 

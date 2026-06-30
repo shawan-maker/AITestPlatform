@@ -103,7 +103,7 @@ class ProjectService:
             await project.fetch_related("owner")
         is_member = membership is not None
         my_role = membership.role if membership else None
-        member_count = int(await ProjectMember.filter(project_id=project.id).count())
+        member_count = len(await ProjectMember.filter(project_id=project.id).all())
         return ProjectBrief(
             id=project.id,
             name=project.name,
@@ -209,9 +209,10 @@ class ProjectService:
         if query.name:
             qs = qs.filter(name__icontains=query.name)
 
-        qs = qs.distinct().prefetch_related("owner").order_by("-created_at")
+        qs = qs.distinct().order_by("-created_at")
         total = await qs.count()
-        projects = await qs.offset((query.page - 1) * query.page_size).limit(query.page_size)
+        project_ids = [p.id for p in await qs.offset((query.page - 1) * query.page_size).limit(query.page_size)]
+        projects = await Project.filter(id__in=project_ids).prefetch_related("owner").order_by("-created_at")
 
         items: list[ProjectBrief] = []
         for project in projects:

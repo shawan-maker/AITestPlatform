@@ -1,4 +1,7 @@
+import logging
 from collections.abc import AsyncIterator
+
+logger = logging.getLogger(__name__)
 
 from service.ai_generation.agent_stream import AgentStreamService
 from service.ai_generation.message_service import MessageService
@@ -185,7 +188,7 @@ class ApiAgentService:
         mode = payload.get("mode", "from_interfaces")
         interface_ids = payload.get("interface_ids")
         api_doc_text = payload.get("api_doc") or payload.get("api_doc_text")
-        user_prompt = session.user_prompt or body.content
+        user_prompt = body.content or session.user_prompt
 
         async for chunk in ApiAgentPipeline.run_phase_1_to_3(
             session,
@@ -221,10 +224,19 @@ class ApiAgentService:
                 iface = interfaces[edit.index]
                 iface["selected_indexes"] = edit.selected_indexes
                 if edit.edited_cases:
-                    # Merge edited cases into base_cases
-                    for i, edited in enumerate(edit.edited_cases):
-                        if i < len(iface.get("base_cases", [])):
-                            iface["base_cases"][i] = {**iface["base_cases"][i], **edited}
+                    # Merge edited cases into base_cases by _index
+                    for edited in edit.edited_cases:
+                        idx = edited.get("_index")
+                        if idx is not None and idx < len(iface.get("base_cases", [])):
+                            old_expected = iface["base_cases"][idx].get("expected")
+                            # Remove _index before merging
+                            edit_data = {k: v for k, v in edited.items() if k != "_index"}
+                            iface["base_cases"][idx] = {**iface["base_cases"][idx], **edit_data}
+                            new_expected = iface["base_cases"][idx].get("expected")
+                            logger.info(
+                                "[save_base_cases] merge case[%d]: old_expected=%s, new_expected=%s",
+                                idx, old_expected, new_expected
+                            )
 
         session.output_payload = payload
         await session.save(update_fields=["output_payload"])

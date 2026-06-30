@@ -286,7 +286,10 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
             json()	        解析 JSON 响应体
    特别注意：teardown_script中的python脚本后面会通过python的eval执行，要保证脚本的语法正确性。 
 
-8. **断言说明**  
+8. **断言说明**
+   - **重要：所有断言必须严格来自 base_case 的 expected（预期结果）字段，不得自行添加任何 expected 中未提及的断言。** 如果用户修改了 expected 字段（删除了某些预期），则对应的断言也必须删除，不可保留。
+   - **重要：teardown_script 中也不得添加 expected 中未提及的断言。** teardown_script 仅用于数据提取（extract）和清理操作，不应包含额外的断言逻辑。所有断言必须放在 assertions 字段中。
+   - **重要：对于返回二进制数据的接口（如图片、文件下载），不要尝试解析响应体内容做断言。** 应通过检查响应头 Content-Type 来验证响应类型，而不是检查响应体是否包含某个关键词。
    - 可以从json响应数据中获取特定字段的值，进行断言。在用例结构中通过 `assertions` 字段定义断言信息，获取特定字段使用jmespath表达式。
      field字段的值，只有两种（其他字段/形式的校验，可以放在teardown_script中实现）：
      - （1）如果要校验json响应字段，则field字段的值，必须写成："jmespath提取表达式"（如："$.status"），不可以直接写"$"，必须获取json响应数据中的某个字段的值，再进行断言

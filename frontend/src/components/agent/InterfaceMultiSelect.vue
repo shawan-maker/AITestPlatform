@@ -1,13 +1,26 @@
 <template>
   <div class="interface-multi-select">
     <div class="interface-multi-select__trigger" @click="showDialog = true">
-      <span v-if="selectedList.length" class="interface-multi-select__count">
-        {{ t('page.agent.selectedInterfaces', { count: selectedList.length }) }}
-      </span>
+      <template v-if="selectedList.length">
+        <el-tag
+          v-for="iface in selectedList.slice(0, 3)"
+          :key="iface.id"
+          size="small"
+          :type="methodTagType(iface.method)"
+          closable
+          @close.stop="removeInterface(iface.id)"
+          class="interface-multi-select__tag"
+        >
+          {{ iface.method }} {{ iface.summary || iface.path }}
+        </el-tag>
+        <el-tag v-if="selectedList.length > 3" size="small" type="info" class="interface-multi-select__tag">
+          +{{ selectedList.length - 3 }}
+        </el-tag>
+      </template>
       <span v-else class="interface-multi-select__placeholder">
         {{ t('page.agent.selectInterfaces') }}
       </span>
-      <el-icon style="margin-left: 4px"><ArrowDown /></el-icon>
+      <el-icon class="interface-multi-select__arrow"><ArrowDown /></el-icon>
     </div>
 
     <el-dialog
@@ -32,7 +45,6 @@
             node-key="nodeKey"
             :props="treeProps"
             show-checkbox
-            :check-strictly="true"
             :default-expand-all="false"
             @check="onTreeCheck"
           >
@@ -126,6 +138,11 @@ function methodTagType(method) {
   return 'info'
 }
 
+function removeInterface(id) {
+  const ids = (props.modelValue || []).filter(v => v !== id)
+  emit('update:modelValue', ids)
+}
+
 function buildTreeNodes(nodes) {
   const result = []
   for (const node of nodes) {
@@ -146,7 +163,6 @@ function buildTreeNodes(nodes) {
         path: iface.path,
         isInterface: true,
         interfaceId: iface.id,
-        children: [],
       })
     }
     if (node.children && node.children.length) {
@@ -171,43 +187,18 @@ function filterTree(nodes, keyword) {
   return result
 }
 
-function onTreeCheck(nodeData, checkState) {
-  if (nodeData.isInterface) {
-    if (checkState.checked) {
-      checkedInterfaceIds.value.add(nodeData.interfaceId)
-    } else {
-      checkedInterfaceIds.value.delete(nodeData.interfaceId)
-    }
-  } else {
-    // catalog node: check/uncheck all child interfaces
-    const childIds = collectInterfaceIds(nodeData)
-    for (const id of childIds) {
-      if (checkState.checked) {
-        checkedInterfaceIds.value.add(id)
-      } else {
-        checkedInterfaceIds.value.delete(id)
-      }
-    }
-    // update tree check state
-    if (treeRef.value) {
-      for (const id of childIds) {
-        treeRef.value.setChecked('iface-' + id, checkState.checked, false)
-      }
+function onTreeCheck() {
+  // With check-strictly=false (default), el-tree handles cascade automatically.
+  // Just collect all checked leaf nodes (interfaces).
+  if (!treeRef.value) return
+  const checkedNodes = treeRef.value.getCheckedNodes(true) // true = include half-checked
+  const ids = new Set()
+  for (const node of checkedNodes) {
+    if (node.isInterface && node.interfaceId) {
+      ids.add(node.interfaceId)
     }
   }
-}
-
-function collectInterfaceIds(node) {
-  const ids = []
-  if (node.isInterface) {
-    ids.push(node.interfaceId)
-  }
-  if (node.children) {
-    for (const child of node.children) {
-      ids.push(...collectInterfaceIds(child))
-    }
-  }
-  return ids
+  checkedInterfaceIds.value = ids
 }
 
 function onConfirm() {
@@ -219,7 +210,7 @@ async function onOpen() {
   searchKey.value = ''
   checkedInterfaceIds.value = new Set(props.modelValue || [])
   await loadTree()
-  // restore checks
+  // Restore checks: only set leaf (interface) nodes; tree auto-cascades to parents
   if (treeRef.value) {
     for (const id of checkedInterfaceIds.value) {
       treeRef.value.setChecked('iface-' + id, true, false)
@@ -261,19 +252,29 @@ watch(() => props.projectId, () => {
   catalogTree.value = []
   interfacesByCatalog.value = {}
 })
+
+defineExpose({ selectedList })
 </script>
 
 <style scoped lang="scss">
+.interface-multi-select {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
 .interface-multi-select__trigger {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
   cursor: pointer;
-  padding: 0 16px;
-  min-height: 64px;
+  padding: 4px 12px;
+  min-height: 48px;
   min-width: 200px;
+  max-width: 500px;
   border: 2px solid var(--el-border-color);
   border-radius: 12px;
-  font-size: 22px;
+  font-size: 18px;
   color: var(--el-text-color-primary);
   background: var(--el-bg-color);
 
@@ -286,9 +287,15 @@ watch(() => props.projectId, () => {
   color: var(--el-text-color-placeholder);
 }
 
-.interface-multi-select__count {
-  color: var(--el-color-primary);
-  font-weight: 500;
+.interface-multi-select__arrow {
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.interface-multi-select__tag {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .interface-multi-select__body {

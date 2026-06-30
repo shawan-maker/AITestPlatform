@@ -142,7 +142,7 @@
           :extract-info="extractResultData"
           :assert-info="assertResultData"
           :log-data="logData"
-          :show-records="showTestRecords"
+          :show-records="true"
           @toggle-records="showTestRecords = !showTestRecords"
         />
       </div>
@@ -371,10 +371,24 @@ async function loadCaseDetail() {
   }
 
   loading.value = true
-  // 重置请求行（不影响表单数据，避免闪屏）
+  // 重置请求表单和响应面板（切换用例时清空上一个用例的数据）
   debugForm.method = 'POST'
   debugForm.base_url = ''
   debugForm.path = ''
+  execResult.value = null
+  responseHeaders.value = {}
+  requestHeaders.value = {}
+  extractResultData.value = []
+  assertResultData.value = []
+  logData.value = []
+  headersData.value = []
+  queryParamsData.value = []
+  bodyContent.value = '{\n\n}'
+  bodyType.value = 'json'
+  urlencodedRows.value = []
+  formDataRows.value = []
+  setupScriptText.value = ''
+  teardownScriptText.value = ''
   try {
     try {
       var res = await getApiCase(caseId.value)
@@ -447,7 +461,7 @@ async function loadCaseDetail() {
 
     /* 解析预执行结果（_exec_result） */
     var er = payload._exec_result
-    console.log('[DEBUG] _exec_result:', er ? JSON.stringify(er).substring(0, 500) : 'null/undefined')
+    var er = payload._exec_result
     if (er && typeof er === 'object' && Object.keys(er).length > 0) {
       // 兼容两种格式：扁平结构 {status, response_body, ...} 和嵌套结构 {state, cases: [{...}]}
       var firstCase = null
@@ -473,11 +487,11 @@ async function loadCaseDetail() {
           success: isSuccess,
           status_code: firstCase.response_code || '',
           duration_ms: firstCase.run_time || firstCase.duration_ms || 0,
-          method: firstCase.method || debugForm.method,
-          url: firstCase.url || (debugForm.base_url + debugForm.path),
+          method: firstCase.method || '',
+          url: firstCase.url || '',
           error_message: firstCase.status === 'error' ? (typeof firstCase.log_data === 'string' ? firstCase.log_data : '') : '',
           response_body: respBody,
-          request_body: firstCase.request_body || null,
+          request_body: firstCase.request_body !== undefined ? firstCase.request_body : null,
         }
 
         // 响应头
@@ -541,7 +555,6 @@ async function loadCaseDetail() {
     }
 
     /* 加载前置依赖 + 测试用例 */
-    console.log('[DEBUG] caseDetail:', caseDetail.value ? { id: caseDetail.value.id, interface_id: caseDetail.value.interface_id } : null)
     if (caseDetail.value && caseDetail.value.interface_id) {
       var iid = caseDetail.value.interface_id
       var results = await Promise.all([
@@ -550,21 +563,12 @@ async function loadCaseDetail() {
       ])
       preconditionCases.value = results[0].data.data ? (results[0].data.data.items || results[0].data.data) : []
       mainCases.value = results[1].data.data ? (results[1].data.data.items || results[1].data.data) : []
-      console.log('[DEBUG] precondition:', preconditionCases.value.length, 'main:', mainCases.value.length)
     } else {
-      console.log('[DEBUG] interface_id is null, skipping case list load')
       preconditionCases.value = []
       mainCases.value = []
     }
 
-    // 切换用例后清空响应面板（上一个用例的执行结果不保留）
-    execResult.value = null
-    responseHeaders.value = {}
-    requestHeaders.value = {}
-    extractResultData.value = []
-    assertResultData.value = []
-    logData.value = []
-
+    // 加载 run_records（如果 _exec_result 已有数据则仅作为补充）
     var recRes = await getApiCaseRunRecords(caseId.value)
     runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
 

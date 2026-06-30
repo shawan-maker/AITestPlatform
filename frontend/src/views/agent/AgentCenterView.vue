@@ -10,16 +10,20 @@
         <FunctionalAgentPanel
           v-show="activeTab === 'functional'"
           :is-active="activeTab === 'functional'"
+          :active-tab="activeTab"
           :auto-new="route.query.new === '1'"
           :initial-requirement="functionalRequirement"
           @composer-mode-change="onComposerModeChange"
+          @tab-change="onTabChange"
         />
         <ApiAgentPanel
           v-show="activeTab === 'api'"
           :is-active="activeTab === 'api'"
+          :active-tab="activeTab"
           :auto-new="route.query.new === '1'"
           :initial-interface-id="apiInterfaceId"
           @composer-mode-change="onComposerModeChange"
+          @tab-change="onTabChange"
         />
       </div>
     </template>
@@ -57,6 +61,12 @@ const apiInterfaceId = computed(() => {
 function onComposerModeChange(value) {
   if (value !== composerMode.value) {
     composerMode.value = value
+  }
+}
+
+function onTabChange(tab) {
+  if (tab !== activeTab.value) {
+    activeTab.value = tab
   }
 }
 
@@ -101,6 +111,13 @@ watch(
     flex: 1;
     min-height: 0;
     width: 100%;
+  }
+
+  /* Hidden panel takes no space */
+  .agent-center-view__body > *[style*="display: none"] {
+    flex: 0;
+    width: 0;
+    overflow: hidden;
   }
 }
 </style>

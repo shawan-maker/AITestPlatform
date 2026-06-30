@@ -268,9 +268,19 @@ class RunnerGateway:
         # ---- 构建主用例 payload，嵌入前置用例（合并为一次引擎调用） ----
         prepared_main = await prepare_case_payload(project_id, case.case_payload)
         if pre_cases:
+            from service.api_test.shared.payload_builder import _normalize_template_vars, _normalize_in_structure
             engine_preconditions = []
             for pc in pre_cases:
                 prepared_pc = await prepare_case_payload(project_id, pc.case_payload)
+                # 防御性归一化：确保 DB 中的 {var} 格式被转换为引擎识别的 ${var}
+                iface = prepared_pc.get("interface") or {}
+                if iface.get("url"):
+                    iface["url"] = _normalize_template_vars(iface["url"])
+                if prepared_pc.get("path"):
+                    prepared_pc["path"] = _normalize_template_vars(prepared_pc["path"])
+                req = prepared_pc.get("request") or {}
+                if req:
+                    prepared_pc["request"] = _normalize_in_structure(req)
                 engine_preconditions.append(prepared_pc)
             prepared_main["preconditions"] = engine_preconditions
 
@@ -324,6 +334,25 @@ class RunnerGateway:
                 if t:
                     pre_step_data[t] = ps
 
+        # 构建 title 映射（精确 + 模糊匹配）
+        engine_titles = list(pre_step_data.keys())
+        db_titles = [pc.title for pc in pre_cases]
+        logger.info(
+            "[debug] _update_precondition_results: engine titles=%s, db titles=%s",
+            engine_titles, db_titles,
+        )
+
+        def _find_step(db_title: str) -> dict:
+            """精确匹配 → 包含匹配 → 索引匹配"""
+            if db_title in pre_step_data:
+                return pre_step_data[db_title]
+            # 模糊匹配：引擎标题包含 DB 标题，或反之
+            for et, step in pre_step_data.items():
+                if db_title in et or et in db_title:
+                    logger.info("[debug] 模糊匹配: '%s' → '%s'", db_title, et)
+                    return step
+            return {}
+
         # 按 title 收集日志和状态
         pre_logs: dict[str, list] = {}
         pre_status: dict[str, str] = {}
@@ -354,13 +383,14 @@ class RunnerGateway:
         for pc in pre_cases:
             status = pre_status.get(pc.title)
             logs = pre_logs.get(pc.title, [])
-            step = pre_step_data.get(pc.title, {})
+            step = _find_step(pc.title)
 
-            # 从 per-step 数据推断状态
-            if status is None and step:
-                # 优先使用引擎返回的 status 字段
-                status = step.get("status")
-            if status is None and step:
+            # 从 per-step 数据推断状态 — HTTP status_code 始终优先
+            sc = step.get("status_code", "")
+            if sc and not str(sc).startswith("2"):
+                # HTTP 非 2xx 一律视为失败，不管引擎 status 怎么说
+                status = "fail"
+            elif status is None and step:
                 # 检查 assert_info 是否有失败的断言
                 assert_info = step.get("assert_info") or []
                 has_failed_assert = any(
@@ -369,8 +399,8 @@ class RunnerGateway:
                 if has_failed_assert:
                     status = "fail"
                 else:
-                    sc = step.get("status_code", "")
-                    status = "success" if str(sc).startswith("2") else "fail"
+                    # 引擎 status + 2xx status_code → success
+                    status = step.get("status") or "success"
             elif status is None:
                 status = "success" if main_record.status == CaseRunStatus.success else "fail"
 

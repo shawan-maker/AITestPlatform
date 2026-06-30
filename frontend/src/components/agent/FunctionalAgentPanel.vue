@@ -32,9 +32,10 @@
         </div>
       </template>
 
-      <!-- Chat mode: context bar + chat panel + composer (fixed bottom) -->
+      <!-- Chat mode: tabs + context bar + chat panel + composer (fixed bottom) -->
       <template v-else>
         <div class="functional-agent-panel__chat-layout">
+          <AgentTypeTabs v-model="sharedActiveTab" :compact="true" />
           <AgentContextBar
             :knowledge-doc-title="sessionDetail?.knowledge_document_title"
             :input-ref-type="sessionDetail?.input_ref_type"
@@ -123,9 +124,10 @@ const props = defineProps({
   autoNew: { type: Boolean, default: false },
   initialRequirement: { type: String, default: '' },
   isActive: { type: Boolean, default: true },
+  activeTab: { type: String, default: 'functional' },
 })
 
-const emit = defineEmits(['composer-mode-change'])
+const emit = defineEmits(['composer-mode-change', 'tab-change'])
 
 const { t } = useI18n()
 const route = useRoute()
@@ -146,6 +148,7 @@ const meta = ref(null)
 const composerMode = ref(true)
 const sidebarCollapsed = ref(false)
 const sharedActiveTab = ref('functional')
+let _runningPollTimer = null
 // Legacy stage log lines (for backward compat with chat panel)
 const stageLogLines = ref([])
 
@@ -283,8 +286,19 @@ function setComposerMode(value) {
   emit('composer-mode-change', value)
 }
 
+// Sync tab changes to parent
+watch(sharedActiveTab, (tab) => {
+  emit('tab-change', tab)
+})
+
+// Sync from parent activeTab (keeps both panels' tabs in sync)
+watch(() => props.activeTab, (tab) => {
+  if (tab && tab !== sharedActiveTab.value) sharedActiveTab.value = tab
+})
+
 function startNewSession() {
   if (streaming.value) stopStream()
+  _stopRunningPoll()
   activeSessionId.value = null
   sessionDetail.value = null
   messages.value = []
@@ -294,9 +308,33 @@ function startNewSession() {
 
 async function selectSession(id) {
   if (streaming.value) stopStream()
+  _stopRunningPoll()
   activeSessionId.value = id
   setComposerMode(false)
   await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+  // 如果 session 仍在后台执行中，启动轮询
+  if (sessionDetail.value?.status === 'running') _startRunningPoll()
+}
+
+function _stopRunningPoll() {
+  if (_runningPollTimer) { clearInterval(_runningPollTimer); _runningPollTimer = null }
+}
+
+function _startRunningPoll() {
+  _stopRunningPoll()
+  _runningPollTimer = setInterval(async () => {
+    try {
+      const res = await getFunctionalSession(activeSessionId.value)
+      const detail = res.data.data
+      if (detail && detail.status !== 'running') {
+        _stopRunningPoll()
+        sessionDetail.value = detail
+        await Promise.all([loadMessages(), loadSessions()])
+      }
+    } catch (e) {
+      console.error('[poll] session poll failed:', e)
+    }
+  }, 3000)
 }
 
 async function createSessionFromComposer(payload) {
@@ -688,12 +726,24 @@ async function sendMessage(content) {
   }
 }
 
+/* 构建富文本消息：上下文 + 用户输入 */
+function buildRichContent(payload) {
+  const lines = []
+  if (payload.projectName) lines.push(`📋 项目: ${payload.projectName}`)
+  if (payload.documentName) lines.push(`📄 需求文档: ${payload.documentName}`)
+  const text = payload.content || ''
+  if (lines.length) {
+    return `[context]\n${lines.join('\n')}\n[/context]\n${text}`
+  }
+  return text
+}
+
 async function handleComposerSend(payload) {
   if (streaming.value || creating.value) return
   try {
     const session = await createSessionFromComposer(payload)
     if (!session) return
-    await sendMessage(payload.content || '')
+    await sendMessage(buildRichContent(payload))
   } catch (err) {
     console.error('handleComposerSend error:', err)
     ElMessage.error(err.message || t('common.requestFailed'))
@@ -714,7 +764,7 @@ async function sendMessageForComposer(payload) {
       return
     }
   }
-  const content = payload.content || ''
+  const content = buildRichContent(payload)
   if (content) {
     await sendMessage(content)
   }

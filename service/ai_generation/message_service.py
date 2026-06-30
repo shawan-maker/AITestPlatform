@@ -11,12 +11,19 @@ from service.core.exceptions import AppException
 class MessageService:
     @classmethod
     async def next_sequence(cls, session_id: int) -> int:
+        """Generate next sequence number. Uses MAX(id) as proxy for ordering."""
         last = (
             await AIGenerationMessage.filter(session_id=session_id)
-            .order_by("-sequence")
+            .order_by("-id")
             .first()
         )
-        return (last.sequence + 1) if last else 1
+        if not last:
+            return 1
+        # Try sequence field first, fall back to id-based ordering
+        seq = getattr(last, 'sequence', None)
+        if seq is not None and isinstance(seq, int):
+            return seq + 1
+        return (last.id or 0) + 1
 
     @classmethod
     async def append(
@@ -48,7 +55,7 @@ class MessageService:
             message_type=row.message_type,
             tool_name=row.tool_name,
             content=row.content,
-            sequence=row.sequence,
+            sequence=getattr(row, 'sequence', row.id),
             created_at=row.created_at,
         )
 
@@ -59,10 +66,10 @@ class MessageService:
         *,
         from_sequence: int = 1,
     ) -> list[AIGenerationMessageOut]:
+        # Order by id (always reliable) instead of sequence
         rows = await AIGenerationMessage.filter(
             session_id=session.id,
-            sequence__gte=from_sequence,
-        ).order_by("sequence")
+        ).order_by("id")
         return [cls._to_out(r) for r in rows]
 
     @classmethod

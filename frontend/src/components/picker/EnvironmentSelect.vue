@@ -35,4 +35,6 @@ async function load() {
 
 onMounted(load)
 watch(() => withProjectParams(), load)
+
+defineExpose({ environments })
 </script>

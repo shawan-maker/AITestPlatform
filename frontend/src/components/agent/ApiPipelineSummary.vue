@@ -31,13 +31,23 @@
           <span class="pipeline-summary__iface-name">{{ iface.summary }}</span>
         </div>
         <div class="pipeline-summary__iface-stats">
-          <span>{{ t('page.agent.caseCount') }}: {{ iface.structured_case_count || 0 }}</span>
-          <template v-if="iface.exec_results">
+          <span class="pipeline-summary__case-count">
+            {{ t('page.agent.caseCount') }}: {{ iface.structured_case_count || 0 }}
+          </span>
+          <template v-if="iface.structure_error">
+            <span class="pipeline-summary__structure-error">
+              ❌ {{ iface.structure_error.substring(0, 80) }}
+            </span>
+          </template>
+          <template v-else-if="iface.exec_results">
             <span class="pipeline-summary__pass">
               ✅ {{ iface.exec_results.passed || 0 }}
             </span>
             <span class="pipeline-summary__fail">
               ❌ {{ iface.exec_results.failed || 0 }}
+            </span>
+            <span class="pipeline-summary__error">
+              ⚠️ {{ iface.exec_results.error || 0 }}
             </span>
             <span class="pipeline-summary__rate">
               {{ t('page.agent.passRate') }}:
@@ -89,27 +99,28 @@ function passRateColor(rate) {
 
 <style scoped lang="scss">
 .pipeline-summary {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 12px;
+  padding: 12px 16px;
   background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  border-left: 3px solid var(--el-color-success);
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow: inset 3px 0 0 var(--el-color-success);
 }
 
 .pipeline-summary__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-  font-size: 16px;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--el-color-success);
 }
 
 .pipeline-summary__stats {
   display: flex;
-  gap: 24px;
-  margin-bottom: 16px;
+  gap: 20px;
+  margin-bottom: 12px;
 }
 
 .pipeline-summary__stat {
@@ -119,7 +130,7 @@ function passRateColor(rate) {
 }
 
 .pipeline-summary__stat-value {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--el-text-color-primary);
 }
@@ -132,42 +143,58 @@ function passRateColor(rate) {
 .pipeline-summary__interfaces {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .pipeline-summary__iface {
-  padding: 8px 12px;
+  padding: 6px 10px;
   background: var(--el-bg-color);
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px solid var(--el-border-color-lighter);
 }
 
 .pipeline-summary__iface-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 4px;
 }
 
 .pipeline-summary__iface-name {
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .pipeline-summary__iface-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   font-size: 13px;
   color: var(--el-text-color-regular);
 }
 
+.pipeline-summary__case-count {
+  min-width: 60px;
+}
+
 .pipeline-summary__pass {
   color: var(--el-color-success);
+  min-width: 36px;
 }
 
 .pipeline-summary__fail {
   color: var(--el-color-danger);
+  min-width: 36px;
+}
+
+.pipeline-summary__error {
+  color: var(--el-color-warning);
+  min-width: 36px;
+}
+
+.pipeline-summary__structure-error {
+  color: var(--el-color-danger);
+  font-size: 12px;
 }
 
 .pipeline-summary__rate {

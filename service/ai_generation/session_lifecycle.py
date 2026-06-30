@@ -167,8 +167,8 @@ class SessionLifecycleService:
 
         if mode == "from_interfaces" and interface_ids:
             # Multi-interface mode
-            input_ref_type = InputRefType.multi_interface
-            source_text = f"multi_interface:{','.join(str(i) for i in interface_ids)}"
+            input_ref_type = InputRefType.multi_iface
+            source_text = user_prompt or f"接口用例生成({len(interface_ids)}个接口)"
 
         elif interface_id is not None:
             from service.api_test.interface.interface_service import InterfaceService
@@ -187,7 +187,7 @@ class SessionLifecycleService:
         else:
             # Allow empty input for pipeline mode (user just selects interfaces)
             source_text = user_prompt or ""
-            input_ref_type = InputRefType.multi_interface
+            input_ref_type = InputRefType.multi_iface
 
         await cls.enforce_fifo(
             project_id=project_id,
@@ -279,6 +279,21 @@ class SessionLifecycleService:
         session.error_message = message
         session.finished_at = datetime.now(timezone.utc)
         await session.save(update_fields=["status", "error_message", "finished_at"])
+
+    @classmethod
+    async def cleanup_stale_sessions(cls) -> int:
+        """清理启动时仍为 running 状态的孤儿会话（服务重启残留）。"""
+        stale_sessions = await AIGenerationSession.filter(status=SessionStatus.running)
+        count = 0
+        for session in stale_sessions:
+            session.status = SessionStatus.failed
+            session.error_message = "服务重启，任务中断"
+            session.finished_at = datetime.now(timezone.utc)
+            await session.save(update_fields=["status", "error_message", "finished_at"])
+            count += 1
+        if count:
+            _log.info("[cleanup] 清理了 %d 个 stale running sessions", count)
+        return count
 
     # ---------- SIT-F7: Session management (rename / delete) ----------
 

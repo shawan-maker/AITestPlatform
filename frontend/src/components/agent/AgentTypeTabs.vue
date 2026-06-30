@@ -1,5 +1,5 @@
 <template>
-  <div class="agent-type-tabs" role="tablist">
+  <div class="agent-type-tabs" :class="{ 'agent-type-tabs--compact': compact }" role="tablist">
     <button
       v-for="tab in tabs"
       :key="tab.name"
@@ -26,6 +26,7 @@ import { ChatDotRound } from '@element-plus/icons-vue'
 
 defineProps({
   modelValue: { type: String, default: 'functional' },
+  compact: { type: Boolean, default: false },
 })
 
 defineEmits(['update:modelValue'])
@@ -44,6 +45,31 @@ const tabs = computed(() => [
   flex-wrap: wrap;
   gap: 20px; /* 加倍：从 10px 改为 20px */
   flex-shrink: 0;
+
+  &--compact {
+    gap: 8px;
+    margin-bottom: 8px;
+
+    .agent-type-tabs__item {
+      padding: 4px 12px;
+      font-size: 13px;
+      gap: 6px;
+      border-width: 1.5px;
+    }
+
+    .agent-type-tabs__icon {
+      width: 20px;
+      height: 20px;
+      font-size: 14px;
+    }
+
+    .agent-type-tabs__api-badge {
+      width: 20px;
+      height: 20px;
+      font-size: 9px;
+      border-width: 1.5px;
+    }
+  }
 }
 
 .agent-type-tabs__item {

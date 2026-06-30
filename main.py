@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     # auto_migrate 已禁用：表结构由 Aerich 手动管理（python scripts/db_manage.py upgrade）
     await ensure_default_super_admin()
+    # 清理服务重启前遗留的 running 状态会话
+    from service.ai_generation.session_lifecycle import SessionLifecycleService
+    await SessionLifecycleService.cleanup_stale_sessions()
     yield
     await close_redis()
     await close_db()

@@ -57,6 +57,7 @@
         </el-select>
         <span>{{ t('page.agent.composeApiMiddle') }}</span>
         <InterfaceMultiSelect
+          ref="interfaceSelectRef"
           v-model="selectedInterfaceIds"
           :project-id="localProjectId"
         />
@@ -64,7 +65,9 @@
     </div>
 
     <div v-if="!hidePromptRow && agentType === 'api'" class="agent-composer__env-row">
+      <span class="agent-composer__env-label">{{ t('page.agent.envLabel') }}</span>
       <EnvironmentSelect
+        ref="envSelectRef"
         v-model="selectedEnvironmentId"
         :placeholder="t('page.agent.selectEnvironment')"
         class="agent-composer__env-select"
@@ -147,6 +150,8 @@ const localProjectId = ref(projectStore.currentProjectId)
 const selectedDocumentKey = ref('')
 const selectedInterfaceIds = ref([])
 const selectedEnvironmentId = ref(null)
+const interfaceSelectRef = ref(null)
+const envSelectRef = ref(null)
 const documentOptions = ref([])
 const loadingOptions = ref(false)
 const textareaRef = ref(null)
@@ -242,17 +247,22 @@ async function submit() {
   if (!canSend.value || props.streaming || props.disabled) return
 
   const content = draft.value.trim()
+  // 获取项目名称
+  const projectName = projectStore.projects.find(p => p.id === localProjectId.value)?.name || ''
+
   const payload = {
     content: content || (props.agentType === 'functional'
       ? t('page.agent.defaultFunctionalPrompt')
       : t('page.agent.defaultApiPrompt')),
     projectId: localProjectId.value,
+    projectName,
   }
 
   if (props.agentType === 'functional') {
     const selected = selectedDocument.value
     if (selected?.type === 'document') {
       payload.knowledgeDocumentId = selected.documentId
+      payload.documentName = selected.label || ''
       payload.userPrompt = content || undefined
     } else {
       payload.userPrompt = content || undefined
@@ -264,6 +274,13 @@ async function submit() {
     payload.userPrompt = content || undefined
     // mode: 'from_interfaces' if interfaces selected, 'from_prompt' otherwise
     payload.mode = selectedInterfaceIds.value.length ? 'from_interfaces' : 'from_prompt'
+    // 获取接口名称列表
+    const ifaceList = interfaceSelectRef.value?.selectedList || []
+    payload.interfaceNames = ifaceList.map(i => `${i.method} ${i.summary || i.path}`)
+    // 获取环境名称
+    const envList = envSelectRef.value?.environments || []
+    const envObj = envList.find(e => e.id === selectedEnvironmentId.value)
+    payload.environmentName = envObj?.env_name || envObj?.name || ''
   }
 
   emit('send', payload)
@@ -352,9 +369,19 @@ onMounted(async () => {
 }
 
 .agent-composer__env-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
+  font-size: 20px;
+  color: var(--el-text-color-primary);
+}
+
+.agent-composer__env-label {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .agent-composer__env-select {

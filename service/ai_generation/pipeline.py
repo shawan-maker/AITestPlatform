@@ -58,6 +58,17 @@ class ApiAgentPipeline:
             session.output_payload = payload
             await session.save(update_fields=["status", "output_payload"])
 
+            # 持久化用户输入消息（供历史记录回放）
+            from service.ai_generation.message_service import MessageService
+            from service.core.enums import MessageRole, MessageType
+            if user_prompt:
+                await MessageService.append(
+                    session.id,
+                    role=MessageRole.user,
+                    content=user_prompt,
+                    message_type=MessageType.text,
+                )
+
             # -- Phase 1: Create interfaces (Mode 1 only) --
             if mode == "from_doc" and api_doc_text:
                 yield _sse("stage", {
@@ -74,6 +85,7 @@ class ApiAgentPipeline:
                     "status": "done",
                     "text": f"解析完成，共发现 {len(interfaces_data)} 个接口",
                 })
+                await MessageService.append(session.id, role=MessageRole.tool, content=f"解析完成，共发现 {len(interfaces_data)} 个接口", message_type=MessageType.custom)
                 yield _sse("pipeline_progress", cls._update_progress(
                     payload["pipeline_progress"], phase=1, status="done"
                 ))
@@ -97,11 +109,12 @@ class ApiAgentPipeline:
                 yield _sse("custom", f"正在为「{iface.get('summary', '')}」生成基础用例...")
                 try:
                     base_cases = await cls._generate_base_cases_for_interface(
-                        iface, user_prompt
+                        iface, user_prompt, session.project_id
                     )
                     iface["base_cases"] = base_cases
                     iface["selected_indexes"] = list(range(len(base_cases)))
                     yield _sse("custom", f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例")
+                    await MessageService.append(session.id, role=MessageRole.tool, content=f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例", message_type=MessageType.custom)
                     yield _sse("interface_progress", {
                         "interface_index": i,
                         "phase": "base_cases_done",
@@ -149,6 +162,15 @@ class ApiAgentPipeline:
             await session.save(update_fields=["status", "error_message", "finished_at"])
             yield _sse("error", {"message": str(e)})
             yield _sse("done", {})
+        except (GeneratorExit, asyncio.CancelledError):
+            # 客户端断开连接：Phase 1-3 需要用户确认，无需后台继续执行
+            _log.info("[pipeline] Phase 1-3 客户端断开连接 session=%s", session.id)
+            refreshed = await AIGenerationSession.get_or_none(id=session.id)
+            if refreshed and refreshed.status == SessionStatus.running:
+                refreshed.status = SessionStatus.failed
+                refreshed.error_message = "连接中断，请重新生成"
+                refreshed.finished_at = datetime.now(timezone.utc)
+                await refreshed.save(update_fields=["status", "error_message", "finished_at"])
 
     # ------------------------------------------------------------------
     # Phase 4-5: Structuring + execution (SSE Stream 2)
@@ -160,7 +182,34 @@ class ApiAgentPipeline:
         *,
         environment_id: int | None,
     ) -> AsyncIterator[str]:
-        """SSE Stream 2: Phase 4 -> 5 + summary."""
+        """SSE Stream 2: Phase 4 -> 5 + summary.
+
+        解耦架构：实际执行在 asyncio.Task 中后台运行，
+        SSE 生成器仅从 Queue 读取事件转发。客户端断开时
+        Task 继续执行并完成 DB 更新。
+        """
+        queue: asyncio.Queue = asyncio.Queue()
+        task = asyncio.create_task(
+            cls._execute_phase_4_to_5(session, queue, environment_id)
+        )
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:  # 哨兵值
+                    break
+                yield item
+        except (GeneratorExit, asyncio.CancelledError):
+            _log.info("[pipeline] Phase 4-5 SSE 客户端断开 session=%s，后台任务继续执行", session.id)
+            return  # Task 继续运行，不取消
+
+    @classmethod
+    async def _execute_phase_4_to_5(
+        cls,
+        session: AIGenerationSession,
+        queue: asyncio.Queue,
+        environment_id: int | None,
+    ) -> None:
+        """后台执行 Phase 4-5，事件写入 Queue，完成后更新 DB。"""
         try:
             payload = dict(session.output_payload or {})
             interfaces = payload.get("interfaces", [])
@@ -169,11 +218,11 @@ class ApiAgentPipeline:
             await session.save(update_fields=["status"])
 
             # -- Phase 4/3: Generate structured cases --
-            yield _sse("stage", {
+            await queue.put(_sse("stage", {
                 "name": "structure_cases",
                 "status": "running",
                 "text": "正在生成结构化测试用例...",
-            })
+            }))
 
             from service.api_test.case.generation_service import ApiCaseGenerationService
 
@@ -183,7 +232,7 @@ class ApiAgentPipeline:
                 if not selected_indexes or not base_cases:
                     continue
 
-                yield _sse("custom", f"正在为「{iface.get('summary', '')}」生成结构化用例...")
+                await queue.put(_sse("custom", f"正在为「{iface.get('summary', '')}」生成结构化用例..."))
 
                 selected_items = [
                     (idx, base_cases[idx])
@@ -193,6 +242,13 @@ class ApiAgentPipeline:
 
                 if not selected_items:
                     continue
+
+                # Debug: log the edited base cases before structuring
+                for idx, base in selected_items:
+                    _log.info(
+                        "[pipeline] 结构化前 base_case[%d]: name=%s, expected=%s",
+                        idx, base.get("name"), base.get("expected")
+                    )
 
                 try:
                     # Build interface doc for structuring
@@ -205,6 +261,17 @@ class ApiAgentPipeline:
                         iface, session.project_id
                     )
 
+                    # Enrich precondition docs from DB (same as confirm flow)
+                    precoditions_api_doc = await ApiCaseGenerationService.enrich_preconditions_api_doc(
+                        session.project_id, selected_items, precoditions_api_doc
+                    )
+
+                    # Load environment data for LLM variable references (same as confirm flow)
+                    test_env_data = None
+                    if environment_id:
+                        from service.test_execution.env_loader import load_test_env_data
+                        test_env_data = await load_test_env_data(environment_id)
+
                     # Run structuring (skip_execution=True)
                     pre_run_results = await ApiCaseGenerationService._pre_run_selected_base_cases(
                         selected_items=selected_items,
@@ -212,75 +279,117 @@ class ApiAgentPipeline:
                         precoditions_api_doc=precoditions_api_doc,
                         environment_id=environment_id or 0,
                         project_id=session.project_id,
-                        test_env_data=None,
+                        test_env_data=test_env_data,
                         skip_execution=True,
                     )
 
                     iface["structured_cases"] = [r.api_case for r in pre_run_results if r.api_case]
                     iface["structured_count"] = len(iface["structured_cases"])
-                    yield _sse("custom", f"✅ 「{iface.get('summary', '')}」结构化完成: {len(iface['structured_cases'])} 条")
+                    await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」结构化完成: {len(iface['structured_cases'])} 条"))
 
-                    # Save to DB (create ApiBaseCase + ApiTestCase records)
-                    interface_id = iface.get("interface_id")
-                    if interface_id:
-                        await cls._save_cases_to_db(
-                            session, iface, selected_items, pre_run_results, interface_id
+                    # --- Precondition handling (same logic as interface detail page) ---
+                    # 1. Collect AI-generated precondition steps
+                    ai_precondition_map: dict[str, dict] = {}
+                    for r in pre_run_results:
+                        if not isinstance(r.api_case, dict):
+                            continue
+                        for pre in (r.api_case.get("preconditions") or []):
+                            if not isinstance(pre, dict):
+                                continue
+                            title = (pre.get("title") or "").strip()
+                            if title and title not in ai_precondition_map:
+                                ai_precondition_map[title] = pre
+
+                    # 2. Align variable names across distributed LLM outputs
+                    if ai_precondition_map:
+                        ApiCaseGenerationService._align_variable_names(
+                            ai_precondition_map, pre_run_results
                         )
+
+                    # 3. Create precondition test cases in DB
+                    precondition_map: dict[str, int] = {}
+                    interface_id = iface.get("interface_id")
+                    if interface_id and ai_precondition_map:
+                        _log.info("[pipeline] ai_precondition_map keys: %s", list(ai_precondition_map.keys()))
+                        from service.api_test.interface.models import ApiInterface
+                        iface_obj = await ApiInterface.get_or_none(id=interface_id)
+                        if iface_obj:
+                            precondition_map = await ApiCaseGenerationService._create_precondition_cases(
+                                interface=iface_obj,
+                                base_cases=base_cases,
+                                selected_indexes=[idx for idx, _ in selected_items],
+                                precoditions_api_doc=precoditions_api_doc,
+                                environment_id=environment_id,
+                                test_env_data=None,
+                                user_id=session.created_by_id,
+                                session_id=session.id,
+                                ai_precondition_map=ai_precondition_map,
+                            )
+                            _log.info("[pipeline] precondition_map created: %s", precondition_map)
+
+                    # 4. Save to DB (create ApiBaseCase + ApiTestCase records)
+                    if interface_id:
+                        created_ids = await cls._save_cases_to_db(
+                            session, iface, selected_items, pre_run_results,
+                            interface_id, precondition_map, environment_id
+                        )
+                        iface["created_case_ids"] = created_ids
 
                 except Exception as e:
                     _log.error("结构化失败 [%s]: %s", iface.get("summary"), e, exc_info=True)
                     iface["structured_cases"] = []
                     iface["structure_error"] = str(e)
-                    yield _sse("custom", f"❌ 「{iface.get('summary', '')}」结构化失败: {str(e)[:100]}")
+                    await queue.put(_sse("custom", f"❌ 「{iface.get('summary', '')}」结构化失败: {str(e)[:100]}"))
 
-                yield _sse("interface_progress", {
+                await queue.put(_sse("interface_progress", {
                     "interface_index": i,
                     "phase": "structured_done",
                     "structured_count": iface.get("structured_count", 0),
-                })
+                    "structure_error": iface.get("structure_error"),
+                }))
 
-            yield _sse("stage", {
+            await queue.put(_sse("stage", {
                 "name": "structure_cases",
                 "status": "done",
                 "text": "结构化用例生成完毕",
-            })
+            }))
 
             # -- Phase 5/4: Pre-execute --
             if environment_id:
-                yield _sse("stage", {
+                await queue.put(_sse("stage", {
                     "name": "pre_run",
                     "status": "running",
                     "text": "正在预执行测试用例...",
-                })
+                }))
 
                 for i, iface in enumerate(interfaces):
-                    structured = iface.get("structured_cases", [])
-                    if not structured:
+                    case_ids = iface.get("created_case_ids", [])
+                    if not case_ids:
                         continue
-                    yield _sse("custom", f"正在预执行「{iface.get('summary', '')}」的用例...")
+                    await queue.put(_sse("custom", f"正在预执行「{iface.get('summary', '')}」的用例..."))
                     try:
                         exec_results = await cls._execute_cases(
-                            iface, environment_id, session.project_id
+                            case_ids, environment_id, session.created_by_id
                         )
                         iface["exec_results"] = exec_results
-                        yield _sse("custom", f"✅ 「{iface.get('summary', '')}」预执行完成: "
-                                  f"通过率 {exec_results.get('pass_rate', 0):.0%}")
+                        await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」预执行完成: "
+                                  f"通过率 {exec_results.get('pass_rate', 0):.0%}"))
                     except Exception as e:
                         _log.error("预执行失败 [%s]: %s", iface.get("summary"), e, exc_info=True)
-                        iface["exec_results"] = {"total": len(structured), "passed": 0, "failed": 0, "pass_rate": 0, "error": str(e)}
-                        yield _sse("custom", f"❌ 「{iface.get('summary', '')}」预执行失败")
+                        iface["exec_results"] = {"total": len(case_ids), "passed": 0, "failed": 0, "error": 0, "pass_rate": 0}
+                        await queue.put(_sse("custom", f"❌ 「{iface.get('summary', '')}」预执行失败"))
 
-                    yield _sse("interface_progress", {
+                    await queue.put(_sse("interface_progress", {
                         "interface_index": i,
                         "phase": "exec_done",
                         "exec_results": iface.get("exec_results", {}),
-                    })
+                    }))
 
-                yield _sse("stage", {
+                await queue.put(_sse("stage", {
                     "name": "pre_run",
                     "status": "done",
                     "text": "预执行完毕",
-                })
+                }))
 
             # -- Summary --
             summary = cls._build_summary(interfaces)
@@ -292,18 +401,57 @@ class ApiAgentPipeline:
             session.finished_at = datetime.now(timezone.utc)
             await session.save(update_fields=["output_payload", "status", "finished_at"])
 
-            yield _sse("summary", summary)
-            yield _sse("payload_updated", {})
-            yield _sse("done", {})
+            # 持久化关键阶段消息到数据库，供历史记录回放
+            from service.ai_generation.message_service import MessageService
+            from service.core.enums import MessageRole, MessageType
+            stage_logs = []
+            for iface in interfaces:
+                name = iface.get("summary", "")
+                sc = iface.get("structured_count", 0)
+                er = iface.get("exec_results", {})
+                stage_logs.append(f"✅ 「{name}」结构化 {sc} 条")
+                if er:
+                    pr = er.get("pass_rate", 0)
+                    stage_logs.append(f"{'✅' if pr == 1 else '❌'} 「{name}」预执行通过率 {pr:.0%}")
+            summary_text = (
+                f"生成完成：共 {summary['total_interfaces']} 个接口，"
+                f"{summary['total_cases']} 条用例，"
+                f"整体通过率 {summary['overall_pass_rate']:.0%}\n"
+                + "\n".join(stage_logs)
+            )
+            await MessageService.append(
+                session.id,
+                role=MessageRole.assistant,
+                content=summary_text,
+                message_type=MessageType.text,
+            )
+            for log_line in stage_logs:
+                await MessageService.append(
+                    session.id,
+                    role=MessageRole.tool,
+                    content=log_line,
+                    message_type=MessageType.custom,
+                )
+
+            await queue.put(_sse("summary", summary))
+            await queue.put(_sse("payload_updated", {}))
+            await queue.put(_sse("done", {}))
 
         except Exception as e:
             _log.error("Pipeline phase 4-5 failed: %s", e, exc_info=True)
-            session.status = SessionStatus.failed
-            session.error_message = str(e)
-            session.finished_at = datetime.now(timezone.utc)
-            await session.save(update_fields=["status", "error_message", "finished_at"])
-            yield _sse("error", {"message": str(e)})
-            yield _sse("done", {})
+            try:
+                refreshed = await AIGenerationSession.get_or_none(id=session.id)
+                if refreshed:
+                    refreshed.status = SessionStatus.failed
+                    refreshed.error_message = str(e)
+                    refreshed.finished_at = datetime.now(timezone.utc)
+                    await refreshed.save(update_fields=["status", "error_message", "finished_at"])
+            except Exception as save_err:
+                _log.error("Failed to save error status: %s", save_err)
+            await queue.put(_sse("error", {"message": str(e)}))
+            await queue.put(_sse("done", {}))
+        finally:
+            await queue.put(None)  # 哨兵值：通知 stream 结束
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -421,19 +569,40 @@ class ApiAgentPipeline:
 
     @classmethod
     async def _generate_base_cases_for_interface(
-        cls, iface_data: dict, user_prompt: str | None
+        cls, iface_data: dict, user_prompt: str | None, project_id: int
     ) -> list[dict]:
-        """Run base case generation workflow for a single interface."""
+        """Run base case generation workflow for a single interface.
+
+        Uses the same two-layer dependency strategy as the interface detail page:
+        1. Try pre-configured dependencies via DependencyResolverService
+        2. Fall back to all project interface summaries for LLM auto-detection
+        """
         from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
+        from service.api_test.dependency.resolver_service import DependencyResolverService
+        from service.api_test.case.generation_service import ApiCaseGenerationService
 
         api_doc = iface_data.get("api_doc", "")
         if isinstance(api_doc, dict):
             api_doc = json.dumps(api_doc, ensure_ascii=False)
 
+        # Layer 1: Get pre-configured dependencies for this interface
+        precoditions: list[str] = []
+        interface_id = iface_data.get("interface_id")
+        if interface_id:
+            try:
+                resolved = await DependencyResolverService.resolve(interface_id)
+                precoditions = resolved.precoditions_summaries or []
+            except Exception:
+                pass
+
+        # Layer 2: If no pre-configured deps, pass all project interfaces for LLM auto-detection
+        if not precoditions:
+            precoditions = await ApiCaseGenerationService._get_all_project_interface_summaries(project_id)
+
         workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         state = workflow.invoke({
             "api_doc": api_doc,
-            "precoditions": [],
+            "precoditions": precoditions,
             "user_prompt": user_prompt,
         })
         return state.get("api_cases") or []
@@ -478,67 +647,144 @@ class ApiAgentPipeline:
             return []
 
     @classmethod
-    async def _save_cases_to_db(cls, session, iface_data, selected_items, pre_run_results, interface_id):
-        """Save base cases and test cases to DB for one interface."""
-        from service.api_test.case.models import ApiBaseCase, ApiTestCase
+    async def _save_cases_to_db(cls, session, iface_data, selected_items, pre_run_results,
+                                 interface_id, precondition_map=None, environment_id=None):
+        """Save base cases and test cases to DB for one interface. Returns list of created case IDs.
+
+        Iterates over pre_run_results (same as confirm flow) to avoid index misalignment.
+        """
+        from service.api_test.models import ApiBaseCase, ApiTestCase
+        from service.api_test.case.generation_service import ApiCaseGenerationService
+        from service.core.enums import (
+            ApiBaseCaseStatus,
+            ApiCaseKind,
+            ExecStatus,
+            ReviewStatus,
+            SourceType,
+        )
 
         base_cases = iface_data.get("base_cases", [])
-        structured = iface_data.get("structured_cases", [])
+        created_case_ids = []
+        initial_exec_status = ExecStatus.running if environment_id else ExecStatus.pending
 
-        for idx, (orig_idx, base) in enumerate(selected_items):
-            # Create base case
-            bc = await ApiBaseCase.create(
-                interface_id=interface_id,
-                name=base.get("name", ""),
-                steps=base.get("steps", []),
-                dependencies=base.get("dependencies", []),
-                expected=base.get("expected", []),
-                source="ai",
-                ai_session_id=session.id,
-            )
-            # Create test case if structured version exists
-            if idx < len(structured) and structured[idx]:
-                await ApiTestCase.create(
+        # Iterate over pre_run_results (same as confirm flow)
+        for pre_result in pre_run_results:
+            idx = pre_result.index
+            if idx >= len(base_cases):
+                continue
+            base = base_cases[idx]
+
+            case_title = str(
+                pre_result.api_case.get("title") or base.get("name") or "untitled"
+            ) if isinstance(pre_result.api_case, dict) else base.get("name", "untitled")
+
+            # 检查是否已存在同 (interface_id, case_kind, title) 的用例
+            if interface_id:
+                existing_tc = await ApiTestCase.filter(
                     interface_id=interface_id,
-                    base_case_id=bc.id,
-                    title=base.get("name", ""),
-                    case_kind="main",
-                    case_payload=structured[idx],
-                    review_status="pending",
+                    case_kind=ApiCaseKind.main,
+                    title=case_title,
+                ).first()
+                if existing_tc:
+                    # 用例已存在（可能被测试套件引用），跳过创建，复用已有 id
+                    _log.info("[pipeline] 用例已存在，跳过创建: '%s' (id=%s)", case_title, existing_tc.id)
+                    created_case_ids.append(existing_tc.id)
+                    continue
+
+            try:
+                # Create base case
+                bc = await ApiBaseCase.create(
+                    project_id=session.project_id,
+                    interface_id=interface_id,
+                    name=base.get("name", ""),
+                    steps=base.get("steps", []),
+                    dependencies=base.get("dependencies"),
+                    expected=base.get("expected", []),
+                    status=ApiBaseCaseStatus.draft,
+                    source=SourceType.ai,
+                    generation_session_id=session.id,
                     created_by_id=session.created_by_id,
                 )
 
-    @classmethod
-    async def _execute_cases(cls, iface_data, environment_id, project_id) -> dict:
-        """Execute structured cases and return results summary."""
-        structured = iface_data.get("structured_cases", [])
-        if not structured:
-            return {"total": 0, "passed": 0, "failed": 0, "pass_rate": 0}
+                # Build main payload from pre_result.api_case (same as confirm flow)
+                main_payload = dict(pre_result.api_case) if isinstance(pre_result.api_case, dict) else {}
 
-        from service.test_execution.run.runner_gateway import RunnerGateway
+                # Inject precondition IDs into main case payload
+                if precondition_map:
+                    main_payload["preconditions"] = []
+                    dep_names = [
+                        ApiCaseGenerationService._clean_dependency_name(str(d).strip())
+                        for d in (base.get("dependencies") or [])
+                    ]
+                    main_payload["precondition_ids"] = [
+                        precondition_map[n] for n in dep_names if n in precondition_map
+                    ]
+
+                tc = await ApiTestCase.create(
+                    project_id=session.project_id,
+                    interface_id=interface_id,
+                    base_case_id=bc.id,
+                    title=case_title,
+                    case_kind=ApiCaseKind.main,
+                    sort_order=idx,
+                    case_payload=main_payload,
+                    review_status=pre_result.review_status if isinstance(pre_result.review_status, ReviewStatus) else ReviewStatus.init,
+                    exec_status=initial_exec_status,
+                    environment_id=environment_id,
+                    generation_session_id=session.id,
+                    created_by_id=session.created_by_id,
+                    updated_by_id=session.created_by_id,
+                )
+                created_case_ids.append(tc.id)
+            except Exception as e:
+                _log.error("[pipeline] 创建用例失败 '%s': %s", case_title, e)
+                # 单个用例失败不影响后续用例
+
+        return created_case_ids
+
+    @classmethod
+    async def _execute_cases(cls, case_ids: list[int], environment_id: int, user_id: int) -> dict:
+        """Execute structured cases by ID and return results summary."""
+        if not case_ids:
+            return {"total": 0, "passed": 0, "failed": 0, "error": 0, "pass_rate": 0}
+
+        from service.api_test.shared.runner_gateway import RunnerGateway
+        from service.api_test.models import ApiTestCase
+        from service.core.enums import ExecStatus, CaseRunStatus
 
         passed = 0
         failed = 0
-        for case_payload in structured:
+        error = 0
+        for case_id in case_ids:
             try:
-                result = await RunnerGateway.run_case_debug(
-                    case_payload=case_payload,
+                record = await RunnerGateway.run_case_debug(
+                    case_id=case_id,
                     environment_id=environment_id,
-                    project_id=project_id,
+                    triggered_by_id=user_id,
                 )
-                if result and result.get("status") == "pass":
+                if record.status == CaseRunStatus.success:
                     passed += 1
-                else:
+                    await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.success)
+                elif record.status == CaseRunStatus.fail:
                     failed += 1
+                    await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.fail)
+                else:
+                    error += 1
+                    await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.error)
             except Exception:
-                failed += 1
+                error += 1
+                try:
+                    await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.error)
+                except Exception:
+                    pass
 
-        total = passed + failed
+        total = passed + failed + error
         return {
             "total": total,
             "passed": passed,
             "failed": failed,
-            "skipped": len(structured) - total,
+            "error": error,
+            "skipped": len(case_ids) - total,
             "pass_rate": passed / total if total > 0 else 0,
         }
 
@@ -590,11 +836,15 @@ class ApiAgentPipeline:
         total_passed = 0
         total_total = 0
         per_interface = []
+        has_errors = False
 
         for iface in interfaces:
             sc = iface.get("structured_count", len(iface.get("structured_cases", [])))
             total_cases += sc
             er = iface.get("exec_results", {})
+            structure_error = iface.get("structure_error")
+            if structure_error:
+                has_errors = True
             total_passed += er.get("passed", 0)
             total_total += er.get("total", 0)
             per_interface.append({
@@ -604,11 +854,13 @@ class ApiAgentPipeline:
                 "base_case_count": len(iface.get("base_cases", [])),
                 "structured_case_count": sc,
                 "exec_results": er,
+                "structure_error": structure_error,
             })
 
         return {
             "total_interfaces": len(interfaces),
             "total_cases": total_cases,
             "overall_pass_rate": total_passed / total_total if total_total > 0 else 0,
+            "has_errors": has_errors,
             "per_interface": per_interface,
         }

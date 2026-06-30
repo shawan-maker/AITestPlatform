@@ -240,6 +240,28 @@ class AgentStreamService:
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
         _agent_error: list[Exception | None] = [None]
         event_count = 0
+        _main_loop = asyncio.get_event_loop()
+
+        async def _finalize():
+            """线程结束后最终化：保存消息 + 更新 session 状态。"""
+            try:
+                if _agent_error[0] is not None:
+                    await SessionLifecycleService.mark_failed(session, str(_agent_error[0]))
+                    return
+                if assistant_buffer:
+                    await MessageService.append(
+                        session.id,
+                        role=MessageRole.assistant,
+                        content="".join(assistant_buffer),
+                        message_type=MessageType.text,
+                    )
+                refreshed = await AIGenerationSession.get_or_none(id=session.id)
+                if refreshed and refreshed.status != SessionStatus.success and refreshed.output_payload:
+                    refreshed.status = SessionStatus.success
+                    refreshed.finished_at = datetime.now(timezone.utc)
+                    await refreshed.save(update_fields=["status", "finished_at"])
+            except Exception as e:
+                _log.error("[Agent] ❌ _finalize 异常 session=%s: %s", session.id, e, exc_info=True)
 
         def _run_in_thread():
             """后台线程：同步执行 agent.stream()，将每个事件立即写入 Queue"""
@@ -256,14 +278,15 @@ class AgentStreamService:
                     event_count += 1
                     _log.info("[Agent] session=%s 产生事件 #%s: %s", session.id, event_count, str(event)[:100])
                     queue.put_nowait(event)
-                # 发送哨兵值表示结束
                 _log.info("[Agent] session=%s 所有事件已放入队列，共 %s 个事件", session.id, event_count)
-                queue.put_nowait(None)
-                _log.info("[Agent] session=%s agent_stream() 正常结束", session.id)
             except Exception as e:
                 _log.error("[Agent] ❌ session=%s agent_stream() 异常: %s", session.id, e, exc_info=True)
                 _agent_error[0] = e
-                queue.put_nowait(None)  # 确保发送哨兵值
+            finally:
+                queue.put_nowait(None)  # 哨兵值
+                # 最终化在事件循环中执行（不依赖 SSE 生成器是否存活）
+                asyncio.run_coroutine_threadsafe(_finalize(), _main_loop)
+                _log.info("[Agent] session=%s agent_stream() 结束，已调度最终化", session.id)
 
         # 启动后台线程执行 agent
         thread = threading.Thread(target=_run_in_thread, daemon=True)
@@ -272,22 +295,23 @@ class AgentStreamService:
         # 在异步生成器中逐个从队列取事件并转发为 SSE
         _log.info("[SSE] 🔄 开始处理队列 session=%s", session.id)
         queue_item_count = 0
-        
-        while True:
-            try:
-                _log.info("[SSE] ⏳ 等待队列事件 session=%s...", session.id)
-                item = await asyncio.wait_for(queue.get(), timeout=_AGENT_TIMEOUT_SECONDS)
-            except asyncio.TimeoutError:
-                _log.error("[SSE] ❌ 超时 session=%s", session.id)
-                raise TimeoutError(f"Agent 执行超时（{_AGENT_TIMEOUT_SECONDS}秒）")
 
-            queue_item_count += 1
-            _log.info("[SSE] 📦 收到队列事件 #%s session=%s", queue_item_count, session.id)
+        try:
+            while True:
+                try:
+                    _log.info("[SSE] ⏳ 等待队列事件 session=%s...", session.id)
+                    item = await asyncio.wait_for(queue.get(), timeout=_AGENT_TIMEOUT_SECONDS)
+                except asyncio.TimeoutError:
+                    _log.error("[SSE] ❌ 超时 session=%s", session.id)
+                    raise TimeoutError(f"Agent 执行超时（{_AGENT_TIMEOUT_SECONDS}秒）")
 
-            # 哨兵值：agent 执行完毕（正常或异常）
-            if item is None:
-                _log.info("[SSE] ✅ 收到哨兵值，结束队列处理 session=%s, 共处理 %s 个事件", session.id, queue_item_count)
-                break
+                queue_item_count += 1
+                _log.info("[SSE] 📦 收到队列事件 #%s session=%s", queue_item_count, session.id)
+
+                # 哨兵值：agent 执行完毕（正常或异常）
+                if item is None:
+                    _log.info("[SSE] ✅ 收到哨兵值，结束队列处理 session=%s, 共处理 %s 个事件", session.id, queue_item_count)
+                    break
 
             kind = item.get("type")
             content = item.get("content", "")
@@ -350,21 +374,6 @@ class AgentStreamService:
                 yield _sse("tool_call", {"name": tool_name, "content": content})
                 _log.info("[SSE] ✅ tool_call 事件已发送 session=%s", session.id)
 
-        # 如果线程中有异常，重新抛出
-        if _agent_error[0] is not None:
-            raise _agent_error[0]
-
-        # 保存 assistant 最终消息
-        if assistant_buffer:
-            await MessageService.append(
-                session.id,
-                role=MessageRole.assistant,
-                content="".join(assistant_buffer),
-                message_type=MessageType.text,
-            )
-
-        refreshed = await AIGenerationSession.get(id=session.id)
-        if refreshed.status != SessionStatus.success and refreshed.output_payload:
-            refreshed.status = SessionStatus.success
-            refreshed.finished_at = datetime.now(timezone.utc)
-            await refreshed.save(update_fields=["status", "finished_at"])
+        except (GeneratorExit, asyncio.CancelledError):
+            _log.info("[SSE] 客户端断开连接 session=%s，后台线程继续执行并最终更新 DB", session.id)
+            return

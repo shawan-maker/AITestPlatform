@@ -22,7 +22,6 @@
         <div class="api-agent-panel__landing">
           <AgentWelcomeHeader />
           <AgentTypeTabs v-model="sharedActiveTab" />
-          <div class="api-agent-panel__landing-spacer" />
           <AgentComposer
             agent-type="api"
             :streaming="streaming"
@@ -33,9 +32,10 @@
         </div>
       </template>
 
-      <!-- Chat mode: context bar + chat panel + composer (fixed bottom) -->
+      <!-- Chat mode: tabs + context bar + chat panel + composer (fixed bottom) -->
       <template v-else>
         <div class="api-agent-panel__chat-layout">
+          <AgentTypeTabs v-model="sharedActiveTab" :compact="true" />
           <AgentContextBar
             :input-ref-type="sessionDetail?.input_ref_type"
             :interface-method="sessionDetail?.interface_method"
@@ -55,41 +55,17 @@
             @open-case-list="handleOpenCaseList"
           >
             <template #after-messages>
-              <!-- Pipeline interface cards (multi-interface mode) -->
-              <div v-if="pipelineInterfaces.length && !hasAgentResponse" class="pipeline-interfaces">
-                <div
-                  v-for="(iface, idx) in pipelineInterfaces"
-                  :key="idx"
-                  class="pipeline-interface-card"
-                >
-                  <div class="pipeline-interface-card__header">
-                    <el-tag :type="methodTagType(iface.method)" size="small">{{ iface.method }}</el-tag>
-                    <span class="pipeline-interface-card__summary">{{ iface.summary || iface.path }}</span>
-                    <span class="pipeline-interface-card__path">{{ iface.path }}</span>
-                  </div>
-                  <div class="pipeline-interface-card__cases">
-                    <div v-for="(bc, ci) in (iface.base_cases || [])" :key="ci" class="pipeline-base-case">
-                      <el-checkbox
-                        :model-value="(iface.selected_indexes || []).includes(ci)"
-                        @change="(val) => toggleBaseCase(idx, ci, val)"
-                      />
-                      <span class="pipeline-base-case__name">{{ bc.name }}</span>
-                      <span class="pipeline-base-case__count">{{ (bc.steps || []).length }} steps</span>
-                    </div>
-                  </div>
-                  <div class="pipeline-interface-card__footer">
-                    <span>{{ (iface.selected_indexes || []).length }} / {{ (iface.base_cases || []).length }} {{ t('page.agent.selectedCases') }}</span>
-                  </div>
-                </div>
-                <div v-if="!streaming && pipelineInterfaces.length" class="pipeline-actions">
+              <!-- Wrapper to align with chat message body (avatar 32px + gap 10px = 42px) -->
+              <div class="pipeline-after-messages">
+                <!-- Pipeline edit button (shown when base cases are ready, hidden for history) -->
+                <div v-if="pipelineInterfaces.length && !streaming && !pipelineEditDone && !pipelineSummary" class="pipeline-edit-action">
                   <el-button type="primary" @click="openEditDialog">
-                    {{ t('page.agent.editBaseCases') }}
+                    {{ t('page.agent.editBaseCases') || '编辑全部' }}
                   </el-button>
                 </div>
-              </div>
 
-              <!-- Pipeline summary -->
-              <ApiPipelineSummary v-if="pipelineSummary" :summary="pipelineSummary" />
+                <!-- Pipeline final summary -->
+                <ApiPipelineSummary v-if="pipelineSummary" :summary="pipelineSummary" />
 
               <!-- Legacy single-interface payload card -->
               <AgentPayloadCard
@@ -100,6 +76,7 @@
                 :saving="confirming"
                 @confirm="confirmCasesFromCard"
               />
+              </div>
             </template>
           </AgentChatPanel>
 
@@ -149,6 +126,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
+import { CircleCheckFilled } from '@element-plus/icons-vue'
 import {
   confirmApiGeneration,
   createApiSession,
@@ -158,6 +136,7 @@ import {
   listApiSessions,
   streamApiMessage,
   streamSaveBaseCases,
+  summarizeApiTitle,
 } from '@/api/aiGeneration'
 import { getApiCatalogTree } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
@@ -178,9 +157,10 @@ const props = defineProps({
   autoNew: { type: Boolean, default: false },
   initialInterfaceId: { type: Number, default: null },
   isActive: { type: Boolean, default: true },
+  activeTab: { type: String, default: 'api' },
 })
 
-const emit = defineEmits(['composer-mode-change'])
+const emit = defineEmits(['composer-mode-change', 'tab-change'])
 
 const { t } = useI18n()
 const route = useRoute()
@@ -206,6 +186,7 @@ const showConfirm = ref(false)
 const selectedIndexes = ref([])
 const sidebarCollapsed = ref(false)
 const sharedActiveTab = ref('api')
+let _runningPollTimer = null
 
 // Case list dialog state
 const caseListVisible = ref(false)
@@ -213,6 +194,7 @@ const caseListPayload = ref(null)
 
 // Interface case edit dialog state (multi-interface pipeline)
 const showEditDialog = ref(false)
+const pipelineEditDone = ref(false)
 const pipelineInterfaces = computed(() =>
   sessionDetail.value?.output_payload?.interfaces || []
 )
@@ -298,13 +280,13 @@ async function loadMessages() {
       }
       if (msg.message_type === 'custom' || msg.role === 'system') {
         const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour12: false }) : ''
-        _addLogToAgent(currentAgent, 'default', `[${time}] ${msg.content}`)
+        _addLogToAgent(currentAgent, 'history', `[${time}] ${msg.content}`)
       } else if (msg.message_type === 'tool_call' && msg.tool_name) {
-        _addLogToAgent(currentAgent, 'default', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
+        _addLogToAgent(currentAgent, 'history', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
       } else if (msg.role === 'assistant' && msg.content) {
         currentAgent.finalText += (currentAgent.finalText ? '\n' : '') + msg.content
       } else if (msg.content) {
-        _addLogToAgent(currentAgent, 'default', msg.content)
+        _addLogToAgent(currentAgent, 'history', msg.content)
       }
     }
   }
@@ -329,20 +311,76 @@ function setComposerMode(value) {
   emit('composer-mode-change', value)
 }
 
+// Sync tab changes to parent
+watch(sharedActiveTab, (tab) => {
+  emit('tab-change', tab)
+})
+
+// Sync from parent activeTab (keeps both panels' tabs in sync)
+watch(() => props.activeTab, (tab) => {
+  if (tab && tab !== sharedActiveTab.value) sharedActiveTab.value = tab
+})
+
 function startNewSession() {
   if (streaming.value) stopStream()
+  _stopRunningPoll()
   activeSessionId.value = null
   sessionDetail.value = null
   messages.value = []
+  pipelineEditDone.value = false
   setComposerMode(true)
   loadSessions()
 }
 
 async function selectSession(id) {
   if (streaming.value) stopStream()
+  _stopRunningPoll()
   activeSessionId.value = id
   setComposerMode(false)
   await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+
+  const detail = sessionDetail.value
+  // 隐藏"编辑基础用例"按钮：如果 session 已完成（有 summary）或正在运行中
+  if (detail?.output_payload?.summary || detail?.status === 'running') {
+    pipelineEditDone.value = true
+  } else {
+    pipelineEditDone.value = false
+  }
+
+  // 如果 session 正在后台执行，追加运行中提示并启动轮询
+  if (detail?.status === 'running') {
+    messages.value = [...messages.value, {
+      id: `running-hint-${Date.now()}`,
+      role: 'agent',
+      isStreaming: true,
+      stages: [{ name: 'running', status: 'running', text: '正在生成结构化用例和预执行...', logs: [] }],
+      finalText: '',
+      payload: null,
+      streamingText: '',
+    }]
+    _startRunningPoll()
+  }
+}
+
+function _stopRunningPoll() {
+  if (_runningPollTimer) { clearInterval(_runningPollTimer); _runningPollTimer = null }
+}
+
+function _startRunningPoll() {
+  _stopRunningPoll()
+  _runningPollTimer = setInterval(async () => {
+    try {
+      const res = await getApiSession(activeSessionId.value)
+      const detail = res.data.data
+      if (detail && detail.status !== 'running') {
+        _stopRunningPoll()
+        sessionDetail.value = detail
+        await Promise.all([loadMessages(), loadSessions()])
+      }
+    } catch (e) {
+      console.error('[poll] session poll failed:', e)
+    }
+  }, 3000)
 }
 
 async function createSessionFromComposer(payload) {
@@ -392,6 +430,8 @@ function stopStream() {
 function detectStageFromText(text) {
   const str = String(text)
   if (str.includes('检索') || str.includes('搜索') || str.includes('\u{1F50D}') || str.includes('search')) return 'search_api_document'
+  if (str.includes('结构化') || str.includes('structure')) return 'structure_cases'
+  if (str.includes('预执行') || str.includes('pre_run') || str.includes('pre-run')) return 'pre_run'
   if (str.includes('用例') || str.includes('生成') || str.includes('generate')) return 'generate_base_cases'
   return 'default'
 }
@@ -497,9 +537,17 @@ async function sendMessage(content) {
           }
         },
         payload_updated: async () => {
-          _addLog('default', '结果已保存到会话')
           await refreshSession()
           agentResponse.payload = sessionDetail.value?.output_payload || null
+          // Add interface summary to edit_base_cases stage
+          const ifaces = agentResponse.payload?.interfaces || []
+          if (ifaces.length) {
+            _addLog('edit_base_cases', `已为 ${ifaces.length} 个接口生成基础用例：`)
+            for (const iface of ifaces) {
+              const skipped = iface.skipped ? '（已存在，跳过创建）' : ''
+              _addLog('edit_base_cases', `  ${iface.method} ${iface.summary || iface.path} — ${(iface.base_cases || []).length} 条基础用例${skipped}`)
+            }
+          }
           if (payloadUpdatedResolve) payloadUpdatedResolve()
         },
         summary: (data) => {
@@ -507,7 +555,10 @@ async function sendMessage(content) {
           if (agentResponse.payload) {
             agentResponse.payload.summary = data
           }
-          _addLog('default', `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
+          // Add summary to last existing stage instead of creating a new one
+          const lastStage = agentResponse.stages.length ? agentResponse.stages[agentResponse.stages.length - 1] : null
+          const stageName = lastStage ? lastStage.name : 'default'
+          _addLog(stageName, `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
         },
         error: (data) => {
           const errorMsg = data?.message || t('common.requestFailed')
@@ -519,13 +570,21 @@ async function sendMessage(content) {
           // Wait for payload_updated to complete first
           await payloadUpdatedPromise
           agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
-          agentResponse.isStreaming = false
-          _addLog('default', '执行完成')
-          await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+          // For pipeline sessions, don't mark as "已完成" — task continues after user edits
+          const mode = sessionDetail.value?.output_payload?.mode
+          const isPipeline = mode === 'from_interfaces' || mode === 'from_doc'
+          if (!isPipeline) {
+            agentResponse.isStreaming = false
+          }
+          // Don't call loadMessages() — it replaces client-side stage blocks
+          await Promise.all([refreshSession(), loadSessions()])
           if (!agentResponse.payload) {
             agentResponse.payload = sessionDetail.value?.output_payload || null
           }
           streamingText.value = ''
+          // AI-generate session title
+          try { await summarizeApiTitle(activeSessionId.value) } catch {}
+          await loadSessions()
         },
       },
       abortController.signal,
@@ -552,12 +611,29 @@ async function sendMessage(content) {
   }
 }
 
+/* 构建富文本消息：上下文 + 用户输入 */
+function buildRichContent(payload) {
+  const lines = []
+  if (payload.projectName) lines.push(`📋 项目: ${payload.projectName}`)
+  if (payload.mode === 'from_interfaces' && payload.interfaceNames?.length) {
+    lines.push(`🔗 接口: ${payload.interfaceNames.join(', ')}`)
+  } else if (payload.mode === 'from_doc') {
+    lines.push('📄 模式: 从接口文档生成')
+  }
+  if (payload.environmentName) lines.push(`🌐 环境: ${payload.environmentName}`)
+  const text = payload.content || ''
+  if (lines.length) {
+    return `[context]\n${lines.join('\n')}\n[/context]\n${text}`
+  }
+  return text
+}
+
 async function handleComposerSend(payload) {
   if (streaming.value || creating.value) return
   // Multi-interface mode: allow sending with just a project (no interface/doc required)
   const session = await createSessionFromComposer(payload)
   if (!session) return
-  await sendMessage(payload.content || '')
+  await sendMessage(buildRichContent(payload))
 }
 
 /* SIT-F7: Composer in chat mode sends directly */
@@ -573,7 +649,7 @@ async function sendMessageForComposer(payload) {
       return
     }
   }
-  const content = payload.content || ''
+  const content = buildRichContent(payload)
   if (content) {
     await sendMessage(content)
   }
@@ -615,6 +691,7 @@ function openEditDialog() {
 async function onSaveEditedBaseCases(editedInterfaces) {
   if (!activeSessionId.value) return
   confirming.value = true
+  pipelineEditDone.value = true
   try {
     // Get environment ID from session payload
     const envId = sessionDetail.value?.output_payload?.environment_id || null
@@ -623,17 +700,23 @@ async function onSaveEditedBaseCases(editedInterfaces) {
     abortController = new AbortController()
     streaming.value = true
 
-    // Create a new agent response for the structuring phase
-    const agentResponse = reactive({
-      id: `agent-structure-${Date.now()}`,
-      role: 'agent',
-      isStreaming: true,
-      stages: [],
-      finalText: '',
-      payload: null,
-      streamingText: '',
-    })
-    messages.value = [...messages.value, agentResponse]
+    // Reuse the existing agent response from Phase 1-3 instead of creating a new one
+    let agentResponse = messages.value.filter(m => m.role === 'agent').pop()
+    if (!agentResponse) {
+      agentResponse = reactive({
+        id: `agent-structure-${Date.now()}`,
+        role: 'agent',
+        isStreaming: true,
+        stages: [],
+        finalText: '',
+        payload: null,
+        streamingText: '',
+      })
+      messages.value = [...messages.value, agentResponse]
+    } else {
+      // Mark the existing response as streaming again for Phase 4-5
+      agentResponse.isStreaming = true
+    }
 
     const getStage = (name) => {
       let stage = agentResponse.stages.find(s => s.name === name)
@@ -681,7 +764,9 @@ async function onSaveEditedBaseCases(editedInterfaces) {
           if (payloadUpdatedResolve) payloadUpdatedResolve()
         },
         summary: (data) => {
-          _addLog('default', `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
+          const lastStage = agentResponse.stages.length ? agentResponse.stages[agentResponse.stages.length - 1] : null
+          const stageName = lastStage ? lastStage.name : 'default'
+          _addLog(stageName, `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
         },
         error: (data) => {
           ElMessage.error(data?.message || t('common.requestFailed'))
@@ -692,10 +777,14 @@ async function onSaveEditedBaseCases(editedInterfaces) {
           await payloadUpdatedPromise
           agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
           agentResponse.isStreaming = false
-          await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+          // Don't call loadMessages() here — it replaces client-side stage blocks
+          // with backend messages that don't contain stage data, causing stages to disappear.
+          await Promise.all([refreshSession(), loadSessions()])
           if (!agentResponse.payload) {
             agentResponse.payload = sessionDetail.value?.output_payload || null
           }
+          try { await summarizeApiTitle(activeSessionId.value) } catch {}
+          await loadSessions()
         },
       },
       abortController.signal,
@@ -824,6 +913,7 @@ onMounted(async () => {
     justify-content: center;
     padding: 24px;
     overflow-y: auto;
+    min-height: 100vh;
   }
 }
 
@@ -834,8 +924,8 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  max-width: 800px;
-  gap: 20px;
+  max-width: 1600px;
+  gap: 40px;
   min-height: 0;
 }
 
@@ -845,82 +935,22 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   width: 100%;
-  max-width: 1200px;
+  max-width: 2400px;
   margin: 0 auto;
   padding: 0 16px;
 }
 
-.api-agent-panel__landing-spacer {
-  flex: 1;
-  min-height: 40px;
+/* Pipeline after-messages wrapper (align with chat message body) */
+.pipeline-after-messages {
+  margin-left: 42px; /* avatar 32px + gap 10px */
+  margin-top: 12px;
 }
 
-/* Pipeline interface cards */
-.pipeline-interfaces {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.pipeline-interface-card {
-  padding: 12px 16px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-}
-
-.pipeline-interface-card__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.pipeline-interface-card__summary {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.pipeline-interface-card__path {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.pipeline-interface-card__cases {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.pipeline-base-case {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.pipeline-base-case__name {
-  flex: 1;
-  font-size: 13px;
-}
-
-.pipeline-base-case__count {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.pipeline-interface-card__footer {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  text-align: right;
-}
-
-.pipeline-actions {
-  display: flex;
-  justify-content: center;
-  padding: 8px 0;
+/* Pipeline edit action */
+.pipeline-edit-action {
+  padding: 12px 0;
+  text-align: center;
 }
 </style>

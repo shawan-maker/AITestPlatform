@@ -147,6 +147,14 @@ class ApiBaseCaseGeneratorWorkflow:
     # 1.5 路由分发的节点
     def route_dispatch(self, state: StateNode):
         """路由分发的节点"""
+        # 当用户有附加要求时，跳过覆盖率校验循环，直接输出首次生成结果
+        # 避免覆盖率校验把用户不需要的用例类型（如反向/异常）补回来
+        user_prompt = state.get("user_prompt")
+        if user_prompt and user_prompt.strip():
+            writer = get_stream_writer()
+            writer("用户有附加要求，跳过覆盖率校验，直接输出生成结果")
+            return "output_basecase"
+
         report = state.get("api_cases_check_report") or []
         count = state.get("basecase_regenerate_count", 0)
         if "已经覆盖全部测试点" in "\n".join(report):

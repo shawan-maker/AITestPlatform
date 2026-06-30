@@ -11,10 +11,13 @@ from service.knowledge.document.storage import KnowledgeStorage
 
 
 def format_user_prompt_section(user_prompt: str | None) -> str:
-    """Return markdown section for user prompt, or empty string when absent."""
+    """Return formatted user prompt text for injection into LLM prompt.
+    When empty, returns a clear "no additional requirements" indicator.
+    When present, returns the user's raw text (template already has the section header).
+    """
     if not user_prompt or not user_prompt.strip():
-        return ""
-    return f"\n## 用户附加要求\n{user_prompt.strip()}\n"
+        return "（无附加要求，按默认规则生成）"
+    return user_prompt.strip()
 
 
 def build_default_additional_info() -> dict[str, str]:

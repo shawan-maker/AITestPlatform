@@ -1,6 +1,27 @@
 from typing import Any
 
 
+import re
+
+
+def _normalize_template_vars(text):
+    """Normalize template variables: {var} -> ${var} (engine only recognizes ${var})."""
+    if not isinstance(text, str):
+        return text
+    return re.sub(r'(?<!\$)\{(\w+)\}', r'${\1}', text)
+
+
+def _normalize_in_structure(obj):
+    """Recursively normalize template variables in dicts/lists."""
+    if isinstance(obj, str):
+        return _normalize_template_vars(obj)
+    elif isinstance(obj, dict):
+        return {k: _normalize_in_structure(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_normalize_in_structure(item) for item in obj]
+    return obj
+
+
 def build_debug_payload_from_interface(iface) -> dict[str, Any]:
     params = iface.parameters or {}
     headers = {p.get("name", ""): p.get("example") for p in params.get("header", []) if p.get("name")}
@@ -54,16 +75,17 @@ def _convert_precondition(step: dict) -> dict:
     - AI format: body in step.request.data/json, path in step.interface.url
     - Frontend format: body in step.body, path in step.path
     """
-    # Path / method: prefer interface sub-object (AI), fallback to top-level (frontend)
     iface = step.get("interface") or {}
     path = iface.get("url") or iface.get("path") or step.get("path", "")
     method = iface.get("method") or step.get("method") or "GET"
     headers = step.get("headers") or {}
 
+    path = _normalize_template_vars(path)
+
     # Body: prefer request sub-object (AI), fallback to top-level body (frontend)
     req = step.get("request") or {}
-    body = req.get("data") or req.get("json") or step.get("body") or {}
-    query = req.get("params") or step.get("query") or step.get("params") or {}
+    body = _normalize_in_structure(req.get("data") or req.get("json") or step.get("body") or {})
+    query = _normalize_in_structure(req.get("params") or step.get("query") or step.get("params") or {})
 
     content_type = headers.get("Content-Type", "")
     request_block: dict[str, Any] = {"params": query}
@@ -77,7 +99,7 @@ def _convert_precondition(step: dict) -> dict:
         "interface": {"url": path, "method": method.lower()},
         "headers": headers,
         "request": request_block,
-        "setup_script": step.get("setup_script") or _extract_script(step.get("setup_scripts")),
+        "setup_script": _normalize_template_vars(step.get("setup_script") or _extract_script(step.get("setup_scripts"))),
         "teardown_script": step.get("teardown_script") or _extract_script(step.get("teardown_scripts")),
     }
 

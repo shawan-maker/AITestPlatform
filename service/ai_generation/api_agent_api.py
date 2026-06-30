@@ -144,6 +144,16 @@ async def api_delete_session(
     return success(data=data, message="会话已删除")
 
 
+@router.post("/sessions/{session_id}/summarize-title", summary="AI 生成会话标题")
+async def api_summarize_title(
+    session_id: int,
+    user: User = Depends(get_current_active_user),
+):
+    from service.ai_generation.session_lifecycle import SessionLifecycleService
+    data = await SessionLifecycleService.summarize_and_update_title(user, session_id=session_id)
+    return success(data=data, message="标题已更新")
+
+
 # ---------- Multi-interface pipeline endpoints ----------
 
 @router.post(

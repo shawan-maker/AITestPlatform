@@ -113,6 +113,10 @@ export function deleteApiSession(sessionId) {
   return request.delete(`/ai-generation/api/sessions/${sessionId}`)
 }
 
+export function summarizeApiTitle(sessionId) {
+  return request.post(`/ai-generation/api/sessions/${sessionId}/summarize-title`)
+}
+
 /** @deprecated Phase 1 */
 export function generateApiFromInterface(data) {
   return request.post('/ai-generation/api/generate-from-interface', data)

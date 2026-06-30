@@ -115,6 +115,40 @@ class ApiCaseGenerationService:
                 summaries.append(name)
         return summaries
 
+    @staticmethod
+    async def enrich_preconditions_api_doc(
+        project_id: int,
+        selected_items: list[tuple[int, dict]],
+        existing_docs: list[dict] | None = None,
+    ) -> list[dict]:
+        """按 base_case 的 dependencies 名称从 DB 补充前置依赖接口文档。
+
+        复用自 _run_confirm_background 的逻辑，供 pipeline 等外部调用。
+        如果 existing_docs 非空则直接返回，不做补充。
+        """
+        docs = list(existing_docs or [])
+        if docs:
+            return docs
+        all_dep_names: list[str] = []
+        seen: set[str] = set()
+        for _, base in selected_items:
+            for name in (base.get("dependencies") or []):
+                name = ApiCaseGenerationService._clean_dependency_name(str(name).strip())
+                if name and name not in seen:
+                    all_dep_names.append(name)
+                    seen.add(name)
+        if not all_dep_names:
+            return docs
+        from service.api_test.interface.models import ApiInterface
+        from service.api_test.shared.interface_doc import interface_to_doc_dict
+        found = await ApiInterface.filter(
+            project_id=project_id, summary__in=all_dep_names, is_current=True,
+        )
+        for iface in found:
+            docs.append(interface_to_doc_dict(iface))
+        logger.info("[enrich_preconditions] 从 DB 补充 %d 个前置接口文档", len(docs))
+        return docs
+
     @classmethod
     async def preview(
         cls,
@@ -541,7 +575,7 @@ class ApiCaseGenerationService:
                     if title and title not in ai_precondition_map:
                         ai_precondition_map[title] = pre
 
-            # ★ 变量对齐：修正分布式 LLM 生成导致的变量名不一致
+            # ★ 变量对齐：两阶段（单用例内部 + 跨用例），覆盖 URL/request/headers
             cls._align_variable_names(ai_precondition_map, pre_run_results)
 
             # 创建前置操作用例
@@ -716,8 +750,10 @@ class ApiCaseGenerationService:
         """从依赖接口文档构建 precondition 用例的基础 payload。
         根据 requestBody.content_type 正确选择 request.data / request.json。
         """
+        from service.api_test.shared.payload_builder import _normalize_template_vars, _normalize_in_structure
+
         method = (dep_doc.get("method") or "GET").upper()
-        path = dep_doc.get("path") or ""
+        path = _normalize_template_vars(dep_doc.get("path") or "")
         parameters = dep_doc.get("parameters") or {}
         request_body = dep_doc.get("requestBody")
 
@@ -748,7 +784,7 @@ class ApiCaseGenerationService:
                 if isinstance(p, dict) and p.get("in") == "query":
                     query_params[p.get("name", "")] = p.get("example") or ""
         if query_params:
-            payload["request"]["params"] = query_params
+            payload["request"]["params"] = _normalize_in_structure(query_params)
 
         # ---- 处理请求体：根据 content_type 选择 data / json ----
         content_type = ""
@@ -781,16 +817,17 @@ class ApiCaseGenerationService:
                     if not content_type:
                         content_type = "application/x-www-form-urlencoded"
 
-        # 根据 content_type 放入正确的 request key
+        # 根据 content_type 放入正确的 request key（归一化 {var} → ${var}）
         if body_fields:
+            normalized_body = _normalize_in_structure(body_fields)
             if "form-urlencoded" in content_type or "multipart" in content_type:
                 payload["headers"]["Content-Type"] = content_type or "application/x-www-form-urlencoded"
-                payload["request"]["data"] = body_fields
+                payload["request"]["data"] = normalized_body
             else:
                 # 默认 JSON
                 ct = content_type if "json" in content_type else "application/json"
                 payload["headers"]["Content-Type"] = ct
-                payload["request"]["json"] = body_fields
+                payload["request"]["json"] = normalized_body
 
         return payload
 
@@ -873,9 +910,50 @@ class ApiCaseGenerationService:
             # 优先用 AI 生成的前置步骤数据（含变量引用、提取、断言）
             ai_step = (ai_precondition_map or {}).get(dep_name)
             if ai_step:
-                from service.api_test.shared.payload_builder import _convert_precondition
+                from service.api_test.shared.payload_builder import _convert_precondition, _normalize_template_vars
                 case_payload = _convert_precondition(ai_step)
                 case_payload["title"] = dep_name
+                # Override URL/method with actual interface data from DB (AI may guess wrong)
+                # Normalize {var} → ${var} so the engine can replace them at runtime
+                if dep_doc and dep_doc.get("path"):
+                    case_payload["path"] = _normalize_template_vars(dep_doc["path"])
+                    case_payload["method"] = (dep_doc.get("method") or "GET").upper()
+                # Fix Content-Type header and body placement from actual interface params
+                if dep_doc:
+                    actual_ct = ""
+                    for param in (dep_doc.get("parameters") or []):
+                        if isinstance(param, dict) and param.get("in") == "header" and \
+                           (param.get("name") or "").lower() == "content-type":
+                            actual_ct = param.get("default") or param.get("example") or ""
+                            break
+                    if not actual_ct and dep_doc.get("requestBody"):
+                        rb = dep_doc["requestBody"]
+                        if isinstance(rb, dict):
+                            content = rb.get("content") or {}
+                            if "application/json" in content:
+                                actual_ct = "application/json"
+                            elif "application/x-www-form-urlencoded" in content:
+                                actual_ct = "application/x-www-form-urlencoded"
+                            elif "multipart/form-data" in content:
+                                actual_ct = "multipart/form-data"
+                    if actual_ct:
+                        headers = case_payload.get("headers") or {}
+                        headers["Content-Type"] = actual_ct
+                        case_payload["headers"] = headers
+                        # Fix body placement based on actual Content-Type
+                        request = case_payload.get("request") or {}
+                        if "application/json" in actual_ct:
+                            if "data" in request and "json" not in request:
+                                request["json"] = request.pop("data")
+                        else:
+                            if "json" in request and "data" not in request:
+                                request["data"] = request.pop("json")
+                        case_payload["request"] = request
+                # Update interface sub-object to match corrected path/method
+                iface_sub = case_payload.get("interface") or {}
+                iface_sub["url"] = case_payload.get("path", "")
+                iface_sub["method"] = (case_payload.get("method") or "GET").lower()
+                case_payload["interface"] = iface_sub
                 logger.info(
                     "[precondition] 使用 AI 数据构建: %s, assertions=%d, extract=%d",
                     dep_name,
@@ -1128,28 +1206,142 @@ class ApiCaseGenerationService:
         ai_precondition_map: dict[str, dict],
         pre_run_results: list,
     ) -> None:
-        """后处理：对齐主用例中的变量引用与前置依赖中保存的变量名。
+        """后处理：对齐变量引用（两阶段）。
 
-        分布式 LLM 生成时，不同批次可能对同一变量使用不同命名（如 reg_phone vs reg_mobile）。
-        匹配策略：利用 API 参数名作为上下文 —— 如果两个变量都被用在同一个 API 参数上
-        （如 phone 参数），则它们一定是同一变量，无需同义词枚举。
+        Phase 1 - 单用例内部对齐：
+            每个前置用例的 setup_script 保存的变量名 vs 同用例 URL/request 引用的变量名。
+            解决：setup_script 保存 r_num 但 URL 引用 ${r} 的问题。
+
+        Phase 2 - 跨用例对齐：
+            前置用例保存的变量名 vs 主用例中引用的变量名。
+            利用 API 参数名作为上下文信号（同参数名 = 同变量）。
         """
-        if not ai_precondition_map:
+        if not ai_precondition_map and not pre_run_results:
             return
 
         var_pattern = re.compile(r'\$\{([^}]+)\}')
+        save_pattern = re.compile(r'save_env_variable\s*\(\s*["\']([^"\']+)["\']')
+        total_replacements = 0
 
-        # ── 1. 从前置依赖中提取：变量名 → 使用该变量的 API 参数名集合 ──
-        #    例如 reg_phone → {"phone"}  (因为 request.data.phone = ${reg_phone})
+        # ── 通用工具函数 ──
+        def _get_saved_vars(script: str) -> list[str]:
+            return save_pattern.findall(script or "")
+
+        def _get_all_refs(obj) -> set:
+            """递归收集所有 ${var} 引用"""
+            refs = set()
+            if isinstance(obj, str):
+                refs.update(var_pattern.findall(obj))
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    refs.update(_get_all_refs(v))
+            elif isinstance(obj, list):
+                for item in obj:
+                    refs.update(_get_all_refs(item))
+            return refs
+
+        def _replace_refs_in(obj, replacements: dict):
+            """递归替换 ${old} → ${new}"""
+            if isinstance(obj, str):
+                for old, new in replacements.items():
+                    obj = obj.replace(f"${{{old}}}", f"${{{new}}}")
+                return obj
+            elif isinstance(obj, dict):
+                return {k: _replace_refs_in(v, replacements) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [_replace_refs_in(item, replacements) for item in obj]
+            return obj
+
+        def _apply_replacements(case: dict, replacements: dict):
+            """对单个用例的 URL、request、headers、scripts 执行替换"""
+            nonlocal total_replacements
+            if not replacements:
+                return
+            count_before = total_replacements
+            # URL
+            iface = case.get("interface") or {}
+            if iface.get("url"):
+                new_url = _replace_refs_in(iface["url"], replacements)
+                if new_url != iface["url"]:
+                    iface["url"] = new_url
+                    total_replacements += 1
+            if case.get("path"):
+                new_path = _replace_refs_in(case["path"], replacements)
+                if new_path != case["path"]:
+                    case["path"] = new_path
+            # Request
+            req = case.get("request")
+            if req and isinstance(req, dict):
+                new_req = _replace_refs_in(req, replacements)
+                if new_req != req:
+                    case["request"] = new_req
+                    total_replacements += 1
+            # Headers
+            headers = case.get("headers")
+            if headers and isinstance(headers, dict):
+                new_h = _replace_refs_in(headers, replacements)
+                if new_h != headers:
+                    case["headers"] = new_h
+                    total_replacements += 1
+            # Scripts
+            for sf in ('setup_script', 'teardown_script'):
+                script = case.get(sf) or ""
+                new_script = _replace_refs_in(script, replacements)
+                if new_script != script:
+                    case[sf] = new_script
+                    total_replacements += 1
+            added = total_replacements - count_before
+            if added:
+                logger.info("[变量对齐] '%s' 替换 %d 处: %s",
+                            case.get("title", "?"), added, replacements)
+
+        # ═══════════════════════════════════════════════════
+        # Phase 1: 单用例内部对齐（前置用例自身）
+        # ═══════════════════════════════════════════════════
+        for title, pre in (ai_precondition_map or {}).items():
+            if not isinstance(pre, dict):
+                continue
+            saved_vars = _get_saved_vars(pre.get("setup_script") or "")
+            if not saved_vars:
+                continue
+            saved_set = set(saved_vars)
+
+            # 收集此用例 URL + request + headers 中的所有引用
+            refs = set()
+            iface = pre.get("interface") or {}
+            refs.update(_get_all_refs(iface.get("url", "")))
+            refs.update(_get_all_refs(pre.get("path", "")))
+            refs.update(_get_all_refs(pre.get("request") or {}))
+            refs.update(_get_all_refs(pre.get("headers") or {}))
+
+            replacements = {}
+            for ref in refs:
+                if ref in saved_set:
+                    continue
+                # 前缀匹配：saved_var 以 ref 开头（如 r → r_num）
+                candidates = [sv for sv in saved_vars if sv.startswith(ref) and sv != ref]
+                if len(candidates) == 1:
+                    replacements[ref] = candidates[0]
+                # 反向匹配：ref 以 saved_var 开头（如 r_num → r）
+                elif not candidates:
+                    for sv in saved_vars:
+                        if ref.startswith(sv) and len(ref) > len(sv):
+                            replacements[ref] = sv
+                            break
+
+            _apply_replacements(pre, replacements)
+
+        # ═══════════════════════════════════════════════════
+        # Phase 2: 跨用例对齐（前置 → 主用例）
+        # ═══════════════════════════════════════════════════
+        # 构建前置变量上下文：变量名 → API 参数名集合
         saved_var_contexts: dict[str, set[str]] = {}
-        for title, pre in ai_precondition_map.items():
-            # 提取 setup_script 中保存的变量
-            script = pre.get("setup_script") or ""
-            saved_in_this = set()
-            for m in re.finditer(r'test\.save_env_variable\s*\(\s*["\']([^"\']+)["\']', script):
-                saved_in_this.add(m.group(1))
+        for title, pre in (ai_precondition_map or {}).items():
+            if not isinstance(pre, dict):
+                continue
+            saved_in_this = set(_get_saved_vars(pre.get("setup_script") or ""))
 
-            # 提取 request 中引用这些变量的参数名
+            # request body 中的引用 → 参数名上下文
             request = pre.get("request") or {}
             for section in ("data", "params", "json"):
                 body = request.get(section)
@@ -1162,7 +1354,7 @@ class ApiCaseGenerationService:
                         if ref in saved_in_this:
                             saved_var_contexts.setdefault(ref, set()).add(param_name.lower())
 
-            # headers 中的引用也记录
+            # headers 中的引用
             headers = pre.get("headers") or {}
             if isinstance(headers, dict):
                 for header_name, header_value in headers.items():
@@ -1174,34 +1366,25 @@ class ApiCaseGenerationService:
                                 )
 
         if not saved_var_contexts:
-            logger.info("[变量对齐] 前置依赖中未找到带上下文的变量，跳过")
+            logger.info("[变量对齐] 前置依赖中未找到带上下文的变量，跳过跨用例对齐")
+            if total_replacements > 0:
+                logger.info("[变量对齐] Phase 1 共替换 %d 处（单用例内部）", total_replacements)
             return
 
-        logger.info(
-            "[变量对齐] 前置依赖变量上下文: %s",
-            {k: list(v) for k, v in saved_var_contexts.items()},
-        )
-
-        # ── 2. 遍历每个主用例，对未匹配的引用按参数上下文查找对应的已保存变量 ──
-        total_replacements = 0
+        logger.info("[变量对齐] 前置变量上下文: %s",
+                     {k: list(v) for k, v in saved_var_contexts.items()})
 
         for result in pre_run_results:
             case = result.api_case if hasattr(result, 'api_case') else None
             if not isinstance(case, dict):
                 continue
 
-            # 收集此用例本地的变量（自身 setup_script 保存的）
             local_vars: set[str] = set()
             for sf in ('setup_script', 'teardown_script'):
-                for m in re.finditer(
-                    r'test\.save_env_variable\s*\(\s*["\']([^"\']+)["\']',
-                    case.get(sf) or "",
-                ):
-                    local_vars.add(m.group(1))
-
+                local_vars.update(save_pattern.findall(case.get(sf) or ""))
             all_known = set(saved_var_contexts.keys()) | local_vars
 
-            # 扫描 request 中的参数引用
+            # request body 参数上下文匹配
             request = case.get("request") or {}
             for section in ("data", "params", "json"):
                 body = request.get(section)
@@ -1210,71 +1393,68 @@ class ApiCaseGenerationService:
                 for param_name, param_value in body.items():
                     if not isinstance(param_value, str):
                         continue
-                    refs = var_pattern.findall(param_value)
-                    for ref in refs:
+                    for ref in var_pattern.findall(param_value):
                         if ref in all_known:
                             continue
-                        # 用参数名作为上下文去匹配（仅精确匹配，避免 phone_code 误匹配到 phone）
                         ctx = param_name.lower()
-                        best_match = None
                         for saved_var, saved_ctxs in saved_var_contexts.items():
                             if ctx in saved_ctxs:
-                                best_match = saved_var
+                                body[param_name] = param_value.replace(
+                                    f"${{{ref}}}", f"${{{saved_var}}}")
+                                total_replacements += 1
+                                logger.info("[变量对齐] 跨用例 '%s' 参数 %s: ${%s} → ${%s}",
+                                            case.get("title", "?"), param_name, ref, saved_var)
                                 break
-                        if best_match and best_match != ref:
-                            old = "${" + ref + "}"
-                            new = "${" + best_match + "}"
-                            body[param_name] = param_value.replace(old, new)
-                            total_replacements += 1
-                            logger.info(
-                                "[变量对齐] 用例 '%s' 参数 %s: %s → %s",
-                                case.get("title", "?"), param_name, old, new,
-                            )
 
-            # 扫描 headers
+            # headers 上下文匹配
             headers = case.get("headers") or {}
             if isinstance(headers, dict):
                 for header_name, header_value in list(headers.items()):
                     if not isinstance(header_value, str):
                         continue
-                    refs = var_pattern.findall(header_value)
-                    for ref in refs:
+                    for ref in var_pattern.findall(header_value):
                         if ref in all_known:
                             continue
                         ctx = f"header:{header_name.lower()}"
                         for saved_var, saved_ctxs in saved_var_contexts.items():
                             if ctx in saved_ctxs:
-                                old = "${" + ref + "}"
-                                new = "${" + saved_var + "}"
-                                headers[header_name] = header_value.replace(old, new)
+                                headers[header_name] = header_value.replace(
+                                    f"${{{ref}}}", f"${{{saved_var}}}")
                                 total_replacements += 1
-                                logger.info(
-                                    "[变量对齐] 用例 '%s' header %s: %s → %s",
-                                    case.get("title", "?"), header_name, old, new,
-                                )
                                 break
 
-            # 扫描 setup_script / teardown_script 中的引用（无参数上下文，仅做精确匹配补充）
+            # URL 路径变量（无参数上下文，仅精确匹配已知变量）
+            iface = case.get("interface") or {}
+            if iface.get("url"):
+                for ref in var_pattern.findall(iface["url"]):
+                    if ref in all_known:
+                        continue
+                    # 对 URL 变量尝试参数上下文回退
+                    ref_parts = set(re.split(r'[_\-]', ref.lower()))
+                    for saved_var in saved_var_contexts:
+                        known_parts = set(re.split(r'[_\-]', saved_var.lower()))
+                        common = ref_parts & known_parts
+                        meaningful = {p for p in common if len(p) >= 3}
+                        if meaningful and len(meaningful) >= len(ref_parts) * 0.5:
+                            iface["url"] = iface["url"].replace(
+                                f"${{{ref}}}", f"${{{saved_var}}}")
+                            total_replacements += 1
+                            break
+
+            # scripts 补充匹配
             for sf in ('setup_script', 'teardown_script'):
                 script = case.get(sf) or ""
                 for ref in var_pattern.findall(script):
                     if ref in all_known:
                         continue
-                    # 无上下文时，尝试基于变量名部分匹配（回退到简单拆分）
                     ref_parts = set(re.split(r'[_\-]', ref.lower()))
-                    for saved_var, saved_ctxs in saved_var_contexts.items():
+                    for saved_var in saved_var_contexts:
                         known_parts = set(re.split(r'[_\-]', saved_var.lower()))
                         common = ref_parts & known_parts
                         meaningful = {p for p in common if len(p) >= 3}
                         if meaningful and len(meaningful) >= len(ref_parts) * 0.5:
-                            old = "${" + ref + "}"
-                            new = "${" + saved_var + "}"
-                            script = script.replace(old, new)
+                            script = script.replace(f"${{{ref}}}", f"${{{saved_var}}}")
                             total_replacements += 1
-                            logger.info(
-                                "[变量对齐] 用例 '%s' %s: %s → %s",
-                                case.get("title", "?"), sf, old, new,
-                            )
                             break
                 case[sf] = script
 
