@@ -15,6 +15,7 @@ class BodyField(BaseModel):
     type: str = Field(..., description="字段类型")
     description: str = Field(..., description="字段说明")
     required: bool = Field(default=False, description="是否必填")
+    example: Optional[Any] = Field(default=None, description="示例值，文档中有则提取，无则为null")
     nested_fields: Optional[List[Dict[str, Any]]] = Field(
         default=None,
         description="嵌套字段，仅当type为object时存在",
@@ -32,6 +33,7 @@ class Parameter(BaseModel):
     type: str = Field(..., description="参数类型")
     description: str = Field(..., description="参数说明")
     required: bool = Field(default=False, description="是否必填")
+    example: Optional[Any] = Field(default=None, description="示例值，文档中有则提取，无则为null")
 
 
 class RequestBody(BaseModel):

@@ -327,6 +327,7 @@ async function confirmSave() {
       }),
     })
     showSaveDialog.value = false
+    visible.value = false  // 保存成功后自动关闭"手工用例列表"窗口
     // 不在子组件中显示提示，由父组件统一显示
   } finally {
     saving.value = false

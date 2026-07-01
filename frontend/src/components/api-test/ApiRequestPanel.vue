@@ -36,7 +36,7 @@
             </el-radio-group>
           </div>
           <div v-if="bodyType === 'json'" class="body-json-section">
-            <MonacoJsonEditor v-model="body" :height="260" language="json" />
+            <MonacoJsonEditor v-model="body" height="100%" language="json" />
           </div>
           <div v-else-if="bodyType === 'urlencoded'">
             <ParamTable v-model="urlencodedRows" :columns="paramColumns" add-label="添加参数" />
@@ -62,7 +62,7 @@
         <slot name="preOps">
           <div class="prepost-container">
             <div class="prepost-code">
-              <MonacoJsonEditor v-model="preOpsScript" :height="260" language="python" />
+              <MonacoJsonEditor v-model="preOpsScript" height="100%" language="python" />
             </div>
             <div class="prepost-template">
               <div class="template-header">前置操作模板</div>
@@ -81,7 +81,7 @@
         <slot name="postOps">
           <div class="prepost-container">
             <div class="prepost-code">
-              <MonacoJsonEditor v-model="postOpsScript" :height="260" language="python" />
+              <MonacoJsonEditor v-model="postOpsScript" height="100%" language="python" />
             </div>
             <div class="prepost-template">
               <div class="template-header">后置操作模板</div>
@@ -297,22 +297,28 @@ var formColumns = [
 
 .body-editor {
   padding: 0;
+  height: calc(100% - 20px);
+  display: flex;
+  flex-direction: column;
 }
 
 .body-type-selector {
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .body-json-section {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 .prepost-container {
   display: flex;
   gap: 16px;
-  height: 100%;
+  height: calc(100% - 20px);
 }
 
 .prepost-code {

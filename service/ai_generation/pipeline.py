@@ -20,6 +20,7 @@ from typing import Any
 
 from service.ai_generation.models import AIGenerationSession
 from service.core.enums import SessionStatus
+from tortoise.functions import Max
 
 _log = logging.getLogger("agent_pipeline")
 
@@ -70,7 +71,7 @@ class ApiAgentPipeline:
                 )
 
             # -- Phase 1: Create interfaces (Mode 1 only) --
-            if mode == "from_doc" and api_doc_text:
+            if mode in ("from_doc", "from_prompt") and api_doc_text:
                 yield _sse("stage", {
                     "name": "create_interfaces",
                     "status": "running",
@@ -243,6 +244,12 @@ class ApiAgentPipeline:
                 if not selected_items:
                     continue
 
+                # Log selected case titles for clarity
+                selected_titles = [f"[{idx}] {base.get('name', '未命名')}" for idx, base in selected_items]
+                selected_msg = f"用户选择了 {len(selected_items)} 条用例进行结构化: {', '.join(selected_titles)}"
+                await queue.put(_sse("custom", selected_msg))
+                iface["selected_titles_text"] = selected_msg
+
                 # Debug: log the edited base cases before structuring
                 for idx, base in selected_items:
                     _log.info(
@@ -356,6 +363,7 @@ class ApiAgentPipeline:
 
             # -- Phase 5/4: Pre-execute --
             if environment_id:
+                _log.info("[pipeline] 开始预执行阶段, environment_id=%s, 接口数量=%d", environment_id, len(interfaces))
                 await queue.put(_sse("stage", {
                     "name": "pre_run",
                     "status": "running",
@@ -364,13 +372,18 @@ class ApiAgentPipeline:
 
                 for i, iface in enumerate(interfaces):
                     case_ids = iface.get("created_case_ids", [])
+                    _log.info("[pipeline] 接口 %d/%d: summary=%s, case_ids=%s",
+                             i+1, len(interfaces), iface.get("summary"), case_ids)
                     if not case_ids:
+                        _log.info("[pipeline] 接口 %d 没有 case_ids，跳过", i+1)
                         continue
                     await queue.put(_sse("custom", f"正在预执行「{iface.get('summary', '')}」的用例..."))
                     try:
+                        _log.info("[pipeline] 开始执行接口 %d 的用例", i+1)
                         exec_results = await cls._execute_cases(
                             case_ids, environment_id, session.created_by_id
                         )
+                        _log.info("[pipeline] 接口 %d 执行完成: %s", i+1, exec_results)
                         iface["exec_results"] = exec_results
                         await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」预执行完成: "
                                   f"通过率 {exec_results.get('pass_rate', 0):.0%}"))
@@ -385,11 +398,23 @@ class ApiAgentPipeline:
                         "exec_results": iface.get("exec_results", {}),
                     }))
 
+                _log.info("[pipeline] 预执行阶段完成，准备发送 stage done 消息")
                 await queue.put(_sse("stage", {
                     "name": "pre_run",
                     "status": "done",
                     "text": "预执行完毕",
                 }))
+                _log.info("[pipeline] stage done 消息已发送")
+
+                # -- Sync debug templates from pre-execution results --
+                try:
+                    _log.info("[pipeline] 开始同步调试模板...")
+                    await cls._sync_debug_templates(interfaces)
+                    _log.info("[pipeline] 调试模板同步完成")
+                except Exception as e:
+                    _log.error("[pipeline] 同步调试模板失败: %s", e, exc_info=True)
+            else:
+                _log.info("[pipeline] 跳过预执行阶段: environment_id 为空")
 
             # -- Summary --
             summary = cls._build_summary(interfaces)
@@ -409,6 +434,9 @@ class ApiAgentPipeline:
                 name = iface.get("summary", "")
                 sc = iface.get("structured_count", 0)
                 er = iface.get("exec_results", {})
+                sel_text = iface.get("selected_titles_text", "")
+                if sel_text:
+                    stage_logs.append(f"「{name}」{sel_text}")
                 stage_logs.append(f"✅ 「{name}」结构化 {sc} 条")
                 if er:
                     pr = er.get("pass_rate", 0)
@@ -480,6 +508,8 @@ class ApiAgentPipeline:
             method = (item.get("method") or "GET").upper()
             path = item.get("path") or ""
             summary = item.get("summary") or ""
+            if not summary:
+                summary = f"{method} {path}"
 
             # Check duplicate within same catalog
             existing = await ApiInterface.filter(
@@ -507,7 +537,19 @@ class ApiAgentPipeline:
                 })
                 continue
 
-            # Create new interface
+            # Create new interface with auto-incremented version
+            from service.api_test.interface.models import ApiInterface as ApiInterfaceModel
+
+            # Get max version for this (project, method, path)
+            max_version_result = await ApiInterfaceModel.filter(
+                project_id=session.project_id,
+                method=method,
+                path=path,
+            ).annotate(max_version=Max("version")).values("max_version")
+
+            max_version = max_version_result[0]["max_version"] if max_version_result else 0
+            new_version = (max_version or 0) + 1
+
             try:
                 iface = await ApiInterface.create(
                     project_id=session.project_id,
@@ -520,6 +562,7 @@ class ApiAgentPipeline:
                     request_body=item.get("requestBody") or item.get("request_body"),
                     responses=item.get("responses") or {},
                     source="ai",
+                    version=new_version,
                     is_current=True,
                     created_by_id=session.created_by_id,
                 )
@@ -618,10 +661,10 @@ class ApiAgentPipeline:
         if not catalog:
             # Get max sort_order at root level
             from tortoise.functions import Max
-            max_order = await ApiInterfaceCatalog.filter(
+            result = await ApiInterfaceCatalog.filter(
                 project_id=project_id, parent_id=None
-            ).annotate(max_sort=Max("sort_order")).values("max_sort").first()
-            next_order = (max_order.get("max_sort") or 0) + 1 if max_order else 0
+            ).annotate(max_sort=Max("sort_order")).first()
+            next_order = (getattr(result, 'max_sort', None) or 0) + 1 if result else 0
 
             catalog = await ApiInterfaceCatalog.create(
                 project_id=project_id,
@@ -666,6 +709,14 @@ class ApiAgentPipeline:
         base_cases = iface_data.get("base_cases", [])
         created_case_ids = []
         initial_exec_status = ExecStatus.running if environment_id else ExecStatus.pending
+
+        # Verify interface still exists in DB before creating cases
+        if interface_id:
+            from service.api_test.interface.models import ApiInterface as ApiInterfaceModel
+            iface_exists = await ApiInterfaceModel.get_or_none(id=interface_id)
+            if not iface_exists:
+                _log.warning("[pipeline] 接口不存在，跳过用例创建: interface_id=%s", interface_id)
+                return []
 
         # Iterate over pre_run_results (same as confirm flow)
         for pre_result in pre_run_results:
@@ -788,13 +839,116 @@ class ApiAgentPipeline:
             "pass_rate": passed / total if total > 0 else 0,
         }
 
+    @classmethod
+    async def _sync_debug_templates(cls, interfaces: list[dict]) -> None:
+        """将预执行结果同步写入接口调试模板（ApiInterfaceDebugTemplate）。
+
+        取每个接口最后一次非 error 状态的执行记录，从 request_info 中
+        提取真实的请求参数，写入 debug template，使"接口调试"tab 有初始数据。
+        """
+        from service.test_execution.models import ApiCaseRunRecord
+        from service.api_test.interface.models import ApiInterfaceDebugTemplate
+        from service.core.enums import CaseRunStatus
+        from urllib.parse import urlparse, parse_qs
+
+        _log.info("[_sync_debug_templates] 开始同步调试模板，共 %d 个接口", len(interfaces))
+
+        for iface in interfaces:
+            interface_id = iface.get("interface_id")
+            iface_summary = iface.get("summary", "")
+            if not interface_id:
+                _log.warning("[_sync_debug_templates] 接口缺少 interface_id，跳过: %s", iface_summary)
+                continue
+
+            _log.info("[_sync_debug_templates] 处理接口: id=%s, summary=%s", interface_id, iface_summary)
+
+            # 取最后一条非 error 的执行记录（排除前置用例的记录）
+            # 前置用例的记录结构是 {"_precondition_detail": ..., "log_data": ...}
+            # 主用例的记录结构是 {"_debug_detail": {...}, ...}
+            records = await ApiCaseRunRecord.filter(
+                interface_id=interface_id,
+                run_type="debug",
+            ).exclude(
+                status=CaseRunStatus.error,
+            ).order_by("-created_at").limit(10)
+
+            # 找到第一个包含 _debug_detail 的记录（即主用例记录）
+            record = None
+            for r in records:
+                if r.api_requests_info and "_debug_detail" in r.api_requests_info:
+                    record = r
+                    break
+
+            if not record:
+                _log.warning("[_sync_debug_templates] 未找到主用例执行记录: interface_id=%s", interface_id)
+                continue
+
+            if not record.api_requests_info:
+                _log.warning("[_sync_debug_templates] 执行记录缺少 api_requests_info: record_id=%s", record.id)
+                continue
+
+            _log.info("[_sync_debug_templates] 找到执行记录: record_id=%s, status=%s", record.id, record.status)
+
+            debug_detail = record.api_requests_info.get("_debug_detail") or {}
+            request_info = debug_detail.get("request_info") or {}
+
+            # 添加详细日志，帮助诊断问题
+            _log.info("[_sync_debug_templates] record_id=%s, debug_detail keys=%s, request_info keys=%s",
+                     record.id, list(debug_detail.keys()), list(request_info.keys()) if request_info else "None")
+
+            if not request_info:
+                _log.warning("[_sync_debug_templates] 执行记录缺少 request_info: record_id=%s, api_requests_info keys=%s",
+                           record.id, list(record.api_requests_info.keys()))
+                continue
+
+            # 从实际请求 URL 中提取 path_params
+            actual_url = request_info.get("url") or ""
+            iface_path = iface.get("path") or ""
+            path_params = {}
+            if actual_url and iface_path:
+                try:
+                    parsed = urlparse(actual_url)
+                    actual_path = parsed.path
+                    # 对比接口路径模板和实际路径，提取 path params
+                    # e.g. /api/user/{id} vs /api/user/123
+                    template_parts = iface_path.strip("/").split("/")
+                    actual_parts = actual_path.strip("/").split("/")
+                    if len(template_parts) == len(actual_parts):
+                        for t, a in zip(template_parts, actual_parts):
+                            if t.startswith("{") and t.endswith("}"):
+                                param_name = t[1:-1]
+                                path_params[param_name] = a
+                except Exception:
+                    pass
+
+            payload = {
+                "method": request_info.get("method") or iface.get("method") or "GET",
+                "path": iface_path,
+                "headers": request_info.get("headers") or {},
+                "query": request_info.get("params") or {},
+                "path_params": path_params,
+                "body": request_info.get("body"),
+            }
+
+            try:
+                tpl, created = await ApiInterfaceDebugTemplate.get_or_create(
+                    interface_id=interface_id,
+                )
+                tpl.payload = payload
+                await tpl.save()
+                _log.info("[_sync_debug_templates] 调试模板保存成功: interface_id=%s, created=%s", interface_id, created)
+            except Exception as e:
+                _log.warning("[_sync_debug_templates] 保存失败: interface_id=%s, error=%s", interface_id, e)
+
+        _log.info("[_sync_debug_templates] 同步完成")
+
     # ------------------------------------------------------------------
     # Progress helpers
     # ------------------------------------------------------------------
 
     @staticmethod
     def _init_progress(mode: str, current_phase: int = 1) -> dict:
-        if mode == "from_doc":
+        if mode in ("from_doc", "from_prompt"):
             phases = [
                 {"id": 1, "name": "生成测试接口", "status": "running"},
                 {"id": 2, "name": "生成基础用例", "status": "pending"},

@@ -121,6 +121,11 @@ def property_to_body_field(
         desc = str(desc)
     required = name in required_set and not force_optional_inner
 
+    # Extract example or default value from schema
+    example = s.get("example")
+    if example is None:
+        example = s.get("default")
+
     nested_fields: Optional[List[Dict[str, Any]]] = None
     array_item_fields: Optional[List[Dict[str, Any]]] = None
 
@@ -153,6 +158,7 @@ def property_to_body_field(
         type=typ,
         description=desc,
         required=required,
+        example=example,
         nested_fields=nested_fields,
         array_item_fields=array_item_fields,
     )
@@ -348,12 +354,20 @@ class SwaggerDocumentParser:
     def _param_from_swagger2(self, spec: Dict[str, Any], p: Dict[str, Any]) -> Parameter:
         name = p.get("name", "")
         schema = p.get("schema")
+        example = None
         if isinstance(schema, dict):
-            typ = schema_type_string(resolve_schema(spec, schema))
+            resolved = resolve_schema(spec, schema)
+            typ = schema_type_string(resolved)
+            example = resolved.get("example")
+            if example is None:
+                example = resolved.get("default")
         else:
             typ = p.get("type") or "string"
             if p.get("format"):
                 typ = f"{typ}({p.get('format')})"
+        # Swagger 2.0 parameter-level example/default
+        if example is None:
+            example = p.get("x-example") or p.get("example") or p.get("default")
         desc = p.get("description") or ""
         if not isinstance(desc, str):
             desc = str(desc)
@@ -362,6 +376,7 @@ class SwaggerDocumentParser:
             type=str(typ),
             description=desc,
             required=bool(p.get("required", False)),
+            example=example,
         )
 
     def _request_body_swagger2(
@@ -393,12 +408,14 @@ class SwaggerDocumentParser:
                 typ = p.get("type") or "string"
                 if p.get("format"):
                     typ = f"{typ}({p.get('format')})"
+                example = p.get("x-example") or p.get("example") or p.get("default")
                 form_fields.append(
                     BodyField(
                         name=str(p.get("name", "")),
                         type=str(typ),
                         description=str(p.get("description") or ""),
                         required=bool(p.get("required", False)),
+                        example=example,
                     )
                 )
         if not form_fields:

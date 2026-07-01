@@ -10,7 +10,7 @@ api_parser_prompt = PromptTemplate.from_template(
         - 严禁编造或推测文档中未明确提及的信息
         - 只提取文档中明确存在的字段和参数
         - 如果某个字段在文档中不存在，请设置为 null 或空数组
-        - 不要添加任何文档中没有的示例数据或默认值
+        - 如果文档中包含示例值（如 example、示例值、如"xxx"、例如13800138000 等），请提取到 example 字段；如果文档中没有示例，example 填 null，不要编造
         - **必须提取文档中的每一个接口，不要遗漏任何接口**
 
     ### 规则说明
@@ -38,19 +38,22 @@ api_parser_prompt = PromptTemplate.from_template(
                   "name": "参数名",
                   "type": "参数类型",
                   "description": "参数说明",
-                  "required": true/false
+                  "required": true/false,
+                  "example": "示例值（文档中有则提取，无则null）"
               }}],
               "path": [{{
                   "name": "参数名",
                   "type": "参数类型",
                   "description": "参数说明",
-                  "required": true/false
+                  "required": true/false,
+                  "example": "示例值（文档中有则提取，无则null）"
               }}],
               "query": [{{
                   "name": "参数名",
                   "type": "参数类型",
                   "description": "参数说明",
-                  "required": true/false
+                  "required": true/false,
+                  "example": "示例值（文档中有则提取，无则null）"
               }}]
             }},
             "requestBody": {{
@@ -60,7 +63,8 @@ api_parser_prompt = PromptTemplate.from_template(
                   "name": "字段名",
                   "type": "string|integer|boolean|number等基础类型",
                   "description": "字段说明",
-                  "required": true/false
+                  "required": true/false,
+                  "example": "示例值（文档中有则提取，无则null）"
                 }}
               ]
             }},

@@ -69,7 +69,7 @@
 
               <!-- Legacy single-interface payload card -->
               <AgentPayloadCard
-                v-if="sessionDetail?.output_payload?.base_cases?.length && !hasAgentResponse && !pipelineInterfaces.length"
+                v-if="sessionDetail?.output_payload?.base_cases?.length && !pipelineInterfaces.length"
                 gen-type="api_base"
                 :payload="sessionDetail.output_payload"
                 :can-edit="canEdit"
@@ -122,7 +122,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -375,7 +375,10 @@ function _startRunningPoll() {
       if (detail && detail.status !== 'running') {
         _stopRunningPoll()
         sessionDetail.value = detail
-        await Promise.all([loadMessages(), loadSessions()])
+        // 只在不在流式传输时重新加载，避免与正在进行的流式传输冲突
+        if (!streaming.value) {
+          await Promise.all([loadMessages(), loadSessions()])
+        }
       }
     } catch (e) {
       console.error('[poll] session poll failed:', e)
@@ -417,13 +420,25 @@ async function createSessionFromComposer(payload) {
   }
 }
 
+// Flag to prevent concurrent state updates during cleanup
+let isCleaningUp = false
+
 function stopStream() {
+  isCleaningUp = true
+
+  console.log(`[ApiAgentPanel-DIAG] stopStream() 调用, 当前 streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
   abortController?.abort()
   abortController = null
   streaming.value = false
   streamingText.value = ''
   hasStageProgress.value = false
   stageLogLines.value = []
+  console.log(`[ApiAgentPanel-DIAG] stopStream() 完成, 活跃SSE=${window.__activeSSECount || 0}`)
+
+  // Reset flag after cleanup is complete
+  setTimeout(() => {
+    isCleaningUp = false
+  }, 100)
 }
 
 /** Detect which stage a text belongs to */
@@ -572,7 +587,7 @@ async function sendMessage(content) {
           agentResponse.stages = agentResponse.stages.map(s => ({ ...s, status: 'done' }))
           // For pipeline sessions, don't mark as "已完成" — task continues after user edits
           const mode = sessionDetail.value?.output_payload?.mode
-          const isPipeline = mode === 'from_interfaces' || mode === 'from_doc'
+          const isPipeline = mode === 'from_interfaces' || mode === 'from_doc' || mode === 'from_prompt'
           if (!isPipeline) {
             agentResponse.isStreaming = false
           }
@@ -603,11 +618,14 @@ async function sendMessage(content) {
       await loadMessages()
     }
   } finally {
-    streaming.value = false
-    streamingText.value = ''
-    hasStageProgress.value = false
-    stageLogLines.value = []
-    abortController = null
+    // Only cleanup if stopStream() hasn't already done it
+    if (!isCleaningUp) {
+      streaming.value = false
+      streamingText.value = ''
+      hasStageProgress.value = false
+      stageLogLines.value = []
+      abortController = null
+    }
   }
 }
 
@@ -619,6 +637,8 @@ function buildRichContent(payload) {
     lines.push(`🔗 接口: ${payload.interfaceNames.join(', ')}`)
   } else if (payload.mode === 'from_doc') {
     lines.push('📄 模式: 从接口文档生成')
+  } else if (payload.mode === 'from_prompt') {
+    lines.push('📝 模式: 从输入内容解析接口')
   }
   if (payload.environmentName) lines.push(`🌐 环境: ${payload.environmentName}`)
   const text = payload.content || ''
@@ -795,8 +815,11 @@ async function onSaveEditedBaseCases(editedInterfaces) {
     }
   } finally {
     confirming.value = false
-    streaming.value = false
-    abortController = null
+    // Only cleanup if stopStream() hasn't already done it
+    if (!isCleaningUp) {
+      streaming.value = false
+      abortController = null
+    }
   }
 }
 
@@ -858,7 +881,27 @@ const resolvedInterfaceId = computed(() => {
 watch(
   () => props.isActive,
   (active) => {
-    if (active) emit('composer-mode-change', composerMode.value)
+    if (active) {
+      emit('composer-mode-change', composerMode.value)
+      // 恢复：刷新 session 状态，如果有正在运行的 session，重新启动轮询
+      if (activeSessionId.value) {
+        refreshSession().then(() => {
+          if (sessionDetail.value?.status === 'running' && !_runningPollTimer) {
+            _startRunningPoll()
+          } else if (sessionDetail.value?.status !== 'running' && !streaming.value) {
+            // session 在隐藏期间完成了，重新加载消息
+            loadMessages()
+          }
+        })
+      }
+    } else {
+      // 暂停：中止流式传输和轮询，释放所有 HTTP 连接
+      // 后端会继续生成，用户切回后会重新加载状态
+      if (streaming.value) {
+        stopStream()
+      }
+      _stopRunningPoll()
+    }
   },
   { immediate: true },
 )
@@ -886,6 +929,16 @@ onMounted(async () => {
   if (props.autoNew || route.query.new === '1' || resolvedInterfaceId.value) {
     setComposerMode(true)
   }
+})
+
+onBeforeUnmount(() => {
+  console.log(`[ApiAgentPanel-DIAG] onBeforeUnmount 触发, streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
+  // 组件卸载时，中止流式传输和轮询，防止后台继续运行导致浏览器卡死
+  if (streaming.value) {
+    stopStream()
+  }
+  _stopRunningPoll()
+  console.log('[ApiAgentPanel] 组件卸载，已清理流式传输和轮询')
 })
 </script>
 

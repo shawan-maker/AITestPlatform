@@ -22,18 +22,81 @@ def _normalize_in_structure(obj):
     return obj
 
 
+def _default_for_type(type_str):
+    """根据类型生成默认值，当文档无 example 时使用。"""
+    if not type_str:
+        return ""
+    t = str(type_str).lower().split("(")[0].strip()
+    if t in ("integer", "int", "long"):
+        return 0
+    if t in ("number", "float", "double"):
+        return 0.0
+    if t == "boolean":
+        return False
+    if t == "array":
+        return []
+    if t == "object":
+        return {}
+    return ""
+
+
+def _extract_param_list(param_list):
+    """从参数列表提取 {name: value} 和 {name: description}。
+
+    优先使用 example，无 example 时按类型生成默认值。
+    """
+    values = {}
+    desc_map = {}
+    for p in param_list:
+        if not isinstance(p, dict):
+            continue
+        name = p.get("name")
+        if not name:
+            continue
+        value = p.get("example")
+        if value is None:
+            value = _default_for_type(p.get("type"))
+        values[name] = value
+        if p.get("description"):
+            desc_map[name] = p["description"]
+    return values, desc_map
+
+
 def build_debug_payload_from_interface(iface) -> dict[str, Any]:
     params = iface.parameters or {}
-    headers = {p.get("name", ""): p.get("example") for p in params.get("header", []) if p.get("name")}
-    query = {p.get("name", ""): p.get("example") for p in params.get("query", []) if p.get("name")}
-    path_params = {p.get("name", ""): p.get("example") for p in params.get("path", []) if p.get("name")}
+
+    headers, header_desc = _extract_param_list(params.get("header", []))
+    query, query_desc = _extract_param_list(params.get("query", []))
+    path_params, path_desc = _extract_param_list(params.get("path", []))
+
     body = None
+    body_field_desc = {}
     if iface.request_body:
-        content = iface.request_body.get("content") or {}
-        for media in content.values():
-            if isinstance(media, dict) and "example" in media:
-                body = media["example"]
-                break
+        # 格式 A：{content: {media_type: {example: ...}}}
+        content = iface.request_body.get("content")
+        if content:
+            for media in content.values():
+                if isinstance(media, dict) and "example" in media:
+                    body = media["example"]
+                    break
+        # 格式 B：{content_type, body: [BodyField...]}
+        elif iface.request_body.get("body"):
+            body_fields = iface.request_body["body"]
+            if isinstance(body_fields, list):
+                body = {}
+                for f in body_fields:
+                    if not isinstance(f, dict):
+                        continue
+                    name = f.get("name")
+                    if not name:
+                        continue
+                    value = f.get("example")
+                    if value is None:
+                        value = _default_for_type(f.get("type"))
+                    body[name] = value
+                    if f.get("description"):
+                        body_field_desc[name] = f["description"]
+
     return {
         "method": iface.method,
         "path": iface.path,
@@ -41,6 +104,12 @@ def build_debug_payload_from_interface(iface) -> dict[str, Any]:
         "query": query,
         "path_params": path_params,
         "body": body,
+        "descriptions": {
+            "headers": header_desc,
+            "query": query_desc,
+            "path_params": path_desc,
+            "body_fields": body_field_desc,
+        },
     }
 
 

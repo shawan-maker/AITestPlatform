@@ -51,15 +51,25 @@ async def api_post_message(
     body: AgentMessageRequest,
     user: User = Depends(get_current_active_user),
 ):
+    import logging
+    _log = logging.getLogger("agent_stream")
+
     # Detect pipeline mode: if session has mode != "single", use pipeline
     from service.ai_generation.models import AIGenerationSession
+    from service.ai_generation.agent_stream import AgentStreamService
+    _log.info("[ORM-DIAG] api_post_message 入口 session=%s: %s", session_id, AgentStreamService._diagnose_orm_health())
+
     session = await AIGenerationSession.get_or_none(id=session_id)
+    _log.info("[ORM-DIAG] get_or_none 后 session=%s: %s", session_id, AgentStreamService._diagnose_orm_health())
+
     if session and session.output_payload:
         mode = session.output_payload.get("mode")
-        if mode in ("from_interfaces", "from_doc"):
+        if mode in ("from_interfaces", "from_doc", "from_prompt"):
+            _log.info("[ORM-DIAG] 使用 pipeline 模式 session=%s, mode=%s", session_id, mode)
             stream = ApiAgentService.stream_pipeline(user, session_id, body)
             return StreamingResponse(stream, media_type="text/event-stream")
     # Fallback to legacy agent flow
+    _log.info("[ORM-DIAG] 使用 legacy 模式 session=%s", session_id)
     stream = ApiAgentService.stream_message(user, session_id, body)
     return StreamingResponse(stream, media_type="text/event-stream")
 

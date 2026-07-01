@@ -2205,7 +2205,11 @@ onMounted(async function () {
     try {
       var ifaceRes = await getInterface(selectedInterfaceId.value)
       fallbackInterface.value = ifaceRes.data.data || ifaceRes.data
-    } catch (e) { /* 接口不存在则忽略 */ }
+    } catch (e) {
+      // 接口不存在（404），清除选中状态和 sessionStorage
+      selectedInterfaceId.value = null
+      sessionStorage.removeItem('workspaceLastInterfaceId')
+    }
   }
   // 加载变量文件列表
   refreshEnvironmentList()

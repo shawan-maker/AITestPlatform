@@ -189,6 +189,11 @@ class ApiAgentService:
         interface_ids = payload.get("interface_ids")
         api_doc_text = payload.get("api_doc") or payload.get("api_doc_text")
         user_prompt = body.content or session.user_prompt
+        # from_prompt 模式：将用户输入作为接口文档文本
+        if mode == "from_prompt" and not api_doc_text:
+            import re
+            # 剥离前端 buildRichContent 添加的 [context]...[/context] 上下文块
+            api_doc_text = re.sub(r'\[context\]\n[\s\S]*?\n\[/context\]\n?', '', user_prompt or "").strip()
 
         async for chunk in ApiAgentPipeline.run_phase_1_to_3(
             session,

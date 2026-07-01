@@ -159,11 +159,18 @@ class OpenAPIDocumentParser:
         desc = p.get("description") or ""
         if not isinstance(desc, str):
             desc = str(desc)
+        # OpenAPI 3.0: example can be at parameter level or schema level
+        example = p.get("example")
+        if example is None:
+            example = schema.get("example")
+        if example is None:
+            example = schema.get("default")
         return Parameter(
             name=str(name),
             type=str(typ),
             description=desc,
             required=bool(p.get("required", False)),
+            example=example,
         )
 
     def _request_body_oas3(

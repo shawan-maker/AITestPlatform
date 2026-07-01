@@ -261,6 +261,24 @@ class ImportService:
             )
             dependency_errors.extend(errors)
 
+        # Auto-create debug templates for newly imported interfaces
+        if new_ids:
+            from service.api_test.interface.models import ApiInterfaceDebugTemplate
+            from service.api_test.shared.payload_builder import build_debug_payload_from_interface
+
+            for iface_id in new_ids:
+                try:
+                    iface_obj = await ApiInterface.get(id=iface_id)
+                    payload = build_debug_payload_from_interface(iface_obj)
+                    tpl, created = await ApiInterfaceDebugTemplate.get_or_create(
+                        interface_id=iface_id,
+                    )
+                    if created or not tpl.payload:
+                        tpl.payload = payload
+                        await tpl.save()
+                except Exception:
+                    pass  # 单条失败不影响整体导入
+
         return ImportConfirmResult(
             created=created,
             failed=0,

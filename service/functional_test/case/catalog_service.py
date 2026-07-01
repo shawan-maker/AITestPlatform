@@ -1,5 +1,4 @@
 from service.core.exceptions import AppException
-from service.functional_test.case.models import FunctionalCase, FunctionalCaseCatalog
 from service.functional_test.permissions import ensure_case_editor, ensure_case_viewer
 from service.functional_test.case.schemas import (
     CatalogCreateRequest,
@@ -17,7 +16,9 @@ class CatalogService:
     @classmethod
     async def _get_catalog_or_404(
         cls, catalog_id: int, project_id: int | None = None
-    ) -> FunctionalCaseCatalog:
+    ):
+        from service.functional_test.case.models import FunctionalCaseCatalog
+
         catalog = await FunctionalCaseCatalog.get_or_none(id=catalog_id)
         if catalog is None:
             raise AppException("目录不存在", 404)
@@ -33,6 +34,8 @@ class CatalogService:
         name: str,
         exclude_id: int | None = None,
     ) -> None:
+        from service.functional_test.case.models import FunctionalCaseCatalog
+
         qs = FunctionalCaseCatalog.filter(
             project_id=project_id, parent_id=parent_id, name=name
         )
@@ -43,6 +46,8 @@ class CatalogService:
 
     @classmethod
     async def _collect_subtree_ids(cls, root_id: int) -> set[int]:
+        from service.functional_test.case.models import FunctionalCaseCatalog
+
         catalogs = await FunctionalCaseCatalog.all().values("id", "parent_id")
         children_map: dict[int | None, list[int]] = {}
         for row in catalogs:
@@ -60,11 +65,15 @@ class CatalogService:
 
     @classmethod
     async def _subtree_has_cases(cls, catalog_id: int) -> bool:
+        from service.functional_test.case.models import FunctionalCase
+
         ids = await cls._collect_subtree_ids(catalog_id)
         return await FunctionalCase.filter(catalog_id__in=list(ids)).exists()
 
     @classmethod
     async def get_tree(cls, user: User, project_id: int) -> list[CatalogTreeNode]:
+        from service.functional_test.case.models import FunctionalCase, FunctionalCaseCatalog
+
         await ensure_case_viewer(project_id, user)
         catalogs = await FunctionalCaseCatalog.filter(project_id=project_id).order_by(
             "level", "sort_order", "id"
@@ -104,6 +113,8 @@ class CatalogService:
     async def create(
         cls, user: User, project_id: int, data: CatalogCreateRequest
     ) -> CatalogOut:
+        from service.functional_test.case.models import FunctionalCaseCatalog
+
         await ensure_case_editor(project_id, user)
         level = 1
         if data.parent_id is not None:
@@ -192,6 +203,8 @@ class CatalogService:
 
     @classmethod
     async def _delete_empty_subtree(cls, catalog_id: int) -> None:
+        from service.functional_test.case.models import FunctionalCaseCatalog
+
         children = await FunctionalCaseCatalog.filter(parent_id=catalog_id)
         for child in children:
             if not await cls._subtree_has_cases(child.id):
@@ -199,7 +212,7 @@ class CatalogService:
         await FunctionalCaseCatalog.filter(id=catalog_id).delete()
 
     @staticmethod
-    def _to_out(catalog: FunctionalCaseCatalog) -> CatalogOut:
+    def _to_out(catalog) -> CatalogOut:
         return CatalogOut(
             id=catalog.id,
             project_id=catalog.project_id,

@@ -15,6 +15,7 @@ from service.ai_generation.payload_sync import (
     sync_api_base_payload,
     sync_functional_payload,
 )
+from service.core.async_utils import get_main_loop, register_main_loop, run_on_main_loop
 from service.knowledge.pipeline.rag_gateway import RagGateway
 from utils.parser.api_document_ai_parser import APIDocumentParser
 from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
@@ -23,27 +24,11 @@ from workflow.case_generator_workflow import GenerateTestCases
 
 
 # ============================================================
-# 🔑 事件循环管理 —— 分离 RAG 循环和主循环
+# 事件循环管理 —— 分离 RAG 循环和主循环
 # ============================================================
 # RAG 专用事件循环（无状态 HTTP 请求，可在任意独立 loop 执行）
 _rag_loop = None       # 全局唯一的 RAG 事件循环
 _rag_thread = None     # 运行该循环的后台线程
-
-# 主事件循环引用（FastAPI/uvicorn loop，Tortoise ORM 连接池绑定在此）
-_main_loop_ref = None
-_main_loop_lock = threading.Lock()
-
-
-def register_main_loop(loop: asyncio.AbstractEventLoop) -> None:
-    """由 agent_stream 在启动时调用，注册主事件循环引用（用于 DB 操作）"""
-    global _main_loop_ref
-    with _main_loop_lock:
-        _main_loop_ref = loop
-
-
-def _get_main_loop() -> asyncio.AbstractEventLoop | None:
-    with _main_loop_lock:
-        return _main_loop_ref
 
 
 def _get_rag_loop():
@@ -76,14 +61,7 @@ def _run_db_operation(coro, timeout: int = 120):
     必须在同一个 loop 中执行数据库查询，否则报
     "got Future attached to a different loop" 错误。
     """
-    main_loop = _get_main_loop()
-    if main_loop is None:
-        raise RuntimeError(
-            "主事件循环未注册，无法执行数据库操作。"
-            "请确保通过 register_main_loop() 注册了主循环。"
-        )
-    future = asyncio.run_coroutine_threadsafe(coro, main_loop)
-    return future.result(timeout=timeout)
+    return run_on_main_loop(coro, timeout=timeout)
 
 
 # ================================生成手工/功能测试用例的工具========================================================
@@ -115,11 +93,12 @@ def search_requirement(query:str, config: RunnableConfig):
         return f"知识库检索失败（{type(e).__name__}），请基于用户输入的需求描述直接进行测试用例设计。"
 
 @tool("generate_testcases",description="基于需求文档生成测试用例的工具")
-def generate_testcases(requirement:str, config: RunnableConfig):
+def generate_testcases(requirement:str, config: RunnableConfig, user_prompt: str = ""):
     """
         工具作用：生成测试用例节点
         参数：
             requirement:需求文档内容（来自用户输入或search_requirement工具的输出）
+            user_prompt:用户的附加要求（如数量限制"设计5条用例"、特殊场景要求等）
     """
 
     writer = get_stream_writer()
@@ -128,7 +107,7 @@ def generate_testcases(requirement:str, config: RunnableConfig):
         # 从 config.context 中获取项目信息
         project_name = config.get("context", {}).get("project_name", "")
         module_id = config.get("context", {}).get("module_id", "")
-        
+
         writer("  → 正在初始化用例生成工作流...")
         workflow = GenerateTestCases().create_workflow()
         writer("  → 调用大模型生成测试点和用例（耗时较长请耐心等待）...")
@@ -136,7 +115,7 @@ def generate_testcases(requirement:str, config: RunnableConfig):
         # 使用 invoke() 获取完整的最终状态
         # stream() 的返回值解析复杂，直接使用 invoke() 获取最终状态更可靠
         final_state = workflow.invoke(
-            {"requirement": requirement},
+            {"requirement": requirement, "user_prompt": user_prompt},
             config=config,
         )
         
@@ -248,22 +227,14 @@ def load_evn_data(environment_id: int):
         )
     precoditions = []
     additional_info = build_default_additional_info()
-    import asyncio
 
-    from service.core.database import close_db, init_db
     from service.test_environment.variable.assembler import TestEnvDataAssembler
 
-    async def _load():
-        await init_db()
-        try:
-            return await TestEnvDataAssembler.get_test_env_data(
-                environment_id,
-                use_snapshot=False,
-            )
-        finally:
-            await close_db()
-
-    test_env_data = dict(asyncio.run(_load()))
+    # 通过 _run_db_operation 将 DB 查询安全调度回主事件循环执行，
+    # 复用已有的 Tortoise ORM 连接池，绝不重新初始化/关闭连接。
+    test_env_data = dict(_run_db_operation(
+        TestEnvDataAssembler.get_test_env_data(environment_id, use_snapshot=False)
+    ))
     test_env_data["environment_id"] = environment_id
     return {
         "precoditions": precoditions,

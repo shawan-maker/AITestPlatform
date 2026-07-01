@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from service.ai_generation.models import AIGenerationMessage, AIGenerationSession
 from service.ai_generation.session_schemas import AIGenerationMessageOut
 from service.core.enums import MessageRole, MessageType
 from service.core.exceptions import AppException
@@ -12,6 +11,8 @@ class MessageService:
     @classmethod
     async def next_sequence(cls, session_id: int) -> int:
         """Generate next sequence number. Uses MAX(id) as proxy for ordering."""
+        from service.ai_generation.models import AIGenerationMessage
+
         last = (
             await AIGenerationMessage.filter(session_id=session_id)
             .order_by("-id")
@@ -35,6 +36,8 @@ class MessageService:
         message_type: MessageType = MessageType.text,
         tool_name: str | None = None,
     ) -> AIGenerationMessageOut:
+        from service.ai_generation.models import AIGenerationMessage
+
         seq = await cls.next_sequence(session_id)
         row = await AIGenerationMessage.create(
             session_id=session_id,
@@ -47,7 +50,7 @@ class MessageService:
         return cls._to_out(row)
 
     @classmethod
-    def _to_out(cls, row: AIGenerationMessage) -> AIGenerationMessageOut:
+    def _to_out(cls, row) -> AIGenerationMessageOut:
         return AIGenerationMessageOut(
             id=row.id,
             session_id=row.session_id,
@@ -62,10 +65,12 @@ class MessageService:
     @classmethod
     async def list_messages(
         cls,
-        session: AIGenerationSession,
+        session,
         *,
         from_sequence: int = 1,
     ) -> list[AIGenerationMessageOut]:
+        from service.ai_generation.models import AIGenerationMessage
+
         # Order by id (always reliable) instead of sequence
         rows = await AIGenerationMessage.filter(
             session_id=session.id,
@@ -77,7 +82,9 @@ class MessageService:
         cls,
         session_id: int,
         user_id: int,
-    ) -> AIGenerationSession:
+    ):
+        from service.ai_generation.models import AIGenerationSession
+
         session = await AIGenerationSession.get_or_none(id=session_id)
         if session is None:
             raise AppException("生成会话不存在", 404)

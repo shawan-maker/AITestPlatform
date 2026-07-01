@@ -213,6 +213,8 @@ class SessionLifecycleService:
             extra["interface_ids"] = interface_ids
         elif mode == "from_doc" and api_doc_text:
             extra["api_doc"] = api_doc_text
+        elif mode == "from_prompt" and user_prompt:
+            extra["api_doc"] = user_prompt  # from_prompt 模式：user_prompt 即原始接口文档
         elif interface_id:
             extra["api_doc"] = source_text
             from service.api_test.dependency.resolver_service import DependencyResolverService

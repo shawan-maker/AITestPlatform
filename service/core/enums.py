@@ -104,6 +104,7 @@ class ApiInterfaceSource(str, Enum):
     openapi = "openapi"
     rag = "rag"
     manual = "manual"
+    ai = "ai"
 
 
 class ApiBaseCaseStatus(str, Enum):

@@ -93,7 +93,7 @@ async def list_debug_records(
     # 获取接口名称
     from service.api_test.models import ApiInterface
     iface = await ApiInterface.get_or_none(id=interface_id)
-    iface_name = (iface.summary or iface.name) if iface else None
+    iface_name = iface.summary if iface else None
 
     qs = (
         ApiCaseRunRecord.filter(interface_id=interface_id, run_type="debug")

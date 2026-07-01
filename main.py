@@ -35,6 +35,25 @@ app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
 app.include_router(api_router, prefix=API_V1_PREFIX)
 
 
+# ===== ORM 健康诊断中间件 =====
+@app.middleware("http")
+async def orm_health_check_middleware(request: Request, call_next):
+    """在每个请求前后检查 ORM 模型字段完整性，发现损坏立即记录"""
+    from service.ai_generation.agent_stream import AgentStreamService
+    path = request.url.path
+
+    # 只检查关键 API 路径，避免过多日志
+    if any(kw in path for kw in ['/auth/verify', '/projects/', '/sessions', '/messages', '/suites', '/environments']):
+        diag_before = AgentStreamService._diagnose_orm_health()
+        if 'is_deleted=False' in diag_before or 'gen_type=False' in diag_before or 'apps=EMPTY' in diag_before:
+            print(f"[ORM-DIAG] ⚠️ ORM 已损坏! path={path} BEFORE: {diag_before}", flush=True)
+        elif '/sessions/' in path or '/messages' in path:
+            print(f"[ORM-DIAG] ✅ path={path} BEFORE: {diag_before}", flush=True)
+
+    response = await call_next(request)
+    return response
+
+
 @app.exception_handler(AppException)
 async def app_exception_handler(request: Request, exc: AppException):
     return JSONResponse(

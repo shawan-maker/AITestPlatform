@@ -35,6 +35,7 @@ from mcp_tools.tools import (
 )
 # 引入双记忆系统模块：DualMemoryManager（管理读写逻辑）+ RuntimeContext（运行时上下文）
 from agents.memory.manager import DualMemoryManager, RuntimeContext
+from service.core.async_utils import run_on_main_loop
 
 
 class AgentManage:
@@ -49,6 +50,19 @@ class AgentManage:
             name="case_generate_agent",
             model=llm,
             tools=[search_requirement, generate_testcases],
+            prompt=case_generate_agent_prompt.prompt,
+            checkpointer=memory.checkpointer,
+        )
+        return agent
+
+    @staticmethod
+    def create_functional_generate_agent():
+        """创建不含 search_requirement 的轻量手工用例生成 Agent（用于无文档场景）"""
+        memory = DualMemoryManager()
+        agent = create_react_agent(
+            name="functional_generate_agent",
+            model=llm,
+            tools=[generate_testcases],
             prompt=case_generate_agent_prompt.prompt,
             checkpointer=memory.checkpointer,
         )
@@ -90,7 +104,9 @@ class AgentManage:
         """
         memory = DualMemoryManager()
 
-        input_data = asyncio.run(memory.prepare_messages(context, query))
+        # 通过 run_on_main_loop 将协程安全调度到主事件循环，
+        # 避免 asyncio.run() 创建/销毁事件循环导致 ORM 连接池损坏
+        input_data = run_on_main_loop(memory.prepare_messages(context, query))
 
         config = run_config or {"configurable": {"thread_id": context.thread_id}}
         if "configurable" not in config:
@@ -131,7 +147,7 @@ class AgentManage:
 
         full_result = "".join(result_parts)
         if full_result.strip():
-            asyncio.run(memory.save_after_turn(context, query, full_result))
+            run_on_main_loop(memory.save_after_turn(context, query, full_result))
 
 
 if __name__ == '__main__':

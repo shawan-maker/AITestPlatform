@@ -109,6 +109,12 @@ class GeneratePoints(BaseModel):
     def verify_coverage(self,state: State2):
         """验证测试点覆盖率"""
         writer = get_stream_writer()
+        max_test_points = state.get("max_test_points")
+        current_count = len(state.get("test_points") or [])
+        # 仅当已达数量上限时跳过（还有空间则正常验证，允许补全）
+        if max_test_points is not None and current_count >= max_test_points:
+            writer(f"【跳过】测试点数量已达上限（{current_count}/{max_test_points}），跳过覆盖率验证")
+            return {"coverage_report": ["测试点已经全部覆盖"]}
         writer("【开始执行节点】 2、验证测试点覆盖率：")
         user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
         # 1、编写提示词
@@ -231,13 +237,15 @@ class GenerateTestCases:
         """创建测试点"""
         writer = get_stream_writer()
         writer("【开始执行节点】 3.1 创建测试点：")
-        
+
         # 解析用户提示词中的数量要求（如"5条"、"10个"、"5个测试用例"等）
         max_test_points = None  # 默认不限制
         user_prompt = state.get("user_prompt") or ""
         import re
         # 支持匹配：5条、5个、5个测试点、5条用例、5个测试用例、5条测试用例
-        match = re.search(r'(\d+)\s*(条|个)(测试用例|测试点|用例)?', user_prompt)
+        # Fallback: 当 user_prompt 为空时（工具未传递），也从 requirement 中解析数量
+        search_text = user_prompt if user_prompt else (state.get("requirement") or "")
+        match = re.search(r'(\d+)\s*(条|个)(测试用例|测试点|用例)?', search_text)
         if match:
             max_test_points = int(match.group(1))
         
@@ -267,7 +275,9 @@ class GenerateTestCases:
         max_test_points = None  # 默认不限制
         user_prompt = state.get("user_prompt") or ""
         import re
-        match = re.search(r'(\d+)\s*(条|个)(测试用例|测试点|用例)?', user_prompt)
+        # Fallback: 当 user_prompt 为空时，也从 requirement 中解析数量
+        search_text = user_prompt if user_prompt else (state.get("requirement") or "")
+        match = re.search(r'(\d+)\s*(条|个)(测试用例|测试点|用例)?', search_text)
         if match:
             max_test_points = int(match.group(1))
         

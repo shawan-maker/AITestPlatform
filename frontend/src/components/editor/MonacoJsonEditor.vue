@@ -1,9 +1,9 @@
 <template>
-  <div ref="containerRef" class="monaco-json-editor" :style="{ height: `${height}px` }" />
+  <div ref="containerRef" class="monaco-json-editor" :style="containerStyle" />
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as monaco from 'monaco-editor'
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker'
@@ -18,8 +18,15 @@ self.MonacoEnvironment = {
 const props = defineProps({
   modelValue: { type: String, default: '' },
   readOnly: { type: Boolean, default: false },
-  height: { type: Number, default: 280 },
+  height: { type: [Number, String], default: 280 },
   language: { type: String, default: 'json' },
+})
+
+const containerStyle = computed(() => {
+  if (typeof props.height === 'string') {
+    return { height: props.height }
+  }
+  return { height: `${props.height}px` }
 })
 
 const emit = defineEmits(['update:modelValue'])

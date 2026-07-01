@@ -55,17 +55,6 @@
             @stop="stopStream"
             @open-case-list="handleOpenCaseList"
           >
-            <template #after-messages>
-              <AgentPayloadCard
-                v-if="sessionDetail?.output_payload && hasPayloadData && !hasAgentResponse"
-                gen-type="functional"
-                :payload="sessionDetail.output_payload"
-                :can-edit="canEdit"
-                :saving="saving"
-                :catalogs="catalogs"
-                @save="saveCases"
-              />
-            </template>
           </AgentChatPanel>
 
           <!-- Composer in chat mode (compact) -->
@@ -93,7 +82,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -375,13 +364,25 @@ async function createSessionFromComposer(payload) {
   }
 }
 
+// Flag to prevent concurrent state updates during cleanup
+let isCleaningUp = false
+
 function stopStream() {
+  isCleaningUp = true
+
+  console.log(`[FunctionalAgentPanel-DIAG] stopStream() 调用, streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
   abortController?.abort()
   abortController = null
   streaming.value = false
   streamingText.value = ''
   hasStageProgress.value = false
   stageLogLines.value = []
+  console.log(`[FunctionalAgentPanel-DIAG] stopStream() 完成, 活跃SSE=${window.__activeSSECount || 0}`)
+
+  // Reset flag after cleanup is complete
+  setTimeout(() => {
+    isCleaningUp = false
+  }, 100)
 }
 
 // Promise to track payload_updated completion
@@ -718,11 +719,14 @@ async function sendMessage(content) {
       await loadMessages()
     }
   } finally {
-    streaming.value = false
-    streamingText.value = ''
-    hasStageProgress.value = false
-    stageLogLines.value = []
-    abortController = null
+    // Only cleanup if stopStream() hasn't already done it
+    if (!isCleaningUp) {
+      streaming.value = false
+      streamingText.value = ''
+      hasStageProgress.value = false
+      stageLogLines.value = []
+      abortController = null
+    }
   }
 }
 
@@ -809,14 +813,6 @@ async function saveCases(payload) {
 }
 
 watch(
-  () => props.isActive,
-  (active) => {
-    if (active) emit('composer-mode-change', composerMode.value)
-  },
-  { immediate: true },
-)
-
-watch(
   () => route.query.requirement,
   (val) => {
     if (typeof val === 'string' && val && props.autoNew) {
@@ -848,6 +844,45 @@ onMounted(async () => {
     setComposerMode(true)
   }
 })
+
+onBeforeUnmount(() => {
+  console.log(`[FunctionalAgentPanel-DIAG] onBeforeUnmount 触发, streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
+  // 组件卸载时，中止流式传输和轮询，防止后台继续运行导致浏览器卡死
+  if (streaming.value) {
+    stopStream()
+  }
+  _stopRunningPoll()
+  console.log('[FunctionalAgentPanel] 组件卸载，已清理流式传输和轮询')
+})
+
+// 标签切换时，暂停/恢复后台活动（流式传输和轮询）
+watch(
+  () => props.isActive,
+  (active) => {
+    if (active) {
+      emit('composer-mode-change', composerMode.value)
+      // 恢复：刷新 session 状态，如果有正在运行的 session，重新启动轮询
+      if (activeSessionId.value) {
+        refreshSession().then(() => {
+          if (sessionDetail.value?.status === 'running' && !_runningPollTimer) {
+            _startRunningPoll()
+          } else if (sessionDetail.value?.status !== 'running' && !streaming.value) {
+            // session 在隐藏期间完成了，重新加载消息
+            loadMessages()
+          }
+        })
+      }
+    } else {
+      // 暂停：中止流式传输和轮询，释放所有 HTTP 连接，防止浏览器卡死
+      // 后端会继续生成，用户切回后会重新加载状态
+      if (streaming.value) {
+        stopStream()
+      }
+      _stopRunningPoll()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped lang="scss">
