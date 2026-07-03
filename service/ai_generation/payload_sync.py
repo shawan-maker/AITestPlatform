@@ -27,7 +27,7 @@ def session_id_from_config(config: dict[str, Any] | None) -> int | None:
 async def sync_functional_payload(session_id: int, workflow_result: dict[str, Any]) -> None:
     import logging
     _logger = logging.getLogger(__name__)
-    
+
     session = await AIGenerationSession.get_or_none(id=session_id)
     if session is None:
         return

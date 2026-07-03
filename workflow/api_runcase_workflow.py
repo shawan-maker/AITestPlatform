@@ -67,6 +67,15 @@ def _resolve_test_env_data(state: APIState) -> dict:
         from service.test_execution.env_loader import load_test_env_data_plain
 
         return load_test_env_data_plain(environment_id)
+    # 无环境时：如果仅做结构化（skip_execution=True），返回空数据允许 LLM 继续执行
+    if state.get("skip_execution"):
+        return {
+            "base_url": "",
+            "headers": {},
+            "envs": {},
+            "global_func": "",
+            "db": [],
+        }
     raise RuntimeError(
         "预执行需要有效的 environment_id 或 test_env_data；请在 confirm 时指定测试环境"
     )

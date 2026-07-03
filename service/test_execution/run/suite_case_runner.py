@@ -1,11 +1,8 @@
-import copy
-
 from service.api_test.models import ApiTestCase
 from service.api_test.shared.runner_gateway import RunnerGateway
 from service.core.enums import CaseRunStatus, CaseRunType
 from service.test_execution.case_prepare_service import prepare_case_payload
 from service.test_execution.models import ApiCaseRunRecord
-from service.test_execution.shared.run_var_context import RunVarContext
 
 
 class SuiteCaseRunner:
@@ -22,11 +19,8 @@ class SuiteCaseRunner:
         environment_id: int,
         env_snapshot_id: int,
         triggered_by_id: int,
-        run_context: RunVarContext | None = None,
+        run_id: str | None = None,
     ) -> ApiCaseRunRecord:
-        ctx = run_context or RunVarContext()
-        env_data = copy.deepcopy(test_env_data)
-
         # 按 precondition_ids 加载关联的前置用例
         pre_cases = []
         if use_dependency:
@@ -56,7 +50,7 @@ class SuiteCaseRunner:
             prepared_main["preconditions"] = engine_preconditions
 
         record = await RunnerGateway.execute_case_payload(
-            test_env_data=env_data,
+            test_env_data=test_env_data,
             case_payload=prepared_main,
             case_name=case.title,
             api_case_id=case.id,
@@ -68,7 +62,7 @@ class SuiteCaseRunner:
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.suite,
             project_id=project_id,
-            temp_vars=ctx.temp_vars,
+            run_id=run_id,
         )
 
         # 从日志解析前置步骤结果，更新各 DB 前置用例

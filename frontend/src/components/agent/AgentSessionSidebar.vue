@@ -215,6 +215,7 @@ function statusType(status) {
   if (status === 'success') return 'success'
   if (status === 'failed') return 'danger'
   if (status === 'running') return 'warning'
+  if (status === 'confirm') return 'primary'
   return 'info'
 }
 
@@ -222,6 +223,7 @@ function statusLabel(status) {
   const map = {
     pending: t('page.agent.statusPending'),
     running: t('page.agent.statusRunning'),
+    confirm: t('page.agent.statusConfirming'),
     success: t('page.agent.statusSuccess'),
     failed: t('page.agent.statusFailed'),
   }

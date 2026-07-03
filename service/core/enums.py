@@ -239,6 +239,7 @@ class InputRefType(str, Enum):
 class SessionStatus(str, Enum):
     pending = "pending"
     running = "running"
+    confirming = "confirm"  # 等待用户确认/编辑
     success = "success"
     failed = "failed"
 

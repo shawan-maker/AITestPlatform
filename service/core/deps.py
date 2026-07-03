@@ -25,55 +25,15 @@ async def get_access_payload(token: str = Depends(oauth2_scheme)) -> dict:
 
 
 async def get_current_user(payload: dict = Depends(get_access_payload)) -> User:
-    import logging as _logging
-    _diag_log = _logging.getLogger("orm_diag")
-
-    from tortoise import Tortoise
-    conn = Tortoise.get_connection("default")
-
-    user_id = int(payload["sub"])
-
-    # 诊断：记录连接对象标识和池状态
-    import threading as _threading
-    conn_id = id(conn)
-    thread_id = _threading.current_thread().name
-    try:
-        pool = conn._pool
-        pool_state = f"pool(size={pool.size},free={pool.freesize},max={pool.maxsize})"
-    except Exception:
-        pool_state = "pool_unknown"
-
-    # 诊断：拦截 _init_from_db
-    _orig_init = User._init_from_db
-    _captured = {}
-
-    @classmethod
-    def _patched_init(cls, **kwargs):
-        _captured['kwargs_keys'] = list(kwargs.keys())
-        _captured['kwargs_count'] = len(kwargs)
-        return _orig_init.__func__(cls, **kwargs)
-
-    User._init_from_db = _patched_init
-    try:
-        user = await User.get_or_none(id=user_id)
-    finally:
-        User._init_from_db = _orig_init
-
+    from datetime import datetime, timezone
+    import logging
+    logging.getLogger("db_trace").info(
+        "[TIME] get_current_user at %s uid=%s",
+        datetime.now(timezone.utc).isoformat(), payload.get("sub"),
+    )
+    user = await User.get_or_none(id=int(payload["sub"]))
     if user is None:
         raise AppException("用户不存在", 401)
-
-    if not hasattr(user, 'is_deleted'):
-        user_keys = [k for k in user.__dict__.keys() if not k.startswith('_')]
-        _diag_log.error(
-            "[ORM-DIAG] ❌ conn_id=%s thread=%s %s user_id=%s _partial=%s "
-            "has=%s init_received=%d_keys:%s",
-            conn_id, thread_id, pool_state, user_id,
-            getattr(user, '_partial', 'N/A'),
-            user_keys,
-            _captured.get('kwargs_count', -1),
-            _captured.get('kwargs_keys', []),
-        )
-
     if user.is_deleted:
         raise AppException("账号已删除", 401)
     return user

@@ -73,28 +73,8 @@ AI_AGENT_SESSION_HISTORY_LIMIT: int = int(
     os.getenv("AI_AGENT_SESSION_HISTORY_LIMIT", "10")
 )
 
-# ---------- Parse DATABASE_URL into credentials for pool config ----------
-from urllib.parse import urlparse as _parse_db_url
-
-_db_parsed = _parse_db_url(DATABASE_URL)
-_DB_CREDENTIALS = {
-    "host": _db_parsed.hostname or "127.0.0.1",
-    "port": _db_parsed.port or 3306,
-    "user": _db_parsed.username or "root",
-    "password": _db_parsed.password or "",
-    "database": _db_parsed.path.lstrip("/") or "aiTestPlatform",
-    # 禁用连接池：每个查询使用独立连接，彻底消除并发数据串流
-    "minsize": 1,
-    "maxsize": 1,
-}
-
 TORTOISE_ORM = {
-    "connections": {
-        "default": {
-            "engine": "tortoise.backends.mysql",
-            "credentials": _DB_CREDENTIALS,
-        },
-    },
+    "connections": {"default": DATABASE_URL},
     "apps": {
         "models": {
             "models": [

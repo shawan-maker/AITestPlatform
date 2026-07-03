@@ -1,5 +1,8 @@
 import asyncio
+import time
 from datetime import datetime, timezone
+
+from ApiEngine.core import TestRunner
 
 from service.api_test.models import ApiTestCase
 from service.core.enums import CaseRunStatus, RunMode, RunStatus, SuiteCaseType
@@ -7,7 +10,6 @@ from service.test_environment.variable.assembler import TestEnvDataAssembler
 from service.test_execution.models import TestSuiteRun
 from service.test_execution.run.run_lock import clear_cancel_flag, is_cancel_requested
 from service.test_execution.run.suite_case_runner import SuiteCaseRunner
-from service.test_execution.shared.run_var_context import RunVarContext
 from service.test_execution.shared.summary_calculator import compute_run_status
 from service.test_management.models import SuiteCaseRelation, TestSuite
 
@@ -39,11 +41,15 @@ class SuiteRunner:
         passed = failed = error = skipped = 0
         cancelled = False
         start = suite_run.start_time or datetime.now(timezone.utc)
-        serial_context = RunVarContext()
+
+        # 注册套件级共享变量存储
+        run_id = f"suite-{suite.id}-{suite_run_id}-{time.time()}"
+        base_envs = dict(test_env_data.get("envs") or {})
+        TestRunner.register_run(run_id, base_envs)
 
         async def run_relation(
             rel: SuiteCaseRelation,
-            run_context: RunVarContext,
+            case_run_id: str | None,
         ) -> tuple[bool, CaseRunStatus | None]:
             case = await ApiTestCase.get_or_none(id=rel.case_id)
             if case is None:
@@ -58,7 +64,7 @@ class SuiteRunner:
                 environment_id=env_id,
                 env_snapshot_id=snap_id,
                 triggered_by_id=suite_run.triggered_by_id,
-                run_context=run_context,
+                run_id=case_run_id,
             )
             return False, record.status
 
@@ -91,33 +97,40 @@ class SuiteRunner:
             else:
                 parallel_main.append(rel)
 
-        if suite.run_mode == RunMode.parallel:
-            for rel in dep_serial:
-                if is_cancel_requested(suite_run_id):
-                    cancelled = True
-                    break
-                apply_result(*await run_relation(rel, serial_context))
-                await flush_progress()
-
-            if not cancelled and parallel_main:
-                if is_cancel_requested(suite_run_id):
-                    cancelled = True
-                else:
-
-                    async def run_parallel(rel: SuiteCaseRelation) -> tuple[bool, CaseRunStatus | None]:
-                        return await run_relation(rel, RunVarContext())
-
-                    results = await asyncio.gather(*(run_parallel(r) for r in parallel_main))
-                    for was_skipped, status in results:
-                        apply_result(was_skipped, status)
+        try:
+            if suite.run_mode == RunMode.parallel:
+                # 依赖用例串行执行（共享 run_id，变量跨用例累积）
+                for rel in dep_serial:
+                    if is_cancel_requested(suite_run_id):
+                        cancelled = True
+                        break
+                    apply_result(*await run_relation(rel, run_id))
                     await flush_progress()
-        else:
-            for rel in relations:
-                if is_cancel_requested(suite_run_id):
-                    cancelled = True
-                    break
-                apply_result(*await run_relation(rel, serial_context))
-                await flush_progress()
+
+                # 并行用例独立执行（不传 run_id，各用例隔离）
+                if not cancelled and parallel_main:
+                    if is_cancel_requested(suite_run_id):
+                        cancelled = True
+                    else:
+
+                        async def run_parallel(rel: SuiteCaseRelation) -> tuple[bool, CaseRunStatus | None]:
+                            return await run_relation(rel, None)
+
+                        results = await asyncio.gather(*(run_parallel(r) for r in parallel_main))
+                        for was_skipped, status in results:
+                            apply_result(was_skipped, status)
+                        await flush_progress()
+            else:
+                # 全部串行（共享 run_id，变量跨用例累积）
+                for rel in relations:
+                    if is_cancel_requested(suite_run_id):
+                        cancelled = True
+                        break
+                    apply_result(*await run_relation(rel, run_id))
+                    await flush_progress()
+        finally:
+            # 清理套件级共享变量存储
+            TestRunner.unregister_run(run_id)
 
         end = datetime.now(timezone.utc)
         total = passed + failed + error + skipped

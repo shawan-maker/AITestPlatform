@@ -954,6 +954,30 @@ class ApiCaseGenerationService:
                 iface_sub["url"] = case_payload.get("path", "")
                 iface_sub["method"] = (case_payload.get("method") or "GET").lower()
                 case_payload["interface"] = iface_sub
+
+                # ── 变量名归一化：setup_script 保存的变量名 vs URL/request 引用的变量名 ──
+                # URL 已从 DB 接口文档覆盖，以 URL 中的 ${var} 为准，修正 setup_script
+                _setup = case_payload.get("setup_script") or ""
+                _var_ref_re = re.compile(r'\$\{([^}]+)\}')
+                _save_var_re = re.compile(r'save_env_variable\s*\(\s*["\']([^"\']+)["\']')
+                _saved = _save_var_re.findall(_setup)
+                if _saved:
+                    _refs = set(_var_ref_re.findall(iface_sub.get("url", "")))
+                    _refs.update(_var_ref_re.findall(str(case_payload.get("request") or {})))
+                    _refs.update(_var_ref_re.findall(str(case_payload.get("headers") or {})))
+                    # 用语义匹配找到 ref→saved_var 映射，再反转为 saved_var→ref
+                    _ref_to_sv = cls._build_var_replacements(case_payload, _saved, _refs)
+                    _sv_to_ref = {sv: ref for ref, sv in _ref_to_sv.items()}
+                    if _sv_to_ref:
+                        for old_name, new_name in _sv_to_ref.items():
+                            _setup = _setup.replace(
+                                f'save_env_variable("{old_name}"', f'save_env_variable("{new_name}"')
+                            _setup = _setup.replace(
+                                f"save_env_variable('{old_name}'", f"save_env_variable('{new_name}'")
+                            _setup = re.sub(r'\b' + re.escape(old_name) + r'\b', new_name, _setup)
+                        case_payload["setup_script"] = _setup
+                        logger.info("[precondition] 变量归一化 '%s': %s", dep_name, _sv_to_ref)
+
                 logger.info(
                     "[precondition] 使用 AI 数据构建: %s, assertions=%d, extract=%d",
                     dep_name,
@@ -1202,6 +1226,72 @@ class ApiCaseGenerationService:
         return cases if isinstance(cases, list) else []
 
     @staticmethod
+    def _get_ref_param_context(case: dict, var_pattern) -> dict[str, set[str]]:
+        """构建 ${ref} → 所在参数名集合 的映射，用于语义匹配。
+
+        例：request.data.phone = "${p}" → {"p": {"phone"}}
+        """
+        ctx: dict[str, set[str]] = {}
+        for section in ("data", "params", "json"):
+            body = (case.get("request") or {}).get(section)
+            if isinstance(body, dict):
+                for param_name, param_value in body.items():
+                    if isinstance(param_value, str):
+                        for ref in var_pattern.findall(param_value):
+                            ctx.setdefault(ref, set()).add(param_name.lower())
+        # URL 路径参数
+        url = (case.get("interface") or {}).get("url", "") or case.get("path", "")
+        for ref in var_pattern.findall(url):
+            ctx.setdefault(ref, set()).add(f"url:{ref}")
+        return ctx
+
+    @staticmethod
+    def _build_var_replacements(case: dict, saved_vars: list[str], refs: set[str]) -> dict[str, str]:
+        """语义匹配：为不匹配的 ${ref} 找到正确的 saved_var，返回替换映射。
+
+        匹配策略（优先级从高到低）：
+        1. 语义匹配：ref 所在的参数名 与 saved_var 名称有包含关系
+        2. 前缀匹配：仅在唯一候选时生效（降级策略）
+        """
+        var_pattern = re.compile(r'\$\{([^}]+)\}')
+        saved_set = set(saved_vars)
+        param_ctx = ApiCaseGenerationService._get_ref_param_context(case, var_pattern)
+
+        replacements = {}
+        for ref in refs:
+            if ref in saved_set:
+                continue
+
+            # 策略 1：语义匹配 — 参数名上下文
+            ref_params = param_ctx.get(ref, set())
+            semantic_match = None
+            for sv in saved_vars:
+                sv_lower = sv.lower()
+                for p in ref_params:
+                    # 参数名与变量名有包含关系
+                    if p in sv_lower or sv_lower in p:
+                        semantic_match = sv
+                        break
+                if semantic_match:
+                    break
+
+            if semantic_match:
+                replacements[ref] = semantic_match
+                continue
+
+            # 策略 2：前缀匹配（仅唯一候选时）
+            candidates = [sv for sv in saved_vars if sv.startswith(ref) and sv != ref]
+            if len(candidates) == 1:
+                replacements[ref] = candidates[0]
+            elif not candidates:
+                for sv in saved_vars:
+                    if ref.startswith(sv) and len(ref) > len(sv):
+                        replacements[ref] = sv
+                        break
+
+        return replacements
+
+    @staticmethod
     def _align_variable_names(
         ai_precondition_map: dict[str, dict],
         pre_run_results: list,
@@ -1304,7 +1394,6 @@ class ApiCaseGenerationService:
             saved_vars = _get_saved_vars(pre.get("setup_script") or "")
             if not saved_vars:
                 continue
-            saved_set = set(saved_vars)
 
             # 收集此用例 URL + request + headers 中的所有引用
             refs = set()
@@ -1314,22 +1403,31 @@ class ApiCaseGenerationService:
             refs.update(_get_all_refs(pre.get("request") or {}))
             refs.update(_get_all_refs(pre.get("headers") or {}))
 
-            replacements = {}
-            for ref in refs:
-                if ref in saved_set:
-                    continue
-                # 前缀匹配：saved_var 以 ref 开头（如 r → r_num）
-                candidates = [sv for sv in saved_vars if sv.startswith(ref) and sv != ref]
-                if len(candidates) == 1:
-                    replacements[ref] = candidates[0]
-                # 反向匹配：ref 以 saved_var 开头（如 r_num → r）
-                elif not candidates:
-                    for sv in saved_vars:
-                        if ref.startswith(sv) and len(ref) > len(sv):
-                            replacements[ref] = sv
-                            break
-
+            replacements = ApiCaseGenerationService._build_var_replacements(pre, saved_vars, refs)
             _apply_replacements(pre, replacements)
+
+        # ═══════════════════════════════════════════════════
+        # Phase 1.5: 主用例自身的 setup_script vs URL 对齐
+        # ═══════════════════════════════════════════════════
+        for result in pre_run_results:
+            case = result.api_case if hasattr(result, 'api_case') else None
+            if not isinstance(case, dict):
+                continue
+            saved_vars = _get_saved_vars(case.get("setup_script") or "")
+            if not saved_vars:
+                continue
+
+            refs = set()
+            iface = case.get("interface") or {}
+            refs.update(_get_all_refs(iface.get("url", "")))
+            refs.update(_get_all_refs(case.get("path", "")))
+            refs.update(_get_all_refs(case.get("request") or {}))
+            refs.update(_get_all_refs(case.get("headers") or {}))
+
+            replacements = ApiCaseGenerationService._build_var_replacements(case, saved_vars, refs)
+            _apply_replacements(case, replacements)
+
+            _apply_replacements(case, replacements)
 
         # ═══════════════════════════════════════════════════
         # Phase 2: 跨用例对齐（前置 → 主用例）

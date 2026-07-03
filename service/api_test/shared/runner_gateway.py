@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import json
 import logging
 from datetime import datetime, timezone
@@ -10,10 +9,6 @@ from ApiEngine.core import TestRunner
 from service.core.enums import CaseRunStatus, CaseRunType
 from service.test_environment.variable.global_config_service import ProjectGlobalConfigService
 from service.test_execution.models import ApiCaseRunRecord
-from service.test_execution.shared.run_var_context import (
-    prepare_runner_env,
-    sync_temp_vars_from_engine,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +87,13 @@ class RunnerGateway:
         triggered_by_id: int | None = None,
         run_type: CaseRunType = CaseRunType.suite,
         project_id: int | None = None,
-        temp_vars: dict[str, str] | None = None,
+        run_id: str | None = None,
         writeback_global: bool = True,
         existing_record_id: int | None = None,
     ) -> ApiCaseRunRecord:
-        base_envs = dict(test_env_data.get("envs") or {})
-        runner_env = prepare_runner_env(test_env_data, temp_vars)
-        runner = TestRunner(runner_env)
+        # 构建 runner 环境（浅copy，引擎内部会再做 deepcopy）
+        runner_env = dict(test_env_data)
+        runner = TestRunner(runner_env, run_id=run_id)
         start = datetime.now(timezone.utc)
         
         # 初始化详细结果信息
@@ -161,16 +156,24 @@ class RunnerGateway:
         if '_debug_detail' in result:
             result['_debug_detail']['duration_ms'] = duration_ms
 
-        engine_snapshot = runner.get_env_snapshot()
-        if temp_vars is not None:
-            sync_temp_vars_from_engine(temp_vars, base_envs, engine_snapshot)
-
+        # ---- 全局变量写DB ----
         if writeback_global and project_id is not None:
-            debug_updates = engine_snapshot.get("debug_updates") or {}
-            if debug_updates:
-                await ProjectGlobalConfigService.apply_engine_writeback(
-                    project_id, debug_updates
-                )
+            if run_id:
+                # 套件模式：从 _suite_stores 提取 debug_updates
+                debug_updates = TestRunner.get_debug_updates(run_id)
+                if debug_updates:
+                    await ProjectGlobalConfigService.apply_engine_writeback(
+                        project_id, debug_updates
+                    )
+                    TestRunner.clear_debug_updates(run_id)
+            else:
+                # 退化模式（单用例调试）：从引擎快照提取
+                engine_snapshot = runner.get_env_snapshot()
+                debug_updates = engine_snapshot.get("debug_updates") or {}
+                if debug_updates:
+                    await ProjectGlobalConfigService.apply_engine_writeback(
+                        project_id, debug_updates
+                    )
 
         status = map_runner_status(result if isinstance(result, dict) else {})
         safe_result = _make_json_safe(result) if isinstance(result, dict) else None
@@ -220,7 +223,6 @@ class RunnerGateway:
 
         test_env_data = await TestEnvDataAssembler.get_test_env_data(environment_id)
         runner_case = build_runner_case_from_payload(interface, payload)
-        temp_vars: dict[str, str] = {}
         record = await cls.execute_case_payload(
             test_env_data=test_env_data,
             case_payload=runner_case,
@@ -230,7 +232,6 @@ class RunnerGateway:
             triggered_by_id=triggered_by_id,
             run_type=CaseRunType.debug,
             project_id=interface.project_id,
-            temp_vars=temp_vars,
         )
         interface.last_debug_environment_id = environment_id
         await interface.save(update_fields=["last_debug_environment_id", "updated_at"])

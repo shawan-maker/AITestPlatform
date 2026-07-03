@@ -337,27 +337,59 @@ async function selectSession(id) {
   _stopRunningPoll()
   activeSessionId.value = id
   setComposerMode(false)
-  await Promise.all([refreshSession(), loadMessages(), loadSessions()])
 
-  const detail = sessionDetail.value
-  // 隐藏"编辑基础用例"按钮：如果 session 已完成（有 summary）或正在运行中
-  if (detail?.output_payload?.summary || detail?.status === 'running') {
-    pipelineEditDone.value = true
-  } else {
-    pipelineEditDone.value = false
+  try {
+    await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+  } catch (e) {
+    console.error('[ApiAgentPanel] selectSession 加载失败:', e)
+    ElMessage.error('加载会话失败，请稍后重试')
+    return
   }
 
-  // 如果 session 正在后台执行，追加运行中提示并启动轮询
+  const detail = sessionDetail.value
+  // 按钮可见性：confirming 状态显示编辑按钮，running 隐藏，success 看是否有 summary
   if (detail?.status === 'running') {
-    messages.value = [...messages.value, {
-      id: `running-hint-${Date.now()}`,
-      role: 'agent',
-      isStreaming: true,
-      stages: [{ name: 'running', status: 'running', text: '正在生成结构化用例和预执行...', logs: [] }],
-      finalText: '',
-      payload: null,
-      streamingText: '',
-    }]
+    pipelineEditDone.value = true  // 运行中，隐藏按钮
+  } else if (detail?.status === 'confirm') {
+    pipelineEditDone.value = false // 待确认，显示按钮
+  } else {
+    pipelineEditDone.value = !!detail?.output_payload?.summary
+  }
+
+  // 如果 session 正在后台执行，将最后一个 agent 消息标记为 streaming 状态并启动轮询
+  // loadMessages() 已从 DB 加载消息并创建了 agent 块，不需要再追加新的
+  if (detail?.status === 'running') {
+    // 根据 pipeline_progress 确定当前阶段的显示文本
+    const progress = detail?.output_payload?.pipeline_progress
+    const currentPhase = progress?.current_phase
+    const phases = progress?.phases || []
+    let stageText = '正在生成结构化用例和预执行...'
+    if (currentPhase && phases.length) {
+      const runningPhase = phases.find(p => p.status === 'running') || phases.find(p => p.id === currentPhase)
+      if (runningPhase) {
+        stageText = `正在${runningPhase.name}...`
+      }
+    }
+
+    const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
+    if (lastAgentMsg) {
+      // 标记已有的最后一个 agent 块为 streaming
+      lastAgentMsg.isStreaming = true
+      // 追加当前运行阶段到已有的 stages 数组，保留历史阶段日志
+      const existingStages = lastAgentMsg.stages || []
+      lastAgentMsg.stages = [...existingStages, { name: 'running', status: 'running', text: stageText, logs: [] }]
+    } else {
+      // 没有历史 agent 消息（极端情况），追加一个占位提示
+      messages.value = [...messages.value, {
+        id: `running-hint-${Date.now()}`,
+        role: 'agent',
+        isStreaming: true,
+        stages: [{ name: 'running', status: 'running', text: stageText, logs: [] }],
+        finalText: '',
+        payload: null,
+        streamingText: '',
+      }]
+    }
     _startRunningPoll()
   }
 }
@@ -375,6 +407,8 @@ function _startRunningPoll() {
       if (detail && detail.status !== 'running') {
         _stopRunningPoll()
         sessionDetail.value = detail
+        // 重新评估编辑按钮可见性：有 summary 说明已走过编辑阶段
+        pipelineEditDone.value = !!detail.output_payload?.summary
         // 只在不在流式传输时重新加载，避免与正在进行的流式传输冲突
         if (!streaming.value) {
           await Promise.all([loadMessages(), loadSessions()])
@@ -426,14 +460,12 @@ let isCleaningUp = false
 function stopStream() {
   isCleaningUp = true
 
-  console.log(`[ApiAgentPanel-DIAG] stopStream() 调用, 当前 streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
   abortController?.abort()
   abortController = null
   streaming.value = false
   streamingText.value = ''
   hasStageProgress.value = false
   stageLogLines.value = []
-  console.log(`[ApiAgentPanel-DIAG] stopStream() 完成, 活跃SSE=${window.__activeSSECount || 0}`)
 
   // Reset flag after cleanup is complete
   setTimeout(() => {
@@ -720,6 +752,9 @@ async function onSaveEditedBaseCases(editedInterfaces) {
     abortController = new AbortController()
     streaming.value = true
 
+    // 刷新侧边栏，将状态从"待确认"更新为"生成中"
+    loadSessions()
+
     // Reuse the existing agent response from Phase 1-3 instead of creating a new one
     let agentResponse = messages.value.filter(m => m.role === 'agent').pop()
     if (!agentResponse) {
@@ -886,11 +921,34 @@ watch(
       // 恢复：刷新 session 状态，如果有正在运行的 session，重新启动轮询
       if (activeSessionId.value) {
         refreshSession().then(() => {
-          if (sessionDetail.value?.status === 'running' && !_runningPollTimer) {
-            _startRunningPoll()
-          } else if (sessionDetail.value?.status !== 'running' && !streaming.value) {
-            // session 在隐藏期间完成了，重新加载消息
-            loadMessages()
+          const detail = sessionDetail.value
+          // 重新评估编辑按钮可见性
+          if (detail?.status === 'running') {
+            pipelineEditDone.value = true  // 还在运行，隐藏按钮
+            // 标记最后一个 agent 块为 streaming 并显示阶段进度
+            const progress = detail?.output_payload?.pipeline_progress
+            const runningPhase = (progress?.phases || []).find(p => p.status === 'running')
+            const stageText = runningPhase ? `正在${runningPhase.name}...` : '正在生成结构化用例和预执行...'
+            const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
+            if (lastAgentMsg) {
+              lastAgentMsg.isStreaming = true
+              const existingStages = lastAgentMsg.stages || []
+              lastAgentMsg.stages = [...existingStages, { name: 'running', status: 'running', text: stageText, logs: [] }]
+            }
+            if (!_runningPollTimer) {
+              _startRunningPoll()
+            }
+          } else if (detail?.status === 'confirm') {
+            pipelineEditDone.value = false // 待确认，显示按钮
+            if (!streaming.value) {
+              loadMessages()
+            }
+          } else {
+            pipelineEditDone.value = !!detail?.output_payload?.summary
+            if (!streaming.value) {
+              // session 在隐藏期间完成了，重新加载消息
+              loadMessages()
+            }
           }
         })
       }
@@ -932,7 +990,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  console.log(`[ApiAgentPanel-DIAG] onBeforeUnmount 触发, streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
   // 组件卸载时，中止流式传输和轮询，防止后台继续运行导致浏览器卡死
   if (streaming.value) {
     stopStream()

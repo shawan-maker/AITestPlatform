@@ -56,11 +56,16 @@ service.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`
     }
   }
+  // 记录请求发送时间
+  config.metadata = { startTime: Date.now(), startTimeISO: new Date().toISOString() }
+  console.log(`[REQ-TIME] 📤 ${config.method?.toUpperCase()} ${config.url} at ${config.metadata.startTimeISO}`)
   return config
 })
 
 service.interceptors.response.use(
   async (response) => {
+    const duration = response.config.metadata ? Date.now() - response.config.metadata.startTime : '?'
+    console.log(`[REQ-TIME] ✅ ${response.config.method?.toUpperCase()} ${response.config.url} → ${response.status} 耗时 ${duration}ms`)
     const payload = response.data
     if (payload && typeof payload.code === 'number' && !isApiSuccess(payload.code)) {
       ElMessage.error(payload.message || '请求失败')
@@ -69,6 +74,8 @@ service.interceptors.response.use(
     return response
   },
   async (error) => {
+    const duration = error?.config?.metadata ? Date.now() - error.config.metadata.startTime : '?'
+    console.log(`[REQ-TIME] ❌ ${error?.config?.method?.toUpperCase()} ${error?.config?.url} → ${error?.response?.status || 'NO_RESPONSE'} 耗时 ${duration}ms`)
     const { config, response } = error
     if (response?.config?.responseType === 'blob' && response.data instanceof Blob) {
       const parsed = await maybeParseJsonBlob(response)

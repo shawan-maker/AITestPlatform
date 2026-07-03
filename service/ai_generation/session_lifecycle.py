@@ -284,7 +284,10 @@ class SessionLifecycleService:
 
     @classmethod
     async def cleanup_stale_sessions(cls) -> int:
-        """清理启动时仍为 running 状态的孤儿会话（服务重启残留）。"""
+        """清理启动时仍为 running 状态的孤儿会话（服务重启残留）。
+
+        confirming 状态不清理：表示 AI 已完成、等待用户确认，重启后用户仍可查看/操作。
+        """
         stale_sessions = await AIGenerationSession.filter(status=SessionStatus.running)
         count = 0
         for session in stale_sessions:

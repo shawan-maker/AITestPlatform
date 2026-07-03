@@ -236,7 +236,7 @@ class FunctionalCaseGenerationService:
 
         session = await cls._get_session_or_404(session_id)
         await ensure_case_editor(session.project_id, user)
-        if session.status != SessionStatus.success or not session.output_payload:
+        if session.status not in (SessionStatus.success, SessionStatus.confirming) or not session.output_payload:
             raise AppException("生成会话未完成或无预览数据", 400)
 
         # [DEBUG-问题6] 详细日志：保存前的关键信息
@@ -322,6 +322,11 @@ class FunctionalCaseGenerationService:
             print(f"[DEBUG-SAVE] 异常类型: {type(txn_err).__name__}")
             print(f"[DEBUG-SAVE] 完整堆栈:\n{traceback.format_exc()}")
             raise
+
+        # 用户已确认保存，将状态从 confirming 更新为 success
+        if session.status == SessionStatus.confirming:
+            session.status = SessionStatus.success
+            await session.save(update_fields=["status"])
 
         return GenerationSaveResult(
             created_case_ids=created_case_ids,

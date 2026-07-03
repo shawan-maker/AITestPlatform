@@ -300,7 +300,13 @@ async function selectSession(id) {
   _stopRunningPoll()
   activeSessionId.value = id
   setComposerMode(false)
-  await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+  try {
+    await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+  } catch (e) {
+    console.error('[FunctionalAgentPanel] selectSession 加载失败:', e)
+    ElMessage.error('加载会话失败，请稍后重试')
+    return
+  }
   // 如果 session 仍在后台执行中，启动轮询
   if (sessionDetail.value?.status === 'running') _startRunningPoll()
 }
@@ -370,14 +376,12 @@ let isCleaningUp = false
 function stopStream() {
   isCleaningUp = true
 
-  console.log(`[FunctionalAgentPanel-DIAG] stopStream() 调用, streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
   abortController?.abort()
   abortController = null
   streaming.value = false
   streamingText.value = ''
   hasStageProgress.value = false
   stageLogLines.value = []
-  console.log(`[FunctionalAgentPanel-DIAG] stopStream() 完成, 活跃SSE=${window.__activeSSECount || 0}`)
 
   // Reset flag after cleanup is complete
   setTimeout(() => {
@@ -411,6 +415,10 @@ async function sendMessage(content) {
   streamingText.value = ''
   hasStageProgress.value = false
   abortController = new AbortController()
+
+  // 乐观更新本地 session 状态为 running，然后刷新侧边栏
+  const activeSession = sessions.value.find(s => s.id === activeSessionId.value)
+  if (activeSession) activeSession.status = 'running'
   
   // Initialize payload_updated tracking Promise
   payloadUpdatedPromise = new Promise((resolve) => {
@@ -846,7 +854,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  console.log(`[FunctionalAgentPanel-DIAG] onBeforeUnmount 触发, streaming=${streaming.value}, 活跃SSE=${window.__activeSSECount || 0}`)
   // 组件卸载时，中止流式传输和轮询，防止后台继续运行导致浏览器卡死
   if (streaming.value) {
     stopStream()

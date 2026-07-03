@@ -336,6 +336,7 @@
       "roleSystem": "System",
       "statusPending": "Pending",
       "statusRunning": "Running",
+      "statusConfirming": "Confirming",
       "statusSuccess": "Success",
       "statusFailed": "Failed",
       "editTitle": "Edit Title",

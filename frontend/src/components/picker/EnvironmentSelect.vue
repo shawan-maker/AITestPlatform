@@ -23,7 +23,7 @@ defineProps({
 defineEmits(['update:modelValue'])
 
 const { t } = useI18n()
-const { withProjectParams } = useProjectScope()
+const { projectId, withProjectParams } = useProjectScope()
 const environments = ref([])
 
 async function load() {
@@ -34,7 +34,10 @@ async function load() {
 }
 
 onMounted(load)
-watch(() => withProjectParams(), load)
+// 直接监听 projectId 而非 withProjectParams()，避免每次返回新对象导致 watch 引用比较失效
+watch(projectId, () => {
+  load()
+})
 
 defineExpose({ environments })
 </script>

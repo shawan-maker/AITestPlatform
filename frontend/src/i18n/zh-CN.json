@@ -336,6 +336,7 @@
       "roleSystem": "系统",
       "statusPending": "待处理",
       "statusRunning": "生成中",
+      "statusConfirming": "待确认",
       "statusSuccess": "成功",
       "statusFailed": "失败",
       "editTitle": "编辑名称",

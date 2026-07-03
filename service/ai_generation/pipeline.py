@@ -34,6 +34,9 @@ def _sse(event: str, data: Any) -> str:
 class ApiAgentPipeline:
     """Multi-interface deterministic pipeline."""
 
+    # 保持后台 Task 的强引用，防止 GC 回收导致 Task 被取消
+    _running_tasks: set[asyncio.Task] = set()
+
     # ------------------------------------------------------------------
     # Phase 1-3: Initial generation (SSE Stream 1)
     # ------------------------------------------------------------------
@@ -47,7 +50,47 @@ class ApiAgentPipeline:
         interface_ids: list[int] | None,
         api_doc_text: str | None,
     ) -> AsyncIterator[str]:
-        """SSE Stream 1: Phase 1 -> 2 -> 3."""
+        """SSE Stream 1: Phase 1 -> 2 -> 3.
+
+        解耦架构：实际执行在 asyncio.Task 中后台运行，
+        SSE 生成器仅从 Queue 读取事件转发。客户端断开时
+        Task 继续执行并完成 DB 更新，用户回来后可看到结果。
+        """
+        queue: asyncio.Queue = asyncio.Queue()
+        task = asyncio.create_task(
+            cls._execute_phase_1_to_3(
+                session, queue,
+                mode=mode,
+                user_prompt=user_prompt,
+                interface_ids=interface_ids,
+                api_doc_text=api_doc_text,
+            )
+        )
+        # 保持强引用，防止 generator 退出后 Task 被 GC 回收取消
+        cls._running_tasks.add(task)
+        task.add_done_callback(cls._running_tasks.discard)
+        try:
+            while True:
+                item = await queue.get()
+                if item is None:  # 哨兵值
+                    break
+                yield item
+        except (GeneratorExit, asyncio.CancelledError):
+            _log.info("[pipeline] Phase 1-3 SSE 客户端断开 session=%s，后台任务继续执行", session.id)
+            return  # Task 继续运行，不取消
+
+    @classmethod
+    async def _execute_phase_1_to_3(
+        cls,
+        session: AIGenerationSession,
+        queue: asyncio.Queue,
+        *,
+        mode: str,
+        user_prompt: str | None,
+        interface_ids: list[int] | None,
+        api_doc_text: str | None,
+    ) -> None:
+        """后台执行 Phase 1-3，事件写入 Queue，完成后更新 DB。"""
         try:
             payload = dict(session.output_payload or {})
             payload["mode"] = mode
@@ -72,106 +115,112 @@ class ApiAgentPipeline:
 
             # -- Phase 1: Create interfaces (Mode 1 only) --
             if mode in ("from_doc", "from_prompt") and api_doc_text:
-                yield _sse("stage", {
+                await queue.put(_sse("stage", {
                     "name": "create_interfaces",
                     "status": "running",
                     "text": "正在解析接口文档...",
-                })
+                }))
                 interfaces_data = await cls._phase1_create_interfaces(
                     session, api_doc_text
                 )
                 payload["interfaces"] = interfaces_data
-                yield _sse("stage", {
+                await queue.put(_sse("stage", {
                     "name": "create_interfaces",
                     "status": "done",
                     "text": f"解析完成，共发现 {len(interfaces_data)} 个接口",
-                })
+                }))
                 await MessageService.append(session.id, role=MessageRole.tool, content=f"解析完成，共发现 {len(interfaces_data)} 个接口", message_type=MessageType.custom)
-                yield _sse("pipeline_progress", cls._update_progress(
+                await queue.put(_sse("pipeline_progress", cls._update_progress(
                     payload["pipeline_progress"], phase=1, status="done"
-                ))
+                )))
             elif mode == "from_interfaces" and interface_ids:
                 # Load existing interfaces
                 interfaces_data = await cls._load_existing_interfaces(interface_ids, session.project_id)
                 payload["interfaces"] = interfaces_data
                 # Skip phase 1
-                yield _sse("pipeline_progress", cls._update_progress(
+                await queue.put(_sse("pipeline_progress", cls._update_progress(
                     payload["pipeline_progress"], phase=1, status="done"
-                ))
+                )))
 
             # -- Phase 2/1: Generate base cases per interface --
-            yield _sse("stage", {
+            await queue.put(_sse("stage", {
                 "name": "generate_base_cases",
                 "status": "running",
                 "text": "正在为各接口生成基础用例...",
-            })
+            }))
+            await MessageService.append(session.id, role=MessageRole.tool, content="正在为各接口生成基础用例...", message_type=MessageType.custom)
 
             for i, iface in enumerate(payload["interfaces"]):
-                yield _sse("custom", f"正在为「{iface.get('summary', '')}」生成基础用例...")
+                await queue.put(_sse("custom", f"正在为「{iface.get('summary', '')}」生成基础用例..."))
                 try:
                     base_cases = await cls._generate_base_cases_for_interface(
                         iface, user_prompt, session.project_id
                     )
                     iface["base_cases"] = base_cases
                     iface["selected_indexes"] = list(range(len(base_cases)))
-                    yield _sse("custom", f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例")
+                    await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例"))
                     await MessageService.append(session.id, role=MessageRole.tool, content=f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例", message_type=MessageType.custom)
-                    yield _sse("interface_progress", {
+                    await queue.put(_sse("interface_progress", {
                         "interface_index": i,
                         "phase": "base_cases_done",
                         "case_count": len(base_cases),
-                    })
+                    }))
                 except Exception as e:
                     _log.error("基础用例生成失败 [%s]: %s", iface.get("summary"), e, exc_info=True)
                     iface["base_cases"] = []
                     iface["selected_indexes"] = []
                     iface["error"] = str(e)
-                    yield _sse("custom", f"❌ 「{iface.get('summary', '')}」生成失败: {str(e)[:100]}")
+                    await queue.put(_sse("custom", f"❌ 「{iface.get('summary', '')}」生成失败: {str(e)[:100]}"))
+                    await MessageService.append(session.id, role=MessageRole.tool, content=f"❌ 「{iface.get('summary', '')}」生成失败: {str(e)[:100]}", message_type=MessageType.custom)
 
-            yield _sse("stage", {
+            await queue.put(_sse("stage", {
                 "name": "generate_base_cases",
                 "status": "done",
                 "text": "基础用例生成完毕",
-            })
-            yield _sse("pipeline_progress", cls._update_progress(
+            }))
+            await MessageService.append(session.id, role=MessageRole.tool, content="基础用例生成完毕", message_type=MessageType.custom)
+            await queue.put(_sse("pipeline_progress", cls._update_progress(
                 payload["pipeline_progress"], phase=2, status="done"
-            ))
+            )))
 
             # -- Phase 3/2: Present cards --
             # Save payload to DB
             session.output_payload = payload
-            session.status = SessionStatus.success
+            session.status = SessionStatus.confirming
             session.finished_at = datetime.now(timezone.utc)
             await session.save(update_fields=["output_payload", "status", "finished_at"])
 
-            yield _sse("stage", {
+            await queue.put(_sse("stage", {
                 "name": "edit_base_cases",
                 "status": "running",
                 "text": "请检查并编辑基础用例",
-            })
-            yield _sse("pipeline_progress", cls._update_progress(
+            }))
+            await MessageService.append(session.id, role=MessageRole.tool, content="请检查并编辑基础用例", message_type=MessageType.custom)
+            await queue.put(_sse("pipeline_progress", cls._update_progress(
                 payload["pipeline_progress"], phase=3, status="running"
-            ))
-            yield _sse("payload_updated", {})
-            yield _sse("done", {})
+            )))
+            await queue.put(_sse("payload_updated", {}))
+            await queue.put(_sse("done", {}))
 
         except Exception as e:
             _log.error("Pipeline phase 1-3 failed: %s", e, exc_info=True)
-            session.status = SessionStatus.failed
-            session.error_message = str(e)
-            session.finished_at = datetime.now(timezone.utc)
-            await session.save(update_fields=["status", "error_message", "finished_at"])
-            yield _sse("error", {"message": str(e)})
-            yield _sse("done", {})
-        except (GeneratorExit, asyncio.CancelledError):
-            # 客户端断开连接：Phase 1-3 需要用户确认，无需后台继续执行
-            _log.info("[pipeline] Phase 1-3 客户端断开连接 session=%s", session.id)
-            refreshed = await AIGenerationSession.get_or_none(id=session.id)
-            if refreshed and refreshed.status == SessionStatus.running:
-                refreshed.status = SessionStatus.failed
-                refreshed.error_message = "连接中断，请重新生成"
-                refreshed.finished_at = datetime.now(timezone.utc)
-                await refreshed.save(update_fields=["status", "error_message", "finished_at"])
+            try:
+                await MessageService.append(session.id, role=MessageRole.tool, content=f"❌ 生成失败: {str(e)[:200]}", message_type=MessageType.custom)
+            except Exception:
+                pass
+            try:
+                refreshed = await AIGenerationSession.get_or_none(id=session.id)
+                if refreshed:
+                    refreshed.status = SessionStatus.failed
+                    refreshed.error_message = str(e)
+                    refreshed.finished_at = datetime.now(timezone.utc)
+                    await refreshed.save(update_fields=["status", "error_message", "finished_at"])
+            except Exception as db_err:
+                _log.error("Phase 1-3 更新失败状态时出错: %s", db_err)
+            await queue.put(_sse("error", {"message": str(e)}))
+            await queue.put(_sse("done", {}))
+        finally:
+            await queue.put(None)  # 哨兵值，通知 SSE reader 结束
 
     # ------------------------------------------------------------------
     # Phase 4-5: Structuring + execution (SSE Stream 2)
@@ -193,6 +242,9 @@ class ApiAgentPipeline:
         task = asyncio.create_task(
             cls._execute_phase_4_to_5(session, queue, environment_id)
         )
+        # 保持强引用，防止 generator 退出后 Task 被 GC 回收取消
+        cls._running_tasks.add(task)
+        task.add_done_callback(cls._running_tasks.discard)
         try:
             while True:
                 item = await queue.get()
@@ -492,7 +544,8 @@ class ApiAgentPipeline:
         """Parse API doc and create interfaces in DB. Returns interface data list."""
         from utils.parser.api_document_ai_parser import APIDocumentParser
 
-        parsed = APIDocumentParser().api_parser(api_doc_text)
+        # FIX: 使用 asyncio.to_thread 将同步 LLM 调用放到后台线程，避免阻塞 event loop
+        parsed = await asyncio.to_thread(APIDocumentParser().api_parser, api_doc_text)
         if not parsed:
             return []
         if isinstance(parsed, dict):
@@ -643,12 +696,53 @@ class ApiAgentPipeline:
             precoditions = await ApiCaseGenerationService._get_all_project_interface_summaries(project_id)
 
         workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
-        state = workflow.invoke({
+        # FIX: 使用 asyncio.to_thread 将同步 LangGraph invoke 放到后台线程，避免阻塞 event loop
+        state = await asyncio.to_thread(workflow.invoke, {
             "api_doc": api_doc,
             "precoditions": precoditions,
             "user_prompt": user_prompt,
         })
-        return state.get("api_cases") or []
+        base_cases = state.get("api_cases") or []
+
+        # 安全网：过滤掉不属于目标接口的用例（LLM 可能错误地为前置依赖接口生成用例）
+        target_summary = iface_data.get("summary", "")
+        if base_cases and precoditions and target_summary:
+            base_cases = cls._filter_precondition_cases(base_cases, target_summary, precoditions)
+
+        return base_cases
+
+    @classmethod
+    def _filter_precondition_cases(
+        cls, cases: list[dict], target_summary: str, precondition_summaries: list[str]
+    ) -> list[dict]:
+        """过滤掉主要描述前置依赖接口的用例。
+
+        判断逻辑：用例名称与某个前置接口名称高度相似，且与目标接口名称不相似，
+        则该用例属于前置接口，应过滤。
+        """
+        filtered = []
+        for case in cases:
+            name = (case.get("name") or "").strip()
+            if not name:
+                filtered.append(case)
+                continue
+
+            # 检查用例名称是否主要匹配前置依赖接口
+            is_precond_case = False
+            for pre_summary in precondition_summaries:
+                if not pre_summary:
+                    continue
+                # 用例名称包含前置接口名称 且 不包含目标接口名称 → 属于前置接口的用例
+                if pre_summary in name and target_summary not in name:
+                    is_precond_case = True
+                    _log.info("[pipeline] 过滤前置依赖用例: '%s' (匹配前置: '%s', 目标: '%s')",
+                              name, pre_summary, target_summary)
+                    break
+
+            if not is_precond_case:
+                filtered.append(case)
+
+        return filtered
 
     @classmethod
     async def _get_or_create_ai_catalog(cls, project_id: int, name: str = "AI生成接口"):
