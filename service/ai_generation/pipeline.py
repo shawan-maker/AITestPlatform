@@ -567,6 +567,10 @@ class ApiAgentPipeline:
             session.finished_at = datetime.now(timezone.utc)
             await session.save(update_fields=["output_payload", "status", "finished_at"])
 
+            # 自动生成标题（fire-and-forget，不阻塞 pipeline）
+            from service.ai_generation.session_lifecycle import SessionLifecycleService
+            asyncio.create_task(SessionLifecycleService.auto_summarize_title(session.id))
+
             # 持久化关键阶段消息到数据库，供历史记录回放
             from service.ai_generation.message_service import MessageService
             from service.core.enums import MessageRole, MessageType
@@ -768,12 +772,10 @@ class ApiAgentPipeline:
         from service.api_test.case.generation_service import ApiCaseGenerationService
 
         target_summary = iface_data.get("summary", "")
-        _log.info("[BASE-CASE-GEN] 🚀 开始生成基础用例: interface=%s", target_summary)
 
         api_doc = iface_data.get("api_doc", "")
         if isinstance(api_doc, dict):
             api_doc = json.dumps(api_doc, ensure_ascii=False)
-        _log.info("[BASE-CASE-GEN] api_doc length=%d", len(api_doc) if api_doc else 0)
 
         # Layer 1: Get pre-configured dependencies for this interface
         precoditions: list[str] = []
@@ -788,11 +790,9 @@ class ApiAgentPipeline:
         # Layer 2: If no pre-configured deps, pass all project interfaces for LLM auto-detection
         if not precoditions:
             precoditions = await ApiCaseGenerationService._get_all_project_interface_summaries(project_id)
-        _log.info("[BASE-CASE-GEN] preconditions count=%d for interface=%s", len(precoditions), target_summary)
 
         workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         _t0 = _time.monotonic()
-        _log.info("[BASE-CASE-GEN] ⏳ 调用 workflow.invoke (LLM) at %s ...", _time.strftime('%H:%M:%S'))
         # FIX: 使用 asyncio.to_thread 将同步 LangGraph invoke 放到后台线程，避免阻塞 event loop
         state = await asyncio.to_thread(workflow.invoke, {
             "api_doc": api_doc,
@@ -800,28 +800,15 @@ class ApiAgentPipeline:
             "user_prompt": user_prompt,
         })
         _elapsed = _time.monotonic() - _t0
-        _log.info("[BASE-CASE-GEN] ✅ workflow.invoke 完成, 耗时=%.1fs, interface=%s", _elapsed, target_summary)
 
-        # Log the raw state keys and api_cases
-        _log.info("[BASE-CASE-GEN] state keys=%s", list(state.keys()) if isinstance(state, dict) else type(state).__name__)
         raw_cases = state.get("api_cases") if isinstance(state, dict) else None
-        _log.info("[BASE-CASE-GEN] raw api_cases: type=%s, len=%s",
-                  type(raw_cases).__name__ if raw_cases is not None else 'None',
-                  len(raw_cases) if raw_cases else 0)
-        if raw_cases:
-            for i, c in enumerate(raw_cases[:3]):
-                _log.info("[BASE-CASE-GEN]   case[%d]: name=%s", i, c.get("name", "N/A") if isinstance(c, dict) else str(c)[:80])
 
         base_cases = raw_cases or []
 
         # 安全网：过滤掉不属于目标接口的用例（LLM 可能错误地为前置依赖接口生成用例）
         if base_cases and precoditions and target_summary:
-            before_count = len(base_cases)
             base_cases = cls._filter_precondition_cases(base_cases, target_summary, precoditions)
-            _log.info("[BASE-CASE-GEN] filter: %d → %d cases (removed %d precondition cases)",
-                      before_count, len(base_cases), before_count - len(base_cases))
 
-        _log.info("[BASE-CASE-GEN] 🏁 最终结果: %d 条基础用例, interface=%s", len(base_cases), target_summary)
         return base_cases
 
     @classmethod
@@ -1071,19 +1058,6 @@ class ApiAgentPipeline:
                     environment_id=environment_id,
                     triggered_by_id=user_id,
                 )
-                _log.info("[EXEC-CASE] case_id=%s | status=%s | record_type=%s | record_keys=%s",
-                          case_id, getattr(record, 'status', 'N/A'),
-                          type(record).__name__,
-                          [k for k in dir(record) if not k.startswith('_')] if record else 'None')
-                # Log response details for debugging empty response issue
-                if hasattr(record, 'response_body'):
-                    _log.info("[EXEC-CASE] case_id=%s | response_body_len=%s | request_body=%s",
-                              case_id,
-                              len(str(record.response_body)) if record.response_body else 0,
-                              str(getattr(record, 'request_body', ''))[:200])
-                if hasattr(record, 'request_headers'):
-                    _log.info("[EXEC-CASE] case_id=%s | request_headers=%s",
-                              case_id, dict(record.request_headers) if record.request_headers else 'None')
                 if record.status == CaseRunStatus.success:
                     passed += 1
                     await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.success)
@@ -1330,6 +1304,7 @@ class ApiAgentPipeline:
             total_passed += er.get("passed", 0)
             total_total += er.get("total", 0)
             per_interface.append({
+                "interface_id": iface.get("interface_id"),
                 "summary": iface.get("summary", ""),
                 "method": iface.get("method", ""),
                 "path": iface.get("path", ""),

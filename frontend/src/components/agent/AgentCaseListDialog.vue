@@ -282,16 +282,12 @@ function getRealIndex(pageIdx) {
 
 function openEditor(caseRow, realIndex) {
   editingCase.value = { ...caseRow }
-  // 调试：查看test_data原始类型和值
-  console.log('[DEBUG] openEditor: test_data =', caseRow.test_data, ', typeof =', typeof caseRow.test_data)
   // 修复：test_data为对象时JSON序列化，无数据时为空字符串
   if (editingCase.value.test_data !== undefined && editingCase.value.test_data !== null) {
     if (typeof editingCase.value.test_data === 'object') {
       try {
         editingCase.value.test_data = JSON.stringify(editingCase.value.test_data, null, 2)
-        console.log('[DEBUG] openEditor: stringified test_data =', editingCase.value.test_data)
       } catch (e) {
-        console.error('[DEBUG] openEditor: JSON.stringify test_data failed', e)
         editingCase.value.test_data = ''
       }
     }
@@ -336,12 +332,10 @@ async function confirmSave() {
 
 // 将目录树扁平化为带路径的列表
 function flattenCatalogs(tree, parentPath = '') {
-  console.log('[DEBUG] flattenCatalogs 开始, parentPath:', parentPath, 'tree长度:', tree?.length)
   const result = []
   function walk(nodes, path) {
     for (const node of nodes) {
       const currentPath = path ? `${path}/${node.name}` : node.name
-      console.log('[DEBUG] walk 处理节点:', node.name, '当前路径:', currentPath)
       result.push({
         id: node.id,
         name: currentPath
@@ -352,13 +346,11 @@ function flattenCatalogs(tree, parentPath = '') {
     }
   }
   walk(tree, parentPath)
-  console.log('[DEBUG] flattenCatalogs 完成, 结果数量:', result.length, '结果示例:', result.slice(0, 3))
   return result
 }
 
 // 项目切换时，重新加载该项目的目录列表
 async function onProjectChange(projectId) {
-  console.log('[DEBUG] onProjectChange: projectId =', projectId)
   // 重置目录选择
   saveForm.value.catalogId = null
   catalogs.value = []
@@ -376,9 +368,7 @@ async function onProjectChange(projectId) {
     const rawTree = res.data.data?.items ?? res.data.data ?? []
     // 扁平化目录树，显示完整路径
     catalogs.value = flattenCatalogs(rawTree)
-    console.log('[DEBUG] onProjectChange: loaded and flattened catalogs =', catalogs.value)
   } catch (e) {
-    console.error('[DEBUG] onProjectChange: failed to load catalogs', e)
     catalogs.value = []
   } finally {
     catalogsLoading.value = false
@@ -396,13 +386,10 @@ watch(() => showSaveDialog.value, async (visible) => {
     }
     // 加载项目列表（只加载一次）
     if (projectVersions.value.length === 0) {
-      console.log('[DEBUG] showSaveDialog opened, loading project list...')
       try {
         const res = await listProjects()
         projectVersions.value = res.data.data?.items ?? res.data.data ?? []
-        console.log('[DEBUG] Loaded project list:', projectVersions.value)
       } catch (e) {
-        console.error('[DEBUG] Failed to load project list:', e)
       }
     }
   } else {

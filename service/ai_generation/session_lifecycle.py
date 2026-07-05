@@ -342,46 +342,54 @@ class SessionLifecycleService:
         return {"success": True}
 
     @classmethod
-    async def summarize_and_update_title(cls, user: User, *, session_id: int) -> AIGenerationSessionOut:
-        """Generate AI title and update session."""
-        import os
-        log_file = "d:/PyProject/AITestPlatform/debug_title.log"
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"\n[DEBUG] summarize_and_update_title called, session_id: {session_id}\n")
-        
-        session = await AIGenerationSession.get_or_none(id=session_id)
-        if not session:
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"[DEBUG] Session not found: {session_id}\n")
-            raise AppException("会话不存在", 404)
-        
-        first_msg = await AIGenerationMessage.filter(
-            session_id=session_id, role="user"
-        ).order_by("sequence").first()
-        
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"[DEBUG] first_msg: {first_msg}\n")
-        
-        if first_msg and first_msg.content:
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"[DEBUG] first_msg.content: {first_msg.content[:100]}...\n")
-            
+    async def auto_summarize_title(cls, session_id: int) -> None:
+        """Session 完成时自动生成标题（fire-and-forget，永不抛异常）。
+
+        在 _finalize() 和 pipeline 完成时通过 asyncio.create_task 调用，
+        确保用户切走后标题也能自动生成。前端下次 loadSessions() 时自然拉取。
+        """
+        try:
+            session = await AIGenerationSession.get_or_none(id=session_id)
+            if not session:
+                return
+            # 已有有效标题则跳过（非"新对话"、非截断文本）
+            if session.title and session.title != '新对话' and not session.title.endswith('...'):
+                return
+            first_msg = await AIGenerationMessage.filter(
+                session_id=session_id, role="user"
+            ).order_by("sequence").first()
+            if not first_msg or not first_msg.content:
+                return
             new_title = await cls.summarize_session_title(
                 session_id=session_id, user_first_msg=first_msg.content[:500]
             )
-            
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"[DEBUG] new_title: {new_title}\n")
-            
             if new_title:
                 session.title = new_title[:200]
                 await session.save(update_fields=["title"])
-                with open(log_file, "a", encoding="utf-8") as f:
-                    f.write(f"[DEBUG] session.title updated to: {session.title}\n")
-        else:
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"[DEBUG] No user message found, cannot generate title\n")
-        
+                _log.info("[auto-title] session=%s title='%s'", session_id, new_title[:50])
+        except Exception as e:
+            _log.warning("[auto-title] session=%s failed: %s", session_id, e)
+
+    @classmethod
+    async def summarize_and_update_title(cls, user: User, *, session_id: int) -> AIGenerationSessionOut:
+        """Generate AI title and update session."""
+        session = await AIGenerationSession.get_or_none(id=session_id)
+        if not session:
+            raise AppException("会话不存在", 404)
+
+        first_msg = await AIGenerationMessage.filter(
+            session_id=session_id, role="user"
+        ).order_by("sequence").first()
+
+        if first_msg and first_msg.content:
+            new_title = await cls.summarize_session_title(
+                session_id=session_id, user_first_msg=first_msg.content[:500]
+            )
+
+            if new_title:
+                session.title = new_title[:200]
+                await session.save(update_fields=["title"])
+
         return session_to_out(session)
 
     @classmethod

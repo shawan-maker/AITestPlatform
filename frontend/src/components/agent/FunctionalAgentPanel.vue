@@ -153,12 +153,11 @@ let _lastEventSeq = -1  // SSE event sequence tracking for reconnect
 let _loadGen = 0          // selectSession / isActive 代次计数器，防止竞态覆盖
 let _isActiveBusy = false // 防止 isActive watcher 并发执行
 let _titleBusy = false    // 防止 _ensureSessionTitle 并发调用
+let _selectSessionTimer = null // selectSession 防抖定时器
 
 // Check if current messages contain a completed agent response (not streaming)
 const hasAgentResponse = computed(() => {
-  const result = messages.value.some(m => m.role === 'agent' && !m.isStreaming)
-  console.log('[DEBUG] hasAgentResponse computed:', result, 'messages count:', messages.value.length)
-  return result
+  return messages.value.some(m => m.role === 'agent' && !m.isStreaming)
 })
 
 // Check if sessionDetail has valid payload data
@@ -211,10 +210,8 @@ async function loadMessages(gen) {
     messages.value = []
     return
   }
-  console.log('[LOAD-MSG] fetching messages for session:', activeSessionId.value)
   const res = await listFunctionalMessages(activeSessionId.value)
   const raw = res.data.data ?? []
-  console.log('[LOAD-MSG] raw messages from DB:', raw.length, '| roles:', raw.map(m => m.role).join(','))
 
   // Merge legacy messages (role=assistant/tool/system) into unified agent responses
   const merged = []
@@ -274,7 +271,6 @@ async function loadMessages(gen) {
     }
   } else if (!lastAgent && payload && (payload.test_points?.length || payload.cases?.length)) {
     // DB 中无 assistant/tool 消息（竞态窗口），但 payload 已存在 → 从 payload 构建结果块
-    console.log('[LOAD-MSG] no agent in DB but payload exists → building result block from payload')
     merged.push({
       id: `agent-payload-${Date.now()}`,
       role: 'agent',
@@ -310,13 +306,8 @@ async function loadMessages(gen) {
     }
   }
 
-  console.log('[LOAD-MSG] final messages:', merged.length,
-    '| has agent:', merged.some(m => m.role === 'agent'),
-    '| agent has payload:', merged.find(m => m.role === 'agent')?.payload ? true : false,
-    '| agent has finalText:', !!merged.find(m => m.role === 'agent')?.finalText)
   // 竞态保护：如果 selectSession 已被新的调用取代，丢弃本次过期响应
   if (gen !== undefined && gen !== _loadGen) {
-    console.log('[LOAD-MSG] stale response discarded, gen:', gen, 'current:', _loadGen)
     return
   }
   messages.value = merged
@@ -361,29 +352,39 @@ function startNewSession() {
 }
 
 async function selectSession(id) {
-  console.log('[SELECT-SESSION] id:', id, '| streaming:', streaming.value,
-    '| previous session:', activeSessionId.value,
-    '| current messages count:', messages.value.length,
-    '| has agent msg:', messages.value.some(m => m.role === 'agent'))
   if (streaming.value) stopStream()
   _stopRunningPoll()
   _lastEventSeq = -1
   const gen = ++_loadGen
   activeSessionId.value = id
+  // 立即显示加载占位，给用户切换反馈（替代白屏）
+  messages.value = [{
+    id: 'loading-placeholder',
+    role: 'agent',
+    isStreaming: true,
+    stages: [{ name: 'processing', status: 'running', text: '正在加载会话...', logs: [] }],
+    finalText: '',
+    payload: null,
+    streamingText: '',
+  }]
   setComposerMode(false)
+  // 防抖：300ms 内的连续点击只执行最后一次，减少请求风暴
+  if (_selectSessionTimer) clearTimeout(_selectSessionTimer)
+  await new Promise(resolve => {
+    _selectSessionTimer = setTimeout(() => {
+      _selectSessionTimer = null
+      resolve()
+    }, 300)
+  })
+  if (gen !== _loadGen) return
   try {
     await Promise.all([refreshSession(), loadMessages(gen), loadSessions()])
     // 竞态保护：如果用户已切到其他 session，丢弃本次结果
     if (gen !== _loadGen) {
-      console.log('[SELECT-SESSION] stale discarded, gen:', gen, 'current:', _loadGen)
       return
     }
-    console.log('[SELECT-SESSION] loaded | status:', sessionDetail.value?.status,
-      '| messages count:', messages.value.length,
-      '| has agent msg:', messages.value.some(m => m.role === 'agent'))
     await _ensureSessionTitle()
   } catch (e) {
-    console.error('[SELECT-SESSION] 加载失败:', e)
     if (gen !== _loadGen) return // 过期请求不弹错误提示
     ElMessage.error('加载会话失败，请稍后重试')
     return
@@ -391,7 +392,6 @@ async function selectSession(id) {
   // 如果 session 仍在后台执行中，启动轮询
   if (gen !== _loadGen) return // 再次检查，防止 await 期间被取代
   if (sessionDetail.value?.status === 'running') {
-    console.log('[SELECT-SESSION] status is running → start poll')
     _startRunningPoll()
   }
 }
@@ -402,14 +402,12 @@ function _stopRunningPoll() {
 
 function _startRunningPoll() {
   _stopRunningPoll()
-  console.log('[POLL] starting poll for session:', activeSessionId.value)
   _runningPollTimer = setInterval(async () => {
     try {
       const res = await getFunctionalSession(activeSessionId.value)
       const detail = res.data.data
       if (detail) {
         sessionDetail.value = detail
-        console.log('[POLL] status:', detail.status, '| has agent msg:', messages.value.some(m => m.role === 'agent'))
         if (detail.status !== 'running') {
           // 状态已完成，重新加载消息和侧边栏
           await loadMessages()
@@ -418,16 +416,14 @@ function _startRunningPoll() {
           // DB 有 agent 消息（assistant 已存入 DB = _finalize 已完成）→ 停止轮询
           // loadMessages 已自动附加 payload，卡片可正常显示
           if (messages.value.some(m => m.role === 'agent')) {
-            console.log('[POLL] agent msg found in DB, stopping poll')
             _stopRunningPoll()
           } else {
             // DB 仍无 agent 消息 → 保持当前 messages（含 payload 构建的结果块），继续轮询
-            console.log('[POLL] no agent msg in DB yet, continuing poll')
           }
         }
       }
     } catch (e) {
-      console.error('[POLL] session poll failed:', e)
+      // poll failed silently
     }
   }, 3000)
 }
@@ -440,22 +436,17 @@ async function _ensureSessionTitle() {
   if (_titleBusy) return
   const s = sessionDetail.value
   if (!s || s.status !== 'success' || !activeSessionId.value) {
-    console.log('[TITLE-FIX] skip: status=%s, sessionId=%s', s?.status, activeSessionId.value)
     return
   }
   if (s.title && s.title !== '新对话' && !s.title.endsWith('...')) {
-    console.log('[TITLE-FIX] skip: title already set:', s.title)
     return
   }
   _titleBusy = true
-  console.log('[TITLE-FIX] title missing, triggering summarize | sessionId:', activeSessionId.value,
-    '| currentTitle:', s.title)
   try {
     await summarizeFunctionalTitle(activeSessionId.value)
-    await loadSessions()
-    console.log('[TITLE-FIX] ✅ title generated and sessions reloaded')
+    loadSessions() // fire-and-forget，不阻塞 _titleBusy 释放
   } catch (e) {
-    console.error('[TITLE-FIX] ❌ summarizeFunctionalTitle failed:', e)
+    // title generation failed silently
   } finally {
     _titleBusy = false
   }
@@ -466,8 +457,6 @@ async function _ensureSessionTitle() {
  */
 async function _tryReconnect() {
   if (!activeSessionId.value) return
-
-  console.log('[reconnect] Attempting SSE reconnect for functional session', activeSessionId.value, 'lastSeq:', _lastEventSeq)
 
   abortController = new AbortController()
   streaming.value = true
@@ -481,6 +470,8 @@ async function _tryReconnect() {
           const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
           if (lastAgentMsg) {
             const stages = lastAgentMsg.stages || []
+            // 新阶段到达时，标记旧 running 阶段为 done（与 sendMessage/getStage 一致）
+            stages.forEach(s => { if (s.status === 'running' && s.name !== data.name) s.status = 'done' })
             let stage = stages.find(s => s.name === data.name)
             if (!stage) {
               // 查找空的 processing 占位并替换（与 getStage 同理）
@@ -492,7 +483,17 @@ async function _tryReconnect() {
                 stage = stages[processingIdx]
               } else {
                 stage = { name: data.name, status: 'running', text: '', logs: [] }
-                stages.push(stage)
+                // 已完成的阶段插入到当前 running 阶段之前，保持时间顺序
+                if (data.status === 'done') {
+                  const runningIdx = stages.findIndex(s => s.status === 'running')
+                  if (runningIdx >= 0) {
+                    stages.splice(runningIdx, 0, stage)
+                  } else {
+                    stages.push(stage)
+                  }
+                } else {
+                  stages.push(stage)
+                }
               }
               lastAgentMsg.stages = [...stages]
             }
@@ -525,8 +526,6 @@ async function _tryReconnect() {
   } else {
     await Promise.all([loadMessages(), loadSessions()])
   }
-
-  console.log('[reconnect] Reconnect completed, session status:', detail?.status)
 }
 
 async function createSessionFromComposer(payload) {
@@ -664,7 +663,6 @@ async function sendMessage(content) {
         const emptyInitIdx = agentResponse.stages.findIndex(s =>
           (s.name === 'initializing' || s.name === 'processing') && s.status === 'done' && (!s.logs || s.logs.length === 0) && !s.text
         )
-        console.log('[STAGE] new stage:', name, '| existing stages:', agentResponse.stages.map(s => s.name + '(' + s.status + ')'), '| emptyInitIdx:', emptyInitIdx)
         if (emptyInitIdx >= 0) {
           // 替换空的 initializing/processing 阶段
           agentResponse.stages[emptyInitIdx] = { name, status: 'running', text: '', logs: [] }
@@ -1079,71 +1077,43 @@ onBeforeUnmount(() => {
 watch(
   () => props.isActive,
   (active) => {
-    console.log('[TAB-WATCH] isActive changed:', active,
-      '| sessionId:', activeSessionId.value,
-      '| streaming:', streaming.value,
-      '| messages count:', messages.value.length,
-      '| has agent msg:', messages.value.some(m => m.role === 'agent'))
-
     if (active) {
       if (_isActiveBusy) {
-        console.log('[TAB-WATCH] → skip: previous activation still busy')
         return
       }
       _isActiveBusy = true
       emit('composer-mode-change', composerMode.value)
       // 恢复：刷新 session 状态，如果有正在运行的 session，尝试重连 SSE 或轮询
       if (activeSessionId.value) {
-        console.log('[TAB-WATCH] → calling refreshSession...')
         refreshSession().then(async () => {
           const gen = ++_loadGen
           const status = sessionDetail.value?.status
-          const hasPayload = !!sessionDetail.value?.output_payload
-          const payloadKeys = hasPayload ? Object.keys(sessionDetail.value.output_payload) : []
-          console.log('[TAB-WATCH] → refreshSession done:',
-            '| status:', status,
-            '| hasPayload:', hasPayload,
-            '| payloadKeys:', payloadKeys,
-            '| messages count:', messages.value.length,
-            '| has agent msg:', messages.value.some(m => m.role === 'agent'),
-            '| gen:', gen)
 
           if (status === 'running') {
-            console.log('[TAB-WATCH] → branch: RUNNING (keep local messages, try reconnect)')
-            // 仍在运行：保留本地 messages（不 loadMessages），尝试重连
+            // 先从 DB 重建 history 阶段（把已完成的 tool/assistant 消息收纳到 history）
+            await loadMessages(gen)
+            if (gen !== _loadGen) return // 竞态保护
+            // 仍在运行：标记最后一个 agent 块为 streaming
             const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
             if (lastAgentMsg) {
               lastAgentMsg.isStreaming = true
             }
-            _tryReconnect().catch((e) => {
-              console.log('[TAB-WATCH] → reconnect failed:', e?.message, '→ fallback to poll')
+            _tryReconnect().catch(() => {
               if (!_runningPollTimer) _startRunningPoll()
             })
           } else if (!streaming.value) {
-            console.log('[TAB-WATCH] → branch: NOT RUNNING (loadMessages)')
             // 已完成/失败/待确认：从 DB 加载消息
-            const beforeCount = messages.value.length
-            const beforeHasAgent = messages.value.some(m => m.role === 'agent')
             await loadMessages(gen)
             loadSessions()
             // 竞态保护：loadMessages 内部已检查 gen，这里再次检查后续逻辑
             if (gen !== _loadGen) {
-              console.log('[TAB-WATCH] stale after loadMessages, gen:', gen, 'current:', _loadGen)
               return
             }
-            console.log('[TAB-WATCH] → loadMessages done:',
-              '| before:', beforeCount, 'msgs, hasAgent:', beforeHasAgent,
-              '| after:', messages.value.length, 'msgs, hasAgent:', messages.value.some(m => m.role === 'agent'))
 
             // 检查是否有 agent 消息（DB 有 assistant = _finalize 已完成）
             const agentMsg = messages.value.find(m => m.role === 'agent')
             if (!agentMsg) {
-              console.log('[TAB-WATCH] no agent msg after loadMessages, start poll')
               _startRunningPoll()
-            } else {
-              console.log('[TAB-WATCH] agent msg found, no poll needed',
-                '| hasPayload:', !!agentMsg.payload,
-                '| hasFinalText:', !!agentMsg.finalText)
             }
             await _ensureSessionTitle()
           }
@@ -1151,13 +1121,9 @@ watch(
           _isActiveBusy = false
         })
       } else {
-        console.log('[TAB-WATCH] → no activeSessionId, skip')
         _isActiveBusy = false
       }
     } else {
-      console.log('[TAB-WATCH] → DEACTIVATE: stopping stream and poll',
-        '| messages count:', messages.value.length,
-        '| has agent msg:', messages.value.some(m => m.role === 'agent'))
       // 暂停：中止流式传输和轮询，释放所有 HTTP 连接，防止浏览器卡死
       if (streaming.value) {
         stopStream()

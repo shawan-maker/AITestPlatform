@@ -28,7 +28,8 @@
       >
         <div class="pipeline-summary__iface-header">
           <el-tag :type="methodTagType(iface.method)" size="small">{{ iface.method }}</el-tag>
-          <span class="pipeline-summary__iface-name">{{ iface.summary }}</span>
+          <a v-if="iface.interface_id" class="pipeline-summary__iface-link" @click="$emit('navigate', iface.interface_id)">{{ iface.summary }}</a>
+          <span v-else class="pipeline-summary__iface-name">{{ iface.summary }}</span>
         </div>
         <div class="pipeline-summary__iface-stats">
           <span class="pipeline-summary__case-count">
@@ -73,6 +74,8 @@ import { CircleCheckFilled } from '@element-plus/icons-vue'
 defineProps({
   summary: { type: Object, default: () => ({}) },
 })
+
+defineEmits(['navigate'])
 
 const { t } = useI18n()
 
@@ -163,6 +166,15 @@ function passRateColor(rate) {
 .pipeline-summary__iface-name {
   font-weight: 500;
   font-size: 13px;
+}
+
+.pipeline-summary__iface-link {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--el-color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+  &:hover { color: var(--el-color-primary-light-3); }
 }
 
 .pipeline-summary__iface-stats {

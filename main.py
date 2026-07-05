@@ -30,12 +30,6 @@ _log_file = open(_LOG_FILE, 'w', encoding='utf-8')
 sys.stdout = _TeeWriter(sys.__stdout__, _log_file)
 sys.stderr = _TeeWriter(sys.__stderr__, _log_file)
 
-print(f"[DEBUG] Python executable: {sys.executable}")
-print(f"[DEBUG] Python version: {sys.version}")
-print(f"[DEBUG] sys.path: {sys.path[:3]}...")
-print(f"[DEBUG] sys.stdout type: {type(sys.stdout).__name__}", flush=True)
-print(f"[DEBUG] TEST PRINT WORKS", flush=True)
-
 # 配置日志模块也写入同一文件
 import logging
 _file_handler = logging.StreamHandler(_log_file)

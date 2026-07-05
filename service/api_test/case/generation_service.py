@@ -910,6 +910,13 @@ class ApiCaseGenerationService:
 
             # 优先用 AI 生成的前置步骤数据（含变量引用、提取、断言）
             ai_step = (ai_precondition_map or {}).get(dep_name)
+            # 精确匹配失败时，尝试子串匹配（LLM 生成的标题可能与依赖名不完全一致）
+            if not ai_step and ai_precondition_map:
+                for _ai_key, _ai_val in ai_precondition_map.items():
+                    if dep_name in _ai_key or _ai_key in dep_name:
+                        ai_step = _ai_val
+                        logger.info("[precondition] 子串匹配: dep_name='%s' → ai_key='%s'", dep_name, _ai_key)
+                        break
             if ai_step:
                 from service.api_test.shared.payload_builder import _convert_precondition, _normalize_template_vars
                 case_payload = _convert_precondition(ai_step)
@@ -1260,9 +1267,6 @@ class ApiCaseGenerationService:
         var_pattern = re.compile(r'\$\{([^}]+)\}')
         saved_set = set(saved_vars)
         param_ctx = ApiCaseGenerationService._get_ref_param_context(case, var_pattern)
-        logger.info("[变量对齐] _build_var_replacements 入口: saved_vars=%s, refs=%s, param_ctx=%s",
-                    saved_vars, refs, dict(param_ctx))
-
         replacements = {}
         for ref in refs:
             if ref in saved_set:
@@ -1295,7 +1299,17 @@ class ApiCaseGenerationService:
                         replacements[ref] = sv
                         break
 
-        logger.info("[变量对齐] _build_var_replacements 结果: %s", replacements)
+            # 策略 3：词边界匹配 — ref 作为 _ 分隔的段出现在 saved_var 中（仅唯一候选时）
+            # 例: ref="r", saved_var="verify_r" → segments=["verify","r"] → 匹配
+            if ref not in replacements:
+                segment_candidates = []
+                for sv in saved_vars:
+                    parts = sv.split('_')
+                    if len(parts) > 1 and ref in parts:
+                        segment_candidates.append(sv)
+                if len(segment_candidates) == 1:
+                    replacements[ref] = segment_candidates[0]
+
         return replacements
 
     @staticmethod
@@ -1315,9 +1329,6 @@ class ApiCaseGenerationService:
         """
         if not ai_precondition_map and not pre_run_results:
             return
-
-        logger.info("[变量对齐] _align_variable_names 入口: precondition_titles=%s, pre_run_count=%d",
-                    list((ai_precondition_map or {}).keys()), len(pre_run_results or []))
 
         var_pattern = re.compile(r'\$\{([^}]+)\}')
         save_pattern = re.compile(r'save_env_variable\s*\(\s*["\']([^"\']+)["\']')
@@ -1391,9 +1402,6 @@ class ApiCaseGenerationService:
                     case[sf] = new_script
                     total_replacements += 1
             added = total_replacements - count_before
-            if added:
-                logger.info("[变量对齐] '%s' 替换 %d 处: %s",
-                            case.get("title", "?"), added, replacements)
 
         # ═══════════════════════════════════════════════════
         # Phase 1: 单用例内部对齐（前置用例自身）
@@ -1413,10 +1421,7 @@ class ApiCaseGenerationService:
             refs.update(_get_all_refs(pre.get("request") or {}))
             refs.update(_get_all_refs(pre.get("headers") or {}))
 
-            logger.info("[变量对齐] Phase1 '%s': saved=%s, refs=%s, url=%s",
-                        title, saved_vars, refs, iface.get("url", ""))
             replacements = ApiCaseGenerationService._build_var_replacements(pre, saved_vars, refs)
-            logger.info("[变量对齐] Phase1 '%s' replacements=%s", title, replacements)
             _apply_replacements(pre, replacements)
 
         # ═══════════════════════════════════════════════════
@@ -1437,10 +1442,7 @@ class ApiCaseGenerationService:
             refs.update(_get_all_refs(case.get("request") or {}))
             refs.update(_get_all_refs(case.get("headers") or {}))
 
-            logger.info("[变量对齐] Phase1.5 '%s': saved=%s, refs=%s, url=%s",
-                        case.get("title", "?"), saved_vars, refs, iface.get("url", ""))
             replacements = ApiCaseGenerationService._build_var_replacements(case, saved_vars, refs)
-            logger.info("[变量对齐] Phase1.5 '%s' replacements=%s", case.get("title", "?"), replacements)
             _apply_replacements(case, replacements)
 
             _apply_replacements(case, replacements)
@@ -1480,13 +1482,7 @@ class ApiCaseGenerationService:
                                 )
 
         if not saved_var_contexts:
-            logger.info("[变量对齐] 前置依赖中未找到带上下文的变量，跳过跨用例对齐")
-            if total_replacements > 0:
-                logger.info("[变量对齐] Phase 1 共替换 %d 处（单用例内部）", total_replacements)
             return
-
-        logger.info("[变量对齐] 前置变量上下文: %s",
-                     {k: list(v) for k, v in saved_var_contexts.items()})
 
         for result in pre_run_results:
             case = result.api_case if hasattr(result, 'api_case') else None
@@ -1516,8 +1512,6 @@ class ApiCaseGenerationService:
                                 body[param_name] = param_value.replace(
                                     f"${{{ref}}}", f"${{{saved_var}}}")
                                 total_replacements += 1
-                                logger.info("[变量对齐] 跨用例 '%s' 参数 %s: ${%s} → ${%s}",
-                                            case.get("title", "?"), param_name, ref, saved_var)
                                 break
 
             # headers 上下文匹配
@@ -1549,8 +1543,6 @@ class ApiCaseGenerationService:
                         known_parts = set(re.split(r'[_\-]', saved_var.lower()))
                         common = ref_parts & known_parts
                         meaningful = {p for p in common if len(p) >= 3}
-                        logger.info("[变量对齐] Phase2 URL: ref=%s, saved_var=%s, ref_parts=%s, known_parts=%s, common=%s, meaningful=%s",
-                                    ref, saved_var, ref_parts, known_parts, common, meaningful)
                         if meaningful and len(meaningful) >= len(ref_parts) * 0.5:
                             iface["url"] = iface["url"].replace(
                                 f"${{{ref}}}", f"${{{saved_var}}}")
@@ -1573,11 +1565,6 @@ class ApiCaseGenerationService:
                             total_replacements += 1
                             break
                 case[sf] = script
-
-        if total_replacements > 0:
-            logger.info("[变量对齐] 共替换 %d 处变量引用", total_replacements)
-        else:
-            logger.info("[变量对齐] 无需替换")
 
     @classmethod
     async def _pre_run_selected_base_cases(

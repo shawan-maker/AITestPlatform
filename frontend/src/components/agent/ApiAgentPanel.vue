@@ -66,7 +66,7 @@
                 </div>
 
                 <!-- Pipeline final summary -->
-                <ApiPipelineSummary v-if="pipelineSummary" :summary="pipelineSummary" />
+                <ApiPipelineSummary v-if="pipelineSummary" :summary="pipelineSummary" @navigate="navigateToInterface" />
 
               <!-- Legacy single-interface payload card -->
               <AgentPayloadCard
@@ -124,7 +124,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { CircleCheckFilled } from '@element-plus/icons-vue'
@@ -166,6 +166,7 @@ const emit = defineEmits(['composer-mode-change', 'tab-change'])
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()
 
@@ -210,6 +211,7 @@ let _lastEventSeq = -1  // SSE event sequence tracking for reconnect
 let _loadGen = 0          // selectSession / isActive 代次计数器，防止竞态覆盖
 let _isActiveBusy = false // 防止 isActive watcher 并发执行
 let _titleBusy = false    // 防止 _ensureApiTitle 并发调用
+let _selectSessionTimer = null // selectSession 防抖定时器
 
 // Check if current messages contain a unified agent response
 const hasAgentResponse = computed(() =>
@@ -323,7 +325,6 @@ async function loadMessages(gen) {
 
   // 竞态保护：如果 selectSession 已被新的调用取代，丢弃本次过期响应
   if (gen !== undefined && gen !== _loadGen) {
-    console.log('[ApiAgentPanel][LOAD-MSG] stale response discarded, gen:', gen, 'current:', _loadGen)
     return
   }
   messages.value = merged
@@ -353,6 +354,11 @@ watch(() => props.activeTab, (tab) => {
   if (tab && tab !== sharedActiveTab.value) sharedActiveTab.value = tab
 })
 
+function navigateToInterface(interfaceId) {
+  if (!interfaceId) return
+  router.push({ path: '/cases/api', query: { ...route.query, interfaceId: String(interfaceId), tab: 'test-cases' } })
+}
+
 function startNewSession() {
   if (streaming.value) stopStream()
   _stopRunningPoll()
@@ -370,13 +376,33 @@ async function selectSession(id) {
   _lastEventSeq = -1  // 重置事件序号追踪
   const gen = ++_loadGen
   activeSessionId.value = id
+  // 立即显示加载占位，给用户切换反馈（替代白屏）
+  messages.value = [{
+    id: 'loading-placeholder',
+    role: 'agent',
+    isStreaming: true,
+    stages: [{ name: 'processing', status: 'running', text: '正在加载会话...', logs: [] }],
+    finalText: '',
+    payload: null,
+    streamingText: '',
+  }]
   setComposerMode(false)
+
+  // 防抖：300ms 内的连续点击只执行最后一次，减少请求风暴
+  if (_selectSessionTimer) clearTimeout(_selectSessionTimer)
+  await new Promise(resolve => {
+    _selectSessionTimer = setTimeout(() => {
+      _selectSessionTimer = null
+      resolve()
+    }, 300)
+  })
+  // 防抖等待后再次检查 gen（可能已有更新的点击）
+  if (gen !== _loadGen) return
 
   try {
     await Promise.all([refreshSession(), loadMessages(gen), loadSessions()])
     // 竞态保护：如果用户已切到其他 session，丢弃本次结果
     if (gen !== _loadGen) {
-      console.log('[ApiAgentPanel][SELECT-SESSION] stale discarded, gen:', gen, 'current:', _loadGen)
       return
     }
   } catch (e) {
@@ -429,13 +455,12 @@ async function selectSession(id) {
       lastAgentMsg.isStreaming = true
       // 追加或更新当前运行阶段（使用实际 stage name 以便与 SSE 重连事件合并）
       const existingStages = lastAgentMsg.stages || []
-      const existingRunning = existingStages.find(s => s.status === 'running')
-      if (existingRunning) {
-        existingRunning.text = stageText
-        existingRunning.name = stageName
-      } else {
-        lastAgentMsg.stages = [...existingStages, { name: stageName, status: 'running', text: stageText, logs: [] }]
-      }
+      // 标记所有旧 running 阶段为 done，防止出现两个同时 running
+      existingStages.forEach(s => { if (s.status === 'running') s.status = 'done' })
+      // 移除同名的旧阶段，避免重复（如两次 create_interfaces）
+      const sameNameIdx = existingStages.findIndex(s => s.name === stageName)
+      if (sameNameIdx >= 0) existingStages.splice(sameNameIdx, 1)
+      lastAgentMsg.stages = [...existingStages, { name: stageName, status: 'running', text: stageText, logs: [] }]
     } else {
       // 没有历史 agent 消息（极端情况），追加一个占位提示
       messages.value = [...messages.value, {
@@ -491,14 +516,11 @@ async function _ensureApiTitle() {
   if (!s || s.status !== 'success' || !activeSessionId.value) return
   if (s.title && s.title !== '新对话' && !s.title.endsWith('...')) return
   _titleBusy = true
-  console.log('[API-TITLE-FIX] title missing/truncated, triggering summarize | sessionId:', activeSessionId.value,
-    '| currentTitle:', s.title)
   try {
     await summarizeApiTitle(activeSessionId.value)
-    await loadSessions()
-    console.log('[API-TITLE-FIX] ✅ title generated and sessions reloaded')
+    loadSessions() // fire-and-forget，不阻塞 _titleBusy 释放
   } catch (e) {
-    console.error('[API-TITLE-FIX] ❌ summarizeApiTitle failed:', e)
+    // title summarization failed silently
   } finally {
     _titleBusy = false
   }
@@ -510,8 +532,6 @@ async function _ensureApiTitle() {
  */
 async function _tryReconnect() {
   if (!activeSessionId.value) return
-
-  console.log('[reconnect] Attempting SSE reconnect for session', activeSessionId.value, 'lastSeq:', _lastEventSeq)
 
   abortController = new AbortController()
   streaming.value = true
@@ -528,10 +548,23 @@ async function _tryReconnect() {
           const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
           if (lastAgentMsg) {
             const stages = lastAgentMsg.stages || []
+            // 新阶段到达时，标记旧 running 阶段为 done（与 sendMessage 一致）
+            stages.forEach(s => { if (s.status === 'running' && s.name !== data.name) s.status = 'done' })
             let stage = stages.find(s => s.name === data.name)
             if (!stage) {
               stage = { name: data.name, status: 'running', text: '', logs: [] }
-              lastAgentMsg.stages = [...stages, stage]
+              // 已完成的阶段插入到当前 running 阶段之前，保持时间顺序
+              if (data.status === 'done') {
+                const runningIdx = stages.findIndex(s => s.status === 'running')
+                if (runningIdx >= 0) {
+                  stages.splice(runningIdx, 0, stage)
+                } else {
+                  stages.push(stage)
+                }
+              } else {
+                stages.push(stage)
+              }
+              lastAgentMsg.stages = [...stages]
             }
             if (data.text) stage.text = data.text
             if (data.status) stage.status = data.status
@@ -568,8 +601,6 @@ async function _tryReconnect() {
     pipelineEditDone.value = !!detail?.output_payload?.summary
     await Promise.all([loadMessages(), loadSessions()])
   }
-
-  console.log('[reconnect] Reconnect completed, session status:', detail?.status)
 }
 
 async function createSessionFromComposer(payload) {
@@ -637,7 +668,6 @@ function detectStageFromText(text) {
 
 async function sendMessage(content) {
   if (!activeSessionId.value || streaming.value) return
-  console.log('[SEND-MSG] 📤 sendMessage started at', new Date().toLocaleTimeString(), '| session:', activeSessionId.value)
   streaming.value = true
   streamingText.value = ''
   hasStageProgress.value = false
@@ -770,7 +800,6 @@ async function sendMessage(content) {
           _addLog('default', `[错误] ${errorMsg}`)
         },
         done: async () => {
-          console.log('[SSE-DONE] 🏁 done event received at', new Date().toLocaleTimeString())
           abortController?.abort()
           // Wait for payload_updated to complete first
           await payloadUpdatedPromise
@@ -778,12 +807,8 @@ async function sendMessage(content) {
           // For pipeline sessions, don't mark as "已完成" — task continues after user edits
           const mode = sessionDetail.value?.output_payload?.mode
           const isPipeline = mode === 'from_interfaces' || mode === 'from_doc' || mode === 'from_prompt'
-          console.log('[SSE-DONE] mode:', mode, '| isPipeline:', isPipeline)
           if (!isPipeline) {
             agentResponse.isStreaming = false
-            console.log('[SSE-DONE] isStreaming set to false (non-pipeline) at', new Date().toLocaleTimeString())
-          } else {
-            console.log('[SSE-DONE] skipping isStreaming=false (pipeline mode)')
           }
           // Don't call loadMessages() — it replaces client-side stage blocks
           await Promise.all([refreshSession(), loadSessions()])
@@ -1148,7 +1173,6 @@ watch(
   (active) => {
     if (active) {
       if (_isActiveBusy) {
-        console.log('[ApiAgentPanel][TAB-WATCH] → skip: previous activation still busy')
         return
       }
       _isActiveBusy = true
@@ -1161,6 +1185,9 @@ watch(
           // 重新评估编辑按钮可见性
           if (detail?.status === 'running') {
             pipelineEditDone.value = true  // 还在运行，隐藏按钮
+            // 先从 DB 重建 history 阶段（把已完成的 tool/assistant 消息收纳到 history）
+            await loadMessages(gen)
+            if (gen !== _loadGen) return // 竞态保护
             // 标记最后一个 agent 块为 streaming 并显示阶段进度
             const progress = detail?.output_payload?.pipeline_progress
             const PHASE_TO_STAGE = {
@@ -1189,13 +1216,12 @@ watch(
             }
             lastAgentMsg.isStreaming = true
             const existingStages = lastAgentMsg.stages || []
-            const existingRunning = existingStages.find(s => s.status === 'running')
-            if (existingRunning) {
-              existingRunning.text = stageText
-              existingRunning.name = stageName
-            } else {
-              lastAgentMsg.stages = [...existingStages, { name: stageName, status: 'running', text: stageText, logs: [] }]
-            }
+            // 标记所有旧 running 阶段为 done，防止出现两个同时 running
+            existingStages.forEach(s => { if (s.status === 'running') s.status = 'done' })
+            // 移除同名的旧阶段，避免重复
+            const sameNameIdx = existingStages.findIndex(s => s.name === stageName)
+            if (sameNameIdx >= 0) existingStages.splice(sameNameIdx, 1)
+            lastAgentMsg.stages = [...existingStages, { name: stageName, status: 'running', text: stageText, logs: [] }]
             // 优先尝试 SSE 重连，失败则降级为轮询
             _tryReconnect().catch(() => {
               if (!_runningPollTimer) _startRunningPoll()

@@ -373,6 +373,9 @@ class AgentStreamService:
                     refreshed.finished_at = datetime.now(timezone.utc)
                     await refreshed.save(update_fields=["status", "finished_at"])
                 _log.info("[FINALIZE] session=%s completed", session.id)
+                # 自动生成标题（fire-and-forget，不阻塞 finalize）
+                import asyncio as _asyncio
+                _asyncio.create_task(SessionLifecycleService.auto_summarize_title(session.id))
             except Exception as e:
                 _log.error("[FINALIZE] session=%s error: %s", session.id, e, exc_info=True)
 

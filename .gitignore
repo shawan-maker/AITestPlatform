@@ -16,6 +16,12 @@ __pycache__/
 # 测试目录（含 smoke tests、other 等不上传的文件）
 tests/
 
+# 示例/学习代码（不上传）
+demo/
+
+# Jupyter checkpoint
+.ipynb_checkpoints/
+
 # IDE
 .idea/
 .vscode/
@@ -23,13 +29,14 @@ tests/
 # 设计文档
 service/design/
 
-# 本地数据/缓存
+# 本地数据/缓存（RAG 相关存储均在 rag/ 下）
 temp/
 rag_storage/
 rag/*
 !rag/ragManager.py
 !rag/rag_api.py
 *.log
+debug_*.log
 
 # Frontend 测试
 frontend/test-results/

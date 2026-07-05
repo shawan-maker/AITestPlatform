@@ -449,6 +449,7 @@ watch(() => route.query.interfaceId, async function (newId) {
         fallbackInterface.value = ifaceRes.data.data || ifaceRes.data
       } catch (e) { /* 忽略 */ }
     }
+    await expandToInterface(numId)
     loadCases()
     loadDeps()
     loadDocPreview()
@@ -1508,6 +1509,48 @@ function onToggleExpand(catalogId) {
   }
 }
 
+// 递归查找从根到目标目录的祖先路径（返回 catalog ID 数组）
+function findCatalogAncestorPath(nodes, targetId, path) {
+  if (!nodes || !targetId) return null
+  for (var i = 0; i < nodes.length; i++) {
+    var node = nodes[i]
+    var currentPath = (path || []).concat([node.id])
+    if (node.id === targetId) return currentPath
+    if (node.children && node.children.length) {
+      var found = findCatalogAncestorPath(node.children, targetId, currentPath)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// 根据接口 ID 自动展开目录树到该接口所在的目录
+async function expandToInterface(interfaceId) {
+  if (!interfaceId || !catalogTree.value || !catalogTree.value.length) return
+  // 获取接口对象（从已加载列表或 fallbackInterface）
+  var iface = findSelectedIface()
+  if (!iface) return
+  var catalogId = iface.catalog_id
+  if (catalogId == null) return
+  // 查找从根到目标目录的祖先路径
+  var ancestorPath = findCatalogAncestorPath(catalogTree.value, catalogId, [])
+  if (!ancestorPath || !ancestorPath.length) return
+  // 展开所有祖先目录（去重）并加载接口列表
+  var newExpanded = expandedCatalogIds.value.slice()
+  for (var i = 0; i < ancestorPath.length; i++) {
+    var catId = ancestorPath[i]
+    if (newExpanded.indexOf(catId) < 0) {
+      newExpanded.push(catId)
+      // 加载该目录下的接口列表（如果尚未加载）
+      if (!interfacesByCatalog.value[catId] || !interfacesByCatalog.value[catId].items || !interfacesByCatalog.value[catId].items.length) {
+        loadCatalogInterfaces(catId)
+      }
+    }
+  }
+  expandedCatalogIds.value = newExpanded
+  selectedCatalogId.value = catalogId
+}
+
 function loadMoreCatalogInterfaces(catalogId) {
   loadCatalogInterfaces(catalogId, true)
 }
@@ -2270,6 +2313,8 @@ onMounted(async function () {
       sessionStorage.removeItem('workspaceLastInterfaceId')
     }
   }
+  // 自动展开目录树到选中的接口
+  await expandToInterface(selectedInterfaceId.value)
   // 加载变量文件列表
   refreshEnvironmentList()
   // 加载上传文件列表

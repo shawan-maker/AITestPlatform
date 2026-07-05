@@ -28,7 +28,6 @@ async def sync_functional_payload(session_id: int, workflow_result: dict[str, An
     import logging
     _logger = logging.getLogger(__name__)
 
-    _logger.info("[PAYLOAD-SYNC] session=%s called | keys=%s", session_id, list(workflow_result.keys()))
     session = await AIGenerationSession.get_or_none(id=session_id)
     if session is None:
         return
@@ -79,8 +78,6 @@ async def sync_functional_payload(session_id: int, workflow_result: dict[str, An
     await session.save(
         update_fields=["output_payload", "status", "error_message", "finished_at"]
     )
-    _logger.info("[PAYLOAD-SYNC] session=%s saved | status=%s | points=%d | cases=%d",
-                 session_id, session.status, len(formatted_points), len(cases))
 
 
 async def sync_api_base_payload(

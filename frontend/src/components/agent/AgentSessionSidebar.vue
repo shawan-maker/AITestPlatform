@@ -13,7 +13,7 @@
         </button>
       </div>
       <div class="agent-session-sidebar__collapsed-icons">
-        <button class="agent-session-sidebar__collapsed-icon-btn" :title="t('page.agent.newSession')" :disabled="disabled" @click="$emit('new')">
+        <button class="agent-session-sidebar__collapsed-icon-btn" :title="t('page.agent.newSession')" @click="$emit('new')">
           <el-icon><Plus /></el-icon>
         </button>
         <button class="agent-session-sidebar__collapsed-icon-btn" :title="t('page.agent.history')">
@@ -31,7 +31,7 @@
 
       <div class="agent-session-sidebar__header">
         <span class="agent-session-sidebar__title">{{ title }}</span>
-        <el-button type="primary" link :disabled="disabled" @click="$emit('new')">
+        <el-button type="primary" link @click="$emit('new')">
           + {{ t('page.agent.newSession') }}
         </el-button>
       </div>

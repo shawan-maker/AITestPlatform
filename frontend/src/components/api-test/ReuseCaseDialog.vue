@@ -356,29 +356,23 @@ async function loadInterfaceCases(interfaceId) {
 
 // ========== 勾选同步 ==========
 function scheduleSyncSelection() {
-  console.log('[DEBUG] scheduleSyncSelection called, will wait 2x nextTick')
   // 等两次 nextTick：第一次等 Vue 更新 DOM，第二次等 el-table 内部渲染行
   nextTick(function () {
-    console.log('[DEBUG] nextTick 1 done')
     nextTick(function () {
-      console.log('[DEBUG] nextTick 2 done, calling doSyncSelection')
       doSyncSelection()
     })
   })
 }
 
 function doSyncSelection() {
-  console.log('[DEBUG] doSyncSelection start, tableRef:', !!caseTableRef.value)
   if (!caseTableRef.value) { isSyncingTable = false; return }
   // 清除所有勾选
   caseTableRef.value.clearSelection()
-  console.log('[DEBUG] clearSelection called')
   // 等 clearSelection 的 @selection-change 事件处理完
   setTimeout(function () {
     if (!caseTableRef.value) { isSyncingTable = false; return }
     // 从表格当前数据中逐行勾选
     var tableData = caseTableRef.value.data || []
-    console.log('[DEBUG] tableData length:', tableData.length, 'selectedCaseIds:', [...selectedCaseIds.value])
     var checked = 0
     for (var i = 0; i < tableData.length; i++) {
       if (selectedCaseIds.value.has(tableData[i].id)) {
@@ -386,28 +380,22 @@ function doSyncSelection() {
         checked++
       }
     }
-    console.log('[DEBUG] toggleRowSelection checked', checked, 'rows')
     // 等所有 toggleRowSelection 的 @selection-change 事件处理完
     setTimeout(function () {
       isSyncingTable = false
-      console.log('[DEBUG] isSyncingTable = false, sync complete')
     }, 100)
   }, 100)
 }
 
 // ========== 右侧表格手动勾选 ==========
 function onCaseSelectionChange(rows) {
-  console.log('[DEBUG] onCaseSelectionChange called, rows:', rows.length, 'isSyncingTable:', isSyncingTable)
   if (isSyncingTable) {
-    console.log('[DEBUG] onCaseSelectionChange SKIPPED (isSyncingTable=true)')
     return
   }
   var pageIds = currentCases.value.map(function (c) { return c.id })
-  console.log('[DEBUG] onCaseSelectionChange processing, pageIds:', pageIds, 'row ids:', rows.map(r => r.id))
   pageIds.forEach(function (id) { selectedCaseIds.value.delete(id) })
   rows.forEach(function (r) { selectedCaseIds.value.add(r.id) })
   selectedCaseIds.value = new Set(selectedCaseIds.value)
-  console.log('[DEBUG] onCaseSelectionChange done, selectedCaseIds:', [...selectedCaseIds.value])
 }
 
 // ========== 左侧树勾选 ==========
@@ -415,7 +403,6 @@ async function onTreeCheck(data, checkInfo) {
   // Element Plus @check 事件参数: (data, { checkedNodes, checkedKeys, halfCheckedNodes, halfCheckedKeys })
   // 判断当前节点是否被勾选：看 nodeKey 是否在 checkedKeys 中
   var checked = (checkInfo.checkedKeys || []).includes(data.nodeKey)
-  console.log('[DEBUG] onTreeCheck: label:', data.label, 'checked:', checked, 'nodeKey:', data.nodeKey)
 
   // ★ 关键：在改变任何数据之前先设守卫
   isSyncingTable = true
@@ -426,7 +413,6 @@ async function onTreeCheck(data, checkInfo) {
     currentInterfaceName.value = data.label
     await loadInterfaceCases(data.interfaceId)
     var cases = caseCache.value[data.interfaceId] || []
-    console.log('[DEBUG] loaded', cases.length, 'cases for interface', data.interfaceId)
     cases.forEach(function (c) {
       if (checked) selectedCaseIds.value.add(c.id)
       else selectedCaseIds.value.delete(c.id)
@@ -439,7 +425,6 @@ async function onTreeCheck(data, checkInfo) {
     var allCases = []
     await collectCasesRecursive(data, allCases)
     currentCases.value = allCases
-    console.log('[DEBUG] catalog: loaded', allCases.length, 'total cases')
     await selectCatalogRecursive(data, checked)
 
     // 手动设置目录下所有接口子节点的勾选状态
@@ -448,7 +433,6 @@ async function onTreeCheck(data, checkInfo) {
     }
   }
   selectedCaseIds.value = new Set(selectedCaseIds.value)
-  console.log('[DEBUG] selectedCaseIds after tree check:', [...selectedCaseIds.value])
   scheduleSyncSelection()
 }
 

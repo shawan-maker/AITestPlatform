@@ -25,12 +25,6 @@ async def get_access_payload(token: str = Depends(oauth2_scheme)) -> dict:
 
 
 async def get_current_user(payload: dict = Depends(get_access_payload)) -> User:
-    from datetime import datetime, timezone
-    import logging
-    logging.getLogger("db_trace").info(
-        "[TIME] get_current_user at %s uid=%s",
-        datetime.now(timezone.utc).isoformat(), payload.get("sub"),
-    )
     user = await User.get_or_none(id=int(payload["sub"]))
     if user is None:
         raise AppException("用户不存在", 401)
