@@ -31,9 +31,6 @@ rag/*
 !rag/rag_api.py
 *.log
 
-# 其他文件
-demo/
-
 # Frontend 测试
 frontend/test-results/
 frontend/playwright-report/

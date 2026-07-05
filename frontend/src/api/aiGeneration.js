@@ -32,6 +32,15 @@ export function streamFunctionalMessage(sessionId, content, handlers, signal) {
   )
 }
 
+export function reconnectFunctionalSession(sessionId, lastSeq, handlers, signal) {
+  return postEventStream(
+    `/ai-generation/functional/sessions/${sessionId}/reconnect?last_seq=${lastSeq}`,
+    {},
+    handlers,
+    signal,
+  )
+}
+
 export function patchFunctionalPreview(sessionId, data) {
   return request.patch(`/ai-generation/functional/sessions/${sessionId}/preview`, data)
 }
@@ -90,14 +99,28 @@ export function patchApiPreview(sessionId, data) {
   return request.patch(`/ai-generation/api/sessions/${sessionId}/preview`, data)
 }
 
-export function confirmApiGeneration(data) {
-  return request.post('/ai-generation/api/confirm', data)
+export function confirmApiGeneration(data, handlers, signal) {
+  return postEventStream(
+    '/ai-generation/api/confirm',
+    data,
+    handlers,
+    signal,
+  )
 }
 
 export function streamSaveBaseCases(sessionId, data, handlers, signal) {
   return postEventStream(
     `/ai-generation/api/sessions/${sessionId}/save-base-cases`,
     data,
+    handlers,
+    signal,
+  )
+}
+
+export function reconnectApiSession(sessionId, lastSeq, handlers, signal) {
+  return postEventStream(
+    `/ai-generation/api/sessions/${sessionId}/reconnect?last_seq=${lastSeq}`,
+    {},
     handlers,
     signal,
   )

@@ -32,7 +32,7 @@ async def main() -> None:
     if not await _table_exists(conn, "task_case_relation"):
         spec = importlib.util.spec_from_file_location(
             "test_management_migration_v1",
-            ROOT / "migrations" / "models" / "6_20260527120000_test_management_v1.py",
+            ROOT / "scripts" / "migrations" / "models" / "6_20260527120000_test_management_v1.py",
         )
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

@@ -53,6 +53,24 @@ async def functional_post_message(
     return StreamingResponse(stream, media_type="text/event-stream")
 
 
+@router.post("/sessions/{session_id}/reconnect", summary="SSE 断线重连（重放缓冲事件 + 接入实时流）")
+async def functional_reconnect_session(
+    session_id: int,
+    last_seq: int = Query(-1, ge=-1, description="客户端收到的最后一个事件序号"),
+    user: User = Depends(get_current_active_user),
+):
+    """SSE reconnect endpoint for functional agent sessions."""
+    from service.ai_generation.models import AIGenerationSession
+    from service.ai_generation.agent_stream import AgentStreamService
+
+    session = await AIGenerationSession.get_or_none(id=session_id)
+    if not session:
+        return success(data=None, message="会话不存在")
+
+    stream = AgentStreamService.stream_reconnect(session, last_seq=last_seq)
+    return StreamingResponse(stream, media_type="text/event-stream")
+
+
 @router.get("/sessions/{session_id}/messages", summary="回放会话消息")
 async def functional_list_messages(
     session_id: int,

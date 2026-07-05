@@ -29,8 +29,17 @@
           <div class="chat-msg__body">
             <div class="chat-msg__meta">
               <span class="chat-msg__role-name">{{ t('page.agent.roleAgent') }}</span>
-              <el-tag v-if="msg.isStreaming" size="small" type="primary" effect="light" round>
-                {{ msg.stages.some(s => s.status !== 'done') ? t('page.agent.executing') : t('page.agent.thinking') }}
+              <el-tag v-if="msg.isStreaming" size="small" type="warning" effect="light" round>
+                {{ t('page.agent.statusRunning') }}
+              </el-tag>
+              <el-tag v-else-if="sessionStatus === 'running'" size="small" type="warning" effect="light" round>
+                {{ t('page.agent.statusRunning') }}
+              </el-tag>
+              <el-tag v-else-if="sessionStatus === 'confirm'" size="small" type="primary" effect="light" round>
+                {{ t('page.agent.statusConfirming') }}
+              </el-tag>
+              <el-tag v-else-if="sessionStatus === 'failed'" size="small" type="danger" effect="light" round>
+                {{ t('page.agent.statusFailed') }}
               </el-tag>
               <el-tag v-else size="small" type="success" effect="light" round>{{ t('page.agent.completed') }}</el-tag>
             </div>
@@ -207,6 +216,7 @@ const props = defineProps({
   stageLogLines: { type: Array, default: () => [] },
   quickTags: { type: Array, default: () => [] },
   agentType: { type: String, default: 'functional' },
+  sessionStatus: { type: String, default: '' },
 })
 
 const emit = defineEmits(['send', 'stop', 'open-case-list'])
@@ -227,6 +237,8 @@ function setStageDetailRef(el, idx) {
 // ===== Stage display helpers =====
 
 const STAGE_LABEL_MAP = {
+  initializing: () => t('page.agent.thinking'),
+  processing: () => t('page.agent.stageDefault'),
   search_requirement: () => t('page.agent.stageSearch'),
   generate_testcases: () => t('page.agent.stageTestcases'),
   history: () => t('page.agent.stageHistory'),

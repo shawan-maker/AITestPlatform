@@ -12,7 +12,7 @@ from tortoise import Tortoise  # noqa: E402
 
 from service.core.config import TORTOISE_ORM  # noqa: E402
 
-MIGRATION_FILE = ROOT / "migrations" / "models" / "7_20260528120000_defect_management_v1.py"
+MIGRATION_FILE = ROOT / "scripts" / "migrations" / "models" / "7_20260528120000_defect_management_v1.py"
 
 
 def _load_migration():

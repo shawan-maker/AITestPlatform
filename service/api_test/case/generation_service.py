@@ -405,6 +405,7 @@ class ApiCaseGenerationService:
 
         # 设置 session 为 running 状态，初始化进度信息
         session.status = SessionStatus.running
+        session.finished_at = None
         progress_items = []
         for idx in data.selected_indexes:
             base = base_cases[idx]
@@ -428,7 +429,7 @@ class ApiCaseGenerationService:
             "user_id": user.id,
             "edited_base_cases": data.edited_base_cases,
         }
-        await session.save(update_fields=["status", "output_payload"])
+        await session.save(update_fields=["status", "finished_at", "output_payload"])
 
         # 启动后台预执行任务
         task = asyncio.create_task(cls._run_confirm_background(session))
@@ -965,8 +966,11 @@ class ApiCaseGenerationService:
                     _refs = set(_var_ref_re.findall(iface_sub.get("url", "")))
                     _refs.update(_var_ref_re.findall(str(case_payload.get("request") or {})))
                     _refs.update(_var_ref_re.findall(str(case_payload.get("headers") or {})))
+                    logger.info("[precondition] 变量归一化入口: dep=%s, url=%s, saved=%s, refs=%s",
+                                dep_name, iface_sub.get("url", ""), _saved, _refs)
                     # 用语义匹配找到 ref→saved_var 映射，再反转为 saved_var→ref
                     _ref_to_sv = cls._build_var_replacements(case_payload, _saved, _refs)
+                    logger.info("[precondition] 变量归一化结果: dep=%s, ref_to_sv=%s", dep_name, _ref_to_sv)
                     _sv_to_ref = {sv: ref for ref, sv in _ref_to_sv.items()}
                     if _sv_to_ref:
                         for old_name, new_name in _sv_to_ref.items():
@@ -1256,6 +1260,8 @@ class ApiCaseGenerationService:
         var_pattern = re.compile(r'\$\{([^}]+)\}')
         saved_set = set(saved_vars)
         param_ctx = ApiCaseGenerationService._get_ref_param_context(case, var_pattern)
+        logger.info("[变量对齐] _build_var_replacements 入口: saved_vars=%s, refs=%s, param_ctx=%s",
+                    saved_vars, refs, dict(param_ctx))
 
         replacements = {}
         for ref in refs:
@@ -1289,6 +1295,7 @@ class ApiCaseGenerationService:
                         replacements[ref] = sv
                         break
 
+        logger.info("[变量对齐] _build_var_replacements 结果: %s", replacements)
         return replacements
 
     @staticmethod
@@ -1308,6 +1315,9 @@ class ApiCaseGenerationService:
         """
         if not ai_precondition_map and not pre_run_results:
             return
+
+        logger.info("[变量对齐] _align_variable_names 入口: precondition_titles=%s, pre_run_count=%d",
+                    list((ai_precondition_map or {}).keys()), len(pre_run_results or []))
 
         var_pattern = re.compile(r'\$\{([^}]+)\}')
         save_pattern = re.compile(r'save_env_variable\s*\(\s*["\']([^"\']+)["\']')
@@ -1403,7 +1413,10 @@ class ApiCaseGenerationService:
             refs.update(_get_all_refs(pre.get("request") or {}))
             refs.update(_get_all_refs(pre.get("headers") or {}))
 
+            logger.info("[变量对齐] Phase1 '%s': saved=%s, refs=%s, url=%s",
+                        title, saved_vars, refs, iface.get("url", ""))
             replacements = ApiCaseGenerationService._build_var_replacements(pre, saved_vars, refs)
+            logger.info("[变量对齐] Phase1 '%s' replacements=%s", title, replacements)
             _apply_replacements(pre, replacements)
 
         # ═══════════════════════════════════════════════════
@@ -1424,7 +1437,10 @@ class ApiCaseGenerationService:
             refs.update(_get_all_refs(case.get("request") or {}))
             refs.update(_get_all_refs(case.get("headers") or {}))
 
+            logger.info("[变量对齐] Phase1.5 '%s': saved=%s, refs=%s, url=%s",
+                        case.get("title", "?"), saved_vars, refs, iface.get("url", ""))
             replacements = ApiCaseGenerationService._build_var_replacements(case, saved_vars, refs)
+            logger.info("[变量对齐] Phase1.5 '%s' replacements=%s", case.get("title", "?"), replacements)
             _apply_replacements(case, replacements)
 
             _apply_replacements(case, replacements)
@@ -1533,6 +1549,8 @@ class ApiCaseGenerationService:
                         known_parts = set(re.split(r'[_\-]', saved_var.lower()))
                         common = ref_parts & known_parts
                         meaningful = {p for p in common if len(p) >= 3}
+                        logger.info("[变量对齐] Phase2 URL: ref=%s, saved_var=%s, ref_parts=%s, known_parts=%s, common=%s, meaningful=%s",
+                                    ref, saved_var, ref_parts, known_parts, common, meaningful)
                         if meaningful and len(meaningful) >= len(ref_parts) * 0.5:
                             iface["url"] = iface["url"].replace(
                                 f"${{{ref}}}", f"${{{saved_var}}}")

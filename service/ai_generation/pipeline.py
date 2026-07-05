@@ -18,6 +18,13 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
 
+from service.ai_generation.event_buffer import (
+    claim_live_queue,
+    cleanup_buffer,
+    cleanup_live_queue,
+    get_or_create_buffer,
+    register_live_queue,
+)
 from service.ai_generation.models import AIGenerationSession
 from service.core.enums import SessionStatus
 from tortoise.functions import Max
@@ -54,9 +61,13 @@ class ApiAgentPipeline:
 
         解耦架构：实际执行在 asyncio.Task 中后台运行，
         SSE 生成器仅从 Queue 读取事件转发。客户端断开时
-        Task 继续执行并完成 DB 更新，用户回来后可看到结果。
+        Task 继续执行并完成 DB 更新，用户回来后可通过
+        reconnect 端点重放缓冲事件并接入实时队列。
         """
         queue: asyncio.Queue = asyncio.Queue()
+        buf = get_or_create_buffer(session.id)
+        register_live_queue(session.id, queue)
+
         task = asyncio.create_task(
             cls._execute_phase_1_to_3(
                 session, queue,
@@ -75,9 +86,14 @@ class ApiAgentPipeline:
                 if item is None:  # 哨兵值
                     break
                 yield item
+                # 缓冲已发送的事件，供断线重连时重放
+                event_type = item.split("\n", 1)[0].replace("event: ", "") if item.startswith("event: ") else "unknown"
+                buf.append(item, event_type)
         except (GeneratorExit, asyncio.CancelledError):
             _log.info("[pipeline] Phase 1-3 SSE 客户端断开 session=%s，后台任务继续执行", session.id)
             return  # Task 继续运行，不取消
+        finally:
+            cleanup_live_queue(session.id)
 
     @classmethod
     async def _execute_phase_1_to_3(
@@ -184,11 +200,24 @@ class ApiAgentPipeline:
             )))
 
             # -- Phase 3/2: Present cards --
+            # Check if any interface actually generated base cases
+            has_any_cases = any(iface.get("base_cases") for iface in payload.get("interfaces", []))
+
             # Save payload to DB
             session.output_payload = payload
-            session.status = SessionStatus.confirming
+            if has_any_cases:
+                session.status = SessionStatus.confirming
+            else:
+                # All interfaces failed — mark session as failed, not confirming
+                session.status = SessionStatus.failed
+                session.error_message = "所有接口的基础用例生成均失败，请检查 LLM 配置或重试"
             session.finished_at = datetime.now(timezone.utc)
-            await session.save(update_fields=["output_payload", "status", "finished_at"])
+            await session.save(update_fields=["output_payload", "status", "finished_at", "error_message"])
+
+            if not has_any_cases:
+                await queue.put(_sse("error", {"message": session.error_message}))
+                await queue.put(_sse("done", {}))
+                return
 
             await queue.put(_sse("stage", {
                 "name": "edit_base_cases",
@@ -239,6 +268,9 @@ class ApiAgentPipeline:
         Task 继续执行并完成 DB 更新。
         """
         queue: asyncio.Queue = asyncio.Queue()
+        buf = get_or_create_buffer(session.id)
+        register_live_queue(session.id, queue)
+
         task = asyncio.create_task(
             cls._execute_phase_4_to_5(session, queue, environment_id)
         )
@@ -251,9 +283,63 @@ class ApiAgentPipeline:
                 if item is None:  # 哨兵值
                     break
                 yield item
+                event_type = item.split("\n", 1)[0].replace("event: ", "") if item.startswith("event: ") else "unknown"
+                buf.append(item, event_type)
         except (GeneratorExit, asyncio.CancelledError):
             _log.info("[pipeline] Phase 4-5 SSE 客户端断开 session=%s，后台任务继续执行", session.id)
             return  # Task 继续运行，不取消
+        finally:
+            cleanup_live_queue(session.id)
+
+    # ------------------------------------------------------------------
+    # Reconnect: Replay buffered events + attach to live queue
+    # ------------------------------------------------------------------
+    @classmethod
+    async def stream_reconnect(
+        cls,
+        session: AIGenerationSession,
+        last_seq: int = -1,
+    ) -> AsyncIterator[str]:
+        """SSE reconnect stream: replay buffered events, then attach to live queue.
+
+        Called when the frontend returns to a session that may still be running.
+        - Replays events from the buffer (skipping those already seen via last_seq)
+        - If the task is still running, attaches to the live queue for new events
+        - Always ends with a 'done' event so the frontend knows the replay is complete
+        """
+        from service.ai_generation.event_buffer import get_buffer, claim_live_queue
+
+        buf = get_buffer(session.id)
+        live_queue = claim_live_queue(session.id)
+
+        # Phase 1: Replay buffered events
+        if buf:
+            missed = buf.replay_from(last_seq)
+            _log.info("[reconnect] Replaying %d buffered events for session=%s (from seq=%d)",
+                       len(missed), session.id, last_seq)
+            for event in missed:
+                yield event.sse_str
+
+        # Phase 2: Attach to live queue if task is still running
+        if live_queue:
+            _log.info("[reconnect] Attaching to live queue for session=%s", session.id)
+            try:
+                while True:
+                    try:
+                        item = await asyncio.wait_for(live_queue.get(), timeout=30)
+                    except asyncio.TimeoutError:
+                        # Send heartbeat to keep connection alive
+                        yield _sse("heartbeat", {})
+                        continue
+                    if item is None:  # sentinel: task completed
+                        break
+                    yield item
+            except (GeneratorExit, asyncio.CancelledError):
+                _log.info("[reconnect] Client disconnected during live stream session=%s", session.id)
+                return
+
+        # Always send done so frontend knows the reconnect stream is complete
+        yield _sse("done", {"reconnected": True})
 
     @classmethod
     async def _execute_phase_4_to_5(
@@ -268,7 +354,8 @@ class ApiAgentPipeline:
             interfaces = payload.get("interfaces", [])
 
             session.status = SessionStatus.running
-            await session.save(update_fields=["status"])
+            session.finished_at = None
+            await session.save(update_fields=["status", "finished_at"])
 
             # -- Phase 4/3: Generate structured cases --
             await queue.put(_sse("stage", {
@@ -361,6 +448,8 @@ class ApiAgentPipeline:
 
                     # 2. Align variable names across distributed LLM outputs
                     if ai_precondition_map:
+                        _log.info("[pipeline] 调用 _align_variable_names: precondition_titles=%s, pre_run_count=%d",
+                                  list(ai_precondition_map.keys()), len(pre_run_results))
                         ApiCaseGenerationService._align_variable_names(
                             ai_precondition_map, pre_run_results
                         )
@@ -673,13 +762,18 @@ class ApiAgentPipeline:
         1. Try pre-configured dependencies via DependencyResolverService
         2. Fall back to all project interface summaries for LLM auto-detection
         """
+        import time as _time
         from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
         from service.api_test.dependency.resolver_service import DependencyResolverService
         from service.api_test.case.generation_service import ApiCaseGenerationService
 
+        target_summary = iface_data.get("summary", "")
+        _log.info("[BASE-CASE-GEN] 🚀 开始生成基础用例: interface=%s", target_summary)
+
         api_doc = iface_data.get("api_doc", "")
         if isinstance(api_doc, dict):
             api_doc = json.dumps(api_doc, ensure_ascii=False)
+        _log.info("[BASE-CASE-GEN] api_doc length=%d", len(api_doc) if api_doc else 0)
 
         # Layer 1: Get pre-configured dependencies for this interface
         precoditions: list[str] = []
@@ -694,21 +788,40 @@ class ApiAgentPipeline:
         # Layer 2: If no pre-configured deps, pass all project interfaces for LLM auto-detection
         if not precoditions:
             precoditions = await ApiCaseGenerationService._get_all_project_interface_summaries(project_id)
+        _log.info("[BASE-CASE-GEN] preconditions count=%d for interface=%s", len(precoditions), target_summary)
 
         workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
+        _t0 = _time.monotonic()
+        _log.info("[BASE-CASE-GEN] ⏳ 调用 workflow.invoke (LLM) at %s ...", _time.strftime('%H:%M:%S'))
         # FIX: 使用 asyncio.to_thread 将同步 LangGraph invoke 放到后台线程，避免阻塞 event loop
         state = await asyncio.to_thread(workflow.invoke, {
             "api_doc": api_doc,
             "precoditions": precoditions,
             "user_prompt": user_prompt,
         })
-        base_cases = state.get("api_cases") or []
+        _elapsed = _time.monotonic() - _t0
+        _log.info("[BASE-CASE-GEN] ✅ workflow.invoke 完成, 耗时=%.1fs, interface=%s", _elapsed, target_summary)
+
+        # Log the raw state keys and api_cases
+        _log.info("[BASE-CASE-GEN] state keys=%s", list(state.keys()) if isinstance(state, dict) else type(state).__name__)
+        raw_cases = state.get("api_cases") if isinstance(state, dict) else None
+        _log.info("[BASE-CASE-GEN] raw api_cases: type=%s, len=%s",
+                  type(raw_cases).__name__ if raw_cases is not None else 'None',
+                  len(raw_cases) if raw_cases else 0)
+        if raw_cases:
+            for i, c in enumerate(raw_cases[:3]):
+                _log.info("[BASE-CASE-GEN]   case[%d]: name=%s", i, c.get("name", "N/A") if isinstance(c, dict) else str(c)[:80])
+
+        base_cases = raw_cases or []
 
         # 安全网：过滤掉不属于目标接口的用例（LLM 可能错误地为前置依赖接口生成用例）
-        target_summary = iface_data.get("summary", "")
         if base_cases and precoditions and target_summary:
+            before_count = len(base_cases)
             base_cases = cls._filter_precondition_cases(base_cases, target_summary, precoditions)
+            _log.info("[BASE-CASE-GEN] filter: %d → %d cases (removed %d precondition cases)",
+                      before_count, len(base_cases), before_count - len(base_cases))
 
+        _log.info("[BASE-CASE-GEN] 🏁 最终结果: %d 条基础用例, interface=%s", len(base_cases), target_summary)
         return base_cases
 
     @classmethod
@@ -717,13 +830,47 @@ class ApiAgentPipeline:
     ) -> list[dict]:
         """过滤掉主要描述前置依赖接口的用例。
 
-        判断逻辑：用例名称与某个前置接口名称高度相似，且与目标接口名称不相似，
-        则该用例属于前置接口，应过滤。
+        三层防护避免误过滤：
+        条件1: pre_summary 长度 ≥ 4（排除过短名称的误匹配）
+        条件2: 用例名与前置接口的相似度 > 与目标接口的相似度
+        条件3: 用例名包含目标接口的关键字时不过滤
         """
+
+        def _char_similarity(a: str, b: str) -> float:
+            """计算两个字符串的字符级相似度（交集 / 较长串长度）"""
+            if not a or not b:
+                return 0.0
+            set_a = set(a)
+            set_b = set(b)
+            intersection = len(set_a & set_b)
+            max_len = max(len(set_a), len(set_b))
+            return intersection / max_len if max_len > 0 else 0.0
+
+        def _extract_keywords(summary: str) -> list[str]:
+            """从接口名称中提取关键字（2字以上的连续子串）"""
+            keywords = []
+            # 按常见分隔符拆分
+            parts = summary.replace(" ", "").replace("/", "").replace("-", "").replace("_", "")
+            # 提取 2-4 字的滑动窗口作为关键字
+            for size in range(2, min(5, len(parts) + 1)):
+                for i in range(len(parts) - size + 1):
+                    kw = parts[i:i + size]
+                    if kw not in keywords:
+                        keywords.append(kw)
+            return keywords
+
+        target_keywords = _extract_keywords(target_summary)
+
         filtered = []
         for case in cases:
             name = (case.get("name") or "").strip()
             if not name:
+                filtered.append(case)
+                continue
+
+            # 条件3：用例名包含目标接口的关键字 → 不过滤
+            has_target_keyword = any(kw in name for kw in target_keywords if len(kw) >= 2)
+            if has_target_keyword:
                 filtered.append(case)
                 continue
 
@@ -732,12 +879,29 @@ class ApiAgentPipeline:
             for pre_summary in precondition_summaries:
                 if not pre_summary:
                     continue
-                # 用例名称包含前置接口名称 且 不包含目标接口名称 → 属于前置接口的用例
-                if pre_summary in name and target_summary not in name:
-                    is_precond_case = True
-                    _log.info("[pipeline] 过滤前置依赖用例: '%s' (匹配前置: '%s', 目标: '%s')",
-                              name, pre_summary, target_summary)
-                    break
+
+                # 条件1：前置接口名称太短（< 4 字），子串匹配不可靠，跳过
+                if len(pre_summary) < 4:
+                    continue
+
+                # 原始子串检查
+                if pre_summary not in name:
+                    continue
+                if target_summary in name:
+                    continue
+
+                # 条件2：相似度比较 — 用例名必须更像前置接口而非目标接口
+                sim_pre = _char_similarity(name, pre_summary)
+                sim_target = _char_similarity(name, target_summary)
+                if sim_pre <= sim_target:
+                    _log.info("[pipeline] 跳过过滤: '%s' 与目标 '%s' 更相似 (%.2f > %.2f)",
+                              name, target_summary, sim_target, sim_pre)
+                    continue
+
+                is_precond_case = True
+                _log.info("[pipeline] 过滤前置依赖用例: '%s' (匹配前置: '%s' sim=%.2f, 目标: '%s' sim=%.2f)",
+                          name, pre_summary, sim_pre, target_summary, sim_target)
+                break
 
             if not is_precond_case:
                 filtered.append(case)
@@ -907,6 +1071,19 @@ class ApiAgentPipeline:
                     environment_id=environment_id,
                     triggered_by_id=user_id,
                 )
+                _log.info("[EXEC-CASE] case_id=%s | status=%s | record_type=%s | record_keys=%s",
+                          case_id, getattr(record, 'status', 'N/A'),
+                          type(record).__name__,
+                          [k for k in dir(record) if not k.startswith('_')] if record else 'None')
+                # Log response details for debugging empty response issue
+                if hasattr(record, 'response_body'):
+                    _log.info("[EXEC-CASE] case_id=%s | response_body_len=%s | request_body=%s",
+                              case_id,
+                              len(str(record.response_body)) if record.response_body else 0,
+                              str(getattr(record, 'request_body', ''))[:200])
+                if hasattr(record, 'request_headers'):
+                    _log.info("[EXEC-CASE] case_id=%s | request_headers=%s",
+                              case_id, dict(record.request_headers) if record.request_headers else 'None')
                 if record.status == CaseRunStatus.success:
                     passed += 1
                     await ApiTestCase.filter(id=case_id).update(exec_status=ExecStatus.success)
@@ -1015,13 +1192,70 @@ class ApiAgentPipeline:
                 except Exception:
                     pass
 
+            # 检测 Content-Type，区分 form-urlencoded 和 json
+            req_headers = request_info.get("headers") or {}
+            content_type = (req_headers.get("Content-Type") or req_headers.get("content-type") or "").lower()
+            raw_body = request_info.get("body")
+
+            if "form-urlencoded" in content_type and isinstance(raw_body, str) and "=" in raw_body:
+                # form 数据：解析为 urlencoded_rows
+                from urllib.parse import parse_qs
+                parsed = parse_qs(raw_body, keep_blank_values=True)
+                body_type = "urlencoded"
+                urlencoded_rows = [
+                    {"name": k, "value": v[0] if v else "", "desc": ""}
+                    for k, v in parsed.items()
+                ]
+                body_value = None
+            else:
+                body_type = "json"
+                urlencoded_rows = []
+                body_value = raw_body
+
+            # 从第一个主用例读取断言
+            from service.api_test.models import ApiTestCase as _ApiTestCase
+            from service.core.enums import ApiCaseKind
+            assertions = []
+            try:
+                main_case = await _ApiTestCase.filter(
+                    interface_id=interface_id, case_kind=ApiCaseKind.main
+                ).order_by("sort_order").first()
+                if main_case and main_case.case_payload and isinstance(main_case.case_payload, dict):
+                    assertions = main_case.case_payload.get("assertions") or []
+            except Exception:
+                pass
+
+            # 转换断言格式：引擎格式 {type, field, expected} → 前端格式 {target, comparator, expected}
+            # 确保调试模板在前 ApiTestWorkspaceView.populateFormFromPayload() 中正确显示
+            frontend_assertions = []
+            for a in (assertions or []):
+                if isinstance(a, dict):
+                    frontend_assertions.append({
+                        "target": a.get("field") or a.get("target") or "",
+                        "comparator": a.get("type") or a.get("comparator") or "eq",
+                        "expected": a.get("expected") if "expected" in a else "",
+                    })
+                else:
+                    frontend_assertions.append({"target": str(a), "comparator": "eq", "expected": ""})
+            assertions = frontend_assertions
+
             payload = {
                 "method": request_info.get("method") or iface.get("method") or "GET",
                 "path": iface_path,
-                "headers": request_info.get("headers") or {},
+                "headers": req_headers,
                 "query": request_info.get("params") or {},
                 "path_params": path_params,
-                "body": request_info.get("body"),
+                "body": body_value,
+                "body_type": body_type,
+                "urlencoded_rows": urlencoded_rows,
+                # 执行结果（4A 修复）
+                "response_info": debug_detail.get("response_info"),
+                "exec_status": record.status.value if record.status else None,
+                "duration_ms": debug_detail.get("duration_ms"),
+                # 断言（4B-2 修复）
+                "assertions": assertions,
+                # 断言执行结果（含 passed/actual，供响应面板断言 tab 显示）
+                "assert_info": debug_detail.get("assert_info") or [],
             }
 
             try:

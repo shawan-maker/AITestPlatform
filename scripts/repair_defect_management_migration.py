@@ -32,7 +32,7 @@ async def main() -> None:
     if not await _table_exists(conn, "test_defect_comment"):
         spec = importlib.util.spec_from_file_location(
             "defect_management_migration_v1",
-            ROOT / "migrations" / "models" / "7_20260528120000_defect_management_v1.py",
+            ROOT / "scripts" / "migrations" / "models" / "7_20260528120000_defect_management_v1.py",
         )
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

@@ -1049,9 +1049,12 @@ function formatResponseBody(body) {
 function parseDebugResponse(data) {
   // 解析后端返回的调试结果，进行结构化展示
   // 后端将 _debug_detail 字段合并到顶层：response_info, request_info, extract_info, assert_info, log_data
-  responseResult.value = data || {}
+  // 仅在有状态信息时覆盖 responseResult（避免 loadLatestDebugResult 擦除 loadTemplate 设置的值）
+  if (data && (data.status || data.response_info)) {
+    responseResult.value = data
+  }
 
-  // 响应信息（包含响应头）
+  // 响应信息（包含响应头）— 仅在有数据时覆盖，否则保留 loadTemplate 设置的值
   if (data.response_info) {
     var ri = data.response_info
     responseDataInfo.value = {
@@ -1062,11 +1065,9 @@ function parseDebugResponse(data) {
       body: ri.body,
       headers: ri.headers || {},
     }
-  } else {
-    responseDataInfo.value = null
   }
 
-  // 请求信息（包含请求头）
+  // 请求信息（包含请求头）— 同上
   if (data.request_info) {
     requestInfo.value = {
       method: data.request_info.method || debugMethod.value,
@@ -1075,18 +1076,19 @@ function parseDebugResponse(data) {
       params: data.request_info.params || data.request_info.query_params || {},
       body: data.request_info.body,
     }
-  } else {
-    requestInfo.value = null
   }
 
-  // 提取信息
-  extractInfo.value = data.extract_info || []
+  // 提取信息 — 仅在有数据时覆盖
+  var ext = data.extract_info || data.extracts
+  if (ext) extractInfo.value = ext
 
   // 断言信息
-  assertInfo.value = data.assert_info || []
+  var ast = data.assert_info || data.assertions
+  if (ast) assertInfo.value = ast
 
   // 日志信息
-  logData.value = data.log_data || data.logs || []
+  var logs = data.log_data || data.logs
+  if (logs) logData.value = logs
 }
 
 function getSiblingList(nodes, parentId) {
@@ -1528,6 +1530,13 @@ function resetDebugForm() {
   assertionsJson.value = '[]'
   preOpsCode.value = '# 前置操作代码\n'
   postOpsCode.value = '# 后置操作代码\n'
+  // 清除响应相关 ref（切换接口时防止残留旧数据）
+  responseDataInfo.value = null
+  responseResult.value = null
+  requestInfo.value = null
+  extractInfo.value = null
+  assertInfo.value = null
+  logData.value = []
 }
 
 function populateFormFromPayload(payload) {
@@ -1573,10 +1582,17 @@ function populateFormFromPayload(payload) {
   var eRows = extracts.map(function (e) { return { name: e.name || '', expression: e.json_path || e.expression || '', desc: e.description || '' } })
   eRows.push({ name: '', expression: '', desc: '' })
   extractRows.value = eRows
-  // assertions → assertRows
+  // assertions → assertRows（兼容引擎格式 {type,field,expected} 和前端格式 {target,comparator,expected}）
   var assertions = payload.assertions || []
-  var aRows = assertions.map(function (a) { return { target: a.target || '', method: a.comparator || 'eq', expected: a.expected !== undefined ? a.expected : '' } })
-  aRows.push({ target: '', method: 'eq', expected: '' })
+  var aRows = assertions.map(function (a) {
+    if (typeof a === 'string') return { target: a, method: 'eq', expected: '' }
+    return {
+      target: a.target || a.field || a.name || '',
+      method: a.comparator || a.type || a.method || 'eq',
+      expected: a.expected !== undefined ? String(a.expected) : ''
+    }
+  })
+  // ParamTable 自动管理尾部空行，无需手动 push 哨兵
   assertRows.value = aRows
   // preconditions / postconditions
   var pre = payload.preconditions || []
@@ -1585,6 +1601,49 @@ function populateFormFromPayload(payload) {
   if (post.length > 0 && post[0].code) postOpsCode.value = post[0].code
   // assertionsJson (for display)
   assertionsJson.value = JSON.stringify(payload.assertions || [], null, 2)
+  // 恢复预执行结果到响应面板（_sync_debug_templates 保存的 response_info/exec_status）
+  var ri = payload.response_info
+  if (ri && typeof ri === 'object') {
+    responseDataInfo.value = {
+      status_code: ri.status_code,
+      content_type: ri.content_type,
+      body: ri.body,
+      elapsed_ms: ri.elapsed_ms || payload.duration_ms,
+      headers: ri.headers || {},
+    }
+    responseResult.value = {
+      status: payload.exec_status || (ri.status_code ? 'success' : 'unknown'),
+      duration_ms: payload.duration_ms || ri.elapsed_ms || 0,
+    }
+  } else {
+    responseDataInfo.value = null
+    responseResult.value = null
+  }
+  // 恢复断言信息到响应面板（优先用 assert_info 执行结果，含 passed/actual；降级用 assertions 定义）
+  var assertSrc = payload.assert_info || payload.assertions || []
+  if (assertSrc.length) {
+    assertInfo.value = assertSrc.map(function (a) {
+      if (typeof a === 'string') return { field: a, type: 'eq', expected: '' }
+      return {
+        field: a.field || a.target || a.name || '',
+        type: a.type || a.comparator || a.method || 'eq',
+        expected: a.expected !== undefined ? String(a.expected) : '',
+        actual: a.actual !== undefined ? String(a.actual) : '',
+        passed: a.passed,
+      }
+    })
+  }
+  // 提取信息和日志 — 模板 payload 中一般无此数据，防御性处理
+  if (payload.extract_info) extractInfo.value = payload.extract_info
+  if (payload.log_data) logData.value = payload.log_data
+  // 恢复请求信息（供 debugExecResult computed 使用 method/url）
+  requestInfo.value = {
+    method: payload.method || '',
+    url: payload.path || '',
+    headers: payload.headers || {},
+    params: payload.query || {},
+    body: payload.body || null,
+  }
 }
 
 async function loadTemplate() {
@@ -2161,7 +2220,7 @@ watch(selectedCatalogId, function () {
   loadInterfaceList()
 })
 
-watch(selectedInterfaceId, function () {
+watch(selectedInterfaceId, async function () {
   // 切换接口时先清空响应区域，再尝试加载最新调试记录
   responseResult.value = null
   responseDataInfo.value = null
@@ -2173,11 +2232,11 @@ watch(selectedInterfaceId, function () {
   responseSubTab.value = 'result'
 
   if (selectedInterfaceId.value) {
-    loadTemplate()
+    await loadTemplate()         // 先加载模板（含 response_info），避免与 loadLatestDebugResult 竞态
     loadCases()
     loadDeps()
     loadDocPreview()
-    loadLatestDebugResult()
+    loadLatestDebugResult()      // 如果有更新的调试记录则覆盖
   }
 })
 

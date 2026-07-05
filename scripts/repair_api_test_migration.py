@@ -32,7 +32,7 @@ async def main() -> None:
     if not await _table_exists(conn, "api_interface_catalog"):
         spec = importlib.util.spec_from_file_location(
             "api_test_migration_v1",
-            ROOT / "migrations" / "models" / "5_20260526120000_api_test_module_v1.py",
+            ROOT / "scripts" / "migrations" / "models" / "5_20260526120000_api_test_module_v1.py",
         )
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

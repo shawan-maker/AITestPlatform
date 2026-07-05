@@ -28,6 +28,7 @@ async def sync_functional_payload(session_id: int, workflow_result: dict[str, An
     import logging
     _logger = logging.getLogger(__name__)
 
+    _logger.info("[PAYLOAD-SYNC] session=%s called | keys=%s", session_id, list(workflow_result.keys()))
     session = await AIGenerationSession.get_or_none(id=session_id)
     if session is None:
         return
@@ -68,12 +69,18 @@ async def sync_functional_payload(session_id: int, workflow_result: dict[str, An
     _logger.info("[payload_sync] 最终cases数量: %d", len(cases))
 
     session.output_payload = {"test_points": formatted_points, "cases": cases}
-    session.status = SessionStatus.success
-    session.error_message = None
+    if formatted_points or cases:
+        session.status = SessionStatus.success
+        session.error_message = None
+    else:
+        session.status = SessionStatus.failed
+        session.error_message = "AI 未生成任何测试用例，请检查输入内容或稍后重试"
     session.finished_at = datetime.now(timezone.utc)
     await session.save(
         update_fields=["output_payload", "status", "error_message", "finished_at"]
     )
+    _logger.info("[PAYLOAD-SYNC] session=%s saved | status=%s | points=%d | cases=%d",
+                 session_id, session.status, len(formatted_points), len(cases))
 
 
 async def sync_api_base_payload(
@@ -93,8 +100,12 @@ async def sync_api_base_payload(
     if extra:
         payload.update(extra)
     session.output_payload = payload
-    session.status = SessionStatus.success
-    session.error_message = None
+    if base_cases:
+        session.status = SessionStatus.success
+        session.error_message = None
+    else:
+        session.status = SessionStatus.failed
+        session.error_message = "AI 未生成任何基础用例，请检查输入内容或稍后重试"
     session.finished_at = datetime.now(timezone.utc)
     await session.save(
         update_fields=["output_payload", "status", "error_message", "finished_at"]

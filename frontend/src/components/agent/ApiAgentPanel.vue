@@ -50,6 +50,7 @@
             :stage-log-lines="stageLogLines"
             :quick-tags="quickTags"
             agent-type="api"
+            :session-status="sessionDetail?.status || ''"
             @send="sendMessage"
             @stop="stopStream"
             @open-case-list="handleOpenCaseList"
@@ -134,6 +135,7 @@ import {
   getMeta,
   listApiMessages,
   listApiSessions,
+  reconnectApiSession,
   streamApiMessage,
   streamSaveBaseCases,
   summarizeApiTitle,
@@ -204,6 +206,10 @@ const pipelineSummary = computed(() =>
 
 let abortController = null
 let tempMsgId = 0
+let _lastEventSeq = -1  // SSE event sequence tracking for reconnect
+let _loadGen = 0          // selectSession / isActive 代次计数器，防止竞态覆盖
+let _isActiveBusy = false // 防止 isActive watcher 并发执行
+let _titleBusy = false    // 防止 _ensureApiTitle 并发调用
 
 // Check if current messages contain a unified agent response
 const hasAgentResponse = computed(() =>
@@ -247,7 +253,7 @@ async function refreshSession() {
   boundInterfaceId.value = payload.interface_id ?? boundInterfaceId.value
 }
 
-async function loadMessages() {
+async function loadMessages(gen) {
   if (!activeSessionId.value) {
     messages.value = []
     return
@@ -294,6 +300,32 @@ async function loadMessages() {
     currentAgent.isStreaming = false
     merged.push(currentAgent)
   }
+
+  // 将 session 的 output_payload 附加到最后一个 agent 消息，供结果卡片渲染
+  const lastAgent = [...merged].reverse().find(m => m.role === 'agent')
+  const payload = sessionDetail.value?.output_payload
+  if (lastAgent && payload) {
+    if (payload.base_cases?.length || payload.interfaces?.length || payload.summary) {
+      lastAgent.payload = payload
+    }
+  } else if (!lastAgent && payload && (payload.base_cases?.length || payload.interfaces?.length || payload.summary)) {
+    // DB 中无 assistant/tool 消息（竞态窗口），但 payload 已存在 → 从 payload 构建结果块
+    merged.push({
+      id: `agent-payload-${Date.now()}`,
+      role: 'agent',
+      isStreaming: false,
+      stages: [],
+      finalText: '',
+      payload: payload,
+      streamingText: '',
+    })
+  }
+
+  // 竞态保护：如果 selectSession 已被新的调用取代，丢弃本次过期响应
+  if (gen !== undefined && gen !== _loadGen) {
+    console.log('[ApiAgentPanel][LOAD-MSG] stale response discarded, gen:', gen, 'current:', _loadGen)
+    return
+  }
   messages.value = merged
 }
 
@@ -335,13 +367,21 @@ function startNewSession() {
 async function selectSession(id) {
   if (streaming.value) stopStream()
   _stopRunningPoll()
+  _lastEventSeq = -1  // 重置事件序号追踪
+  const gen = ++_loadGen
   activeSessionId.value = id
   setComposerMode(false)
 
   try {
-    await Promise.all([refreshSession(), loadMessages(), loadSessions()])
+    await Promise.all([refreshSession(), loadMessages(gen), loadSessions()])
+    // 竞态保护：如果用户已切到其他 session，丢弃本次结果
+    if (gen !== _loadGen) {
+      console.log('[ApiAgentPanel][SELECT-SESSION] stale discarded, gen:', gen, 'current:', _loadGen)
+      return
+    }
   } catch (e) {
     console.error('[ApiAgentPanel] selectSession 加载失败:', e)
+    if (gen !== _loadGen) return // 过期请求不弹错误提示
     ElMessage.error('加载会话失败，请稍后重试')
     return
   }
@@ -355,19 +395,31 @@ async function selectSession(id) {
   } else {
     pipelineEditDone.value = !!detail?.output_payload?.summary
   }
+  await _ensureApiTitle()
 
   // 如果 session 正在后台执行，将最后一个 agent 消息标记为 streaming 状态并启动轮询
   // loadMessages() 已从 DB 加载消息并创建了 agent 块，不需要再追加新的
   if (detail?.status === 'running') {
+    if (gen !== _loadGen) return // 再次检查，防止 await 期间被取代
     // 根据 pipeline_progress 确定当前阶段的显示文本
     const progress = detail?.output_payload?.pipeline_progress
     const currentPhase = progress?.current_phase
     const phases = progress?.phases || []
+    // Pipeline phase name → SSE stage name 映射，确保与 SSE 重连事件合并
+    const PHASE_TO_STAGE = {
+      '生成测试接口': 'create_interfaces',
+      '生成基础用例': 'generate_base_cases',
+      '用例编辑确认': 'edit_base_cases',
+      '生成结构化用例': 'structure_cases',
+      '接口用例预执行': 'pre_run',
+    }
     let stageText = '正在生成结构化用例和预执行...'
+    let stageName = 'processing'
     if (currentPhase && phases.length) {
       const runningPhase = phases.find(p => p.status === 'running') || phases.find(p => p.id === currentPhase)
       if (runningPhase) {
         stageText = `正在${runningPhase.name}...`
+        stageName = PHASE_TO_STAGE[runningPhase.name] || 'processing'
       }
     }
 
@@ -375,16 +427,22 @@ async function selectSession(id) {
     if (lastAgentMsg) {
       // 标记已有的最后一个 agent 块为 streaming
       lastAgentMsg.isStreaming = true
-      // 追加当前运行阶段到已有的 stages 数组，保留历史阶段日志
+      // 追加或更新当前运行阶段（使用实际 stage name 以便与 SSE 重连事件合并）
       const existingStages = lastAgentMsg.stages || []
-      lastAgentMsg.stages = [...existingStages, { name: 'running', status: 'running', text: stageText, logs: [] }]
+      const existingRunning = existingStages.find(s => s.status === 'running')
+      if (existingRunning) {
+        existingRunning.text = stageText
+        existingRunning.name = stageName
+      } else {
+        lastAgentMsg.stages = [...existingStages, { name: stageName, status: 'running', text: stageText, logs: [] }]
+      }
     } else {
       // 没有历史 agent 消息（极端情况），追加一个占位提示
       messages.value = [...messages.value, {
         id: `running-hint-${Date.now()}`,
         role: 'agent',
         isStreaming: true,
-        stages: [{ name: 'running', status: 'running', text: stageText, logs: [] }],
+        stages: [{ name: stageName, status: 'running', text: stageText, logs: [] }],
         finalText: '',
         payload: null,
         streamingText: '',
@@ -405,19 +463,113 @@ function _startRunningPoll() {
       const res = await getApiSession(activeSessionId.value)
       const detail = res.data.data
       if (detail && detail.status !== 'running') {
-        _stopRunningPoll()
         sessionDetail.value = detail
-        // 重新评估编辑按钮可见性：有 summary 说明已走过编辑阶段
         pipelineEditDone.value = !!detail.output_payload?.summary
-        // 只在不在流式传输时重新加载，避免与正在进行的流式传输冲突
         if (!streaming.value) {
-          await Promise.all([loadMessages(), loadSessions()])
+          await loadMessages()
+          await loadSessions()
+          await _ensureApiTitle()
+          // DB 有 agent 消息（assistant 已存入 DB = _finalize 已完成）→ 停止轮询
+          if (messages.value.some(m => m.role === 'agent')) {
+            _stopRunningPoll()
+          }
         }
       }
     } catch (e) {
       console.error('[poll] session poll failed:', e)
     }
   }, 3000)
+}
+
+/**
+ * 标题补全：SSE done 事件未到达时（断连、切走再切回），在 selectSession / isActive 时触发。
+ * status=success 且标题为空/"新对话"/截断文本（以"..."结尾）时触发。
+ */
+async function _ensureApiTitle() {
+  if (_titleBusy) return
+  const s = sessionDetail.value
+  if (!s || s.status !== 'success' || !activeSessionId.value) return
+  if (s.title && s.title !== '新对话' && !s.title.endsWith('...')) return
+  _titleBusy = true
+  console.log('[API-TITLE-FIX] title missing/truncated, triggering summarize | sessionId:', activeSessionId.value,
+    '| currentTitle:', s.title)
+  try {
+    await summarizeApiTitle(activeSessionId.value)
+    await loadSessions()
+    console.log('[API-TITLE-FIX] ✅ title generated and sessions reloaded')
+  } catch (e) {
+    console.error('[API-TITLE-FIX] ❌ summarizeApiTitle failed:', e)
+  } finally {
+    _titleBusy = false
+  }
+}
+
+/**
+ * SSE 断线重连：重放缓冲事件 + 接入实时流。
+ * 成功返回 true，失败抛出异常（调用方降级为轮询）。
+ */
+async function _tryReconnect() {
+  if (!activeSessionId.value) return
+
+  console.log('[reconnect] Attempting SSE reconnect for session', activeSessionId.value, 'lastSeq:', _lastEventSeq)
+
+  abortController = new AbortController()
+  streaming.value = true
+
+  let reconnectDone = false
+
+  await reconnectApiSession(
+    activeSessionId.value,
+    _lastEventSeq,
+    {
+      onEvent(type, data) {
+        _lastEventSeq++  // 追踪事件序号，供断线重连使用
+        if (type === 'stage' && data?.name) {
+          const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
+          if (lastAgentMsg) {
+            const stages = lastAgentMsg.stages || []
+            let stage = stages.find(s => s.name === data.name)
+            if (!stage) {
+              stage = { name: data.name, status: 'running', text: '', logs: [] }
+              lastAgentMsg.stages = [...stages, stage]
+            }
+            if (data.text) stage.text = data.text
+            if (data.status) stage.status = data.status
+          }
+        } else if (type === 'custom' && data) {
+          const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
+          if (lastAgentMsg) {
+            const stages = lastAgentMsg.stages || []
+            const activeStage = [...stages].reverse().find(s => s.status !== 'done')
+            if (activeStage) {
+              activeStage.logs = [...(activeStage.logs || []), String(data)]
+            }
+          }
+        } else if (type === 'done') {
+          reconnectDone = true
+        }
+      },
+    },
+    abortController.signal,
+  )
+
+  // 重连流结束，刷新最终状态
+  streaming.value = false
+  abortController = null
+
+  await refreshSession()
+  const detail = sessionDetail.value
+
+  if (detail?.status === 'running') {
+    // 任务仍在运行，启动轮询兜底
+    if (!_runningPollTimer) _startRunningPoll()
+  } else {
+    // 任务已完成
+    pipelineEditDone.value = !!detail?.output_payload?.summary
+    await Promise.all([loadMessages(), loadSessions()])
+  }
+
+  console.log('[reconnect] Reconnect completed, session status:', detail?.status)
 }
 
 async function createSessionFromComposer(payload) {
@@ -485,10 +637,15 @@ function detectStageFromText(text) {
 
 async function sendMessage(content) {
   if (!activeSessionId.value || streaming.value) return
+  console.log('[SEND-MSG] 📤 sendMessage started at', new Date().toLocaleTimeString(), '| session:', activeSessionId.value)
   streaming.value = true
   streamingText.value = ''
   hasStageProgress.value = false
   abortController = new AbortController()
+
+  // 乐观更新本地 session 状态为 running，然后刷新侧边栏
+  const activeSession = sessions.value.find(s => s.id === activeSessionId.value)
+  if (activeSession) activeSession.status = 'running'
 
   // Add user message
   messages.value = [...messages.value, {
@@ -613,6 +770,7 @@ async function sendMessage(content) {
           _addLog('default', `[错误] ${errorMsg}`)
         },
         done: async () => {
+          console.log('[SSE-DONE] 🏁 done event received at', new Date().toLocaleTimeString())
           abortController?.abort()
           // Wait for payload_updated to complete first
           await payloadUpdatedPromise
@@ -620,8 +778,12 @@ async function sendMessage(content) {
           // For pipeline sessions, don't mark as "已完成" — task continues after user edits
           const mode = sessionDetail.value?.output_payload?.mode
           const isPipeline = mode === 'from_interfaces' || mode === 'from_doc' || mode === 'from_prompt'
+          console.log('[SSE-DONE] mode:', mode, '| isPipeline:', isPipeline)
           if (!isPipeline) {
             agentResponse.isStreaming = false
+            console.log('[SSE-DONE] isStreaming set to false (non-pipeline) at', new Date().toLocaleTimeString())
+          } else {
+            console.log('[SSE-DONE] skipping isStreaming=false (pipeline mode)')
           }
           // Don't call loadMessages() — it replaces client-side stage blocks
           await Promise.all([refreshSession(), loadSessions()])
@@ -752,8 +914,9 @@ async function onSaveEditedBaseCases(editedInterfaces) {
     abortController = new AbortController()
     streaming.value = true
 
-    // 刷新侧边栏，将状态从"待确认"更新为"生成中"
-    loadSessions()
+    // 乐观更新侧边栏状态：confirm → running
+    const activeSession = sessions.value.find(s => s.id === activeSessionId.value)
+    if (activeSession) activeSession.status = 'running'
 
     // Reuse the existing agent response from Phase 1-3 instead of creating a new one
     let agentResponse = messages.value.filter(m => m.role === 'agent').pop()
@@ -874,38 +1037,105 @@ function confirmCasesFromCard() {
 async function onConfirmDialog(payload) {
   if (!activeSessionId.value) return
   confirming.value = true
+  pipelineEditDone.value = true
   try {
     const indexes = payload.selected_indexes?.length ? payload.selected_indexes : selectedIndexes.value
-    await confirmApiGeneration({
-      session_id: activeSessionId.value,
-      selected_indexes: indexes,
-      environment_id: payload.environment_id,
-      catalog_id: payload.catalog_id,
-      interface_id: payload.interface_id ?? boundInterfaceId.value ?? undefined,
-    })
+
+    // Legacy confirm now returns SSE (Pipeline Phase 4-5)
+    abortController = new AbortController()
+    streaming.value = true
+
+    // 乐观更新侧边栏状态：confirm/success → running
+    const activeSession = sessions.value.find(s => s.id === activeSessionId.value)
+    if (activeSession) activeSession.status = 'running'
+
+    // Reuse existing agent response or create new one
+    let agentResponse = messages.value.filter(m => m.role === 'agent').pop()
+    if (!agentResponse) {
+      agentResponse = reactive({
+        id: `agent-confirm-${Date.now()}`,
+        role: 'agent',
+        isStreaming: true,
+        stages: [],
+        finalText: '',
+        payload: null,
+        streamingText: '',
+      })
+      messages.value = [...messages.value, agentResponse]
+    } else {
+      agentResponse.isStreaming = true
+    }
+
+    const getStage = (name) => {
+      let stage = agentResponse.stages.find(s => s.name === name)
+      if (!stage) {
+        stage = { name, status: 'running', text: '', logs: [] }
+        agentResponse.stages = [...agentResponse.stages, stage]
+      }
+      return stage
+    }
+
+    await confirmApiGeneration(
+      {
+        session_id: activeSessionId.value,
+        selected_indexes: indexes,
+        environment_id: payload.environment_id,
+        catalog_id: payload.catalog_id,
+        interface_id: payload.interface_id ?? boundInterfaceId.value ?? undefined,
+      },
+      {
+        onEvent(type, data) {
+          _lastEventSeq++
+          if (type === 'stage' && data?.name) {
+            const stage = getStage(data.name)
+            if (data.text) stage.text = data.text
+            if (data.status) stage.status = data.status
+            agentResponse.stages.forEach(s => {
+              if (s.status === 'running' && s.name !== data.name) s.status = 'done'
+            })
+          } else if (type === 'custom' && data) {
+            const activeStage = [...agentResponse.stages].reverse().find(s => s.status !== 'done')
+            if (activeStage) {
+              activeStage.logs = [...(activeStage.logs || []), String(data)]
+            }
+          } else if (type === 'summary') {
+            agentResponse.payload = { ...(agentResponse.payload || {}), summary: data }
+          } else if (type === 'payload_updated') {
+            refreshSession()
+          } else if (type === 'error' && data?.message) {
+            ElMessage.error(data.message)
+          }
+        },
+      },
+      abortController.signal,
+    )
+
+    // SSE stream ended
+    agentResponse.isStreaming = false
+    agentResponse.stages.forEach(s => { if (s.status === 'running') s.status = 'done' })
+    streaming.value = false
+    abortController = null
+
+    await refreshSession()
+    pipelineEditDone.value = !!sessionDetail.value?.output_payload?.summary
+    await Promise.all([loadMessages(), loadSessions()])
+
     ElMessage.success(t('page.agent.saved'))
     showConfirm.value = false
+  } catch (e) {
+    if (e?.name !== 'AbortError') {
+      console.error('[confirm] Failed:', e)
+      ElMessage.error(e?.message || t('common.requestFailed'))
+    }
   } finally {
     confirming.value = false
+    streaming.value = false
   }
 }
 
-/* Kept for backward compatibility - delegates to dialog */
+/* Kept for backward compatibility - delegates to onConfirmDialog */
 async function confirmCases(payload) {
-  if (!activeSessionId.value) return
-  confirming.value = true
-  try {
-    await confirmApiGeneration({
-      session_id: activeSessionId.value,
-      selected_indexes: payload.selected_indexes,
-      environment_id: payload.environment_id,
-      catalog_id: payload.catalog_id,
-      interface_id: payload.interface_id ?? boundInterfaceId.value ?? undefined,
-    })
-    ElMessage.success(t('page.agent.saved'))
-  } finally {
-    confirming.value = false
-  }
+  return onConfirmDialog(payload)
 }
 
 const resolvedInterfaceId = computed(() => {
@@ -917,40 +1147,89 @@ watch(
   () => props.isActive,
   (active) => {
     if (active) {
+      if (_isActiveBusy) {
+        console.log('[ApiAgentPanel][TAB-WATCH] → skip: previous activation still busy')
+        return
+      }
+      _isActiveBusy = true
       emit('composer-mode-change', composerMode.value)
-      // 恢复：刷新 session 状态，如果有正在运行的 session，重新启动轮询
+      // 恢复：刷新 session 状态，如果有正在运行的 session，尝试重连 SSE 或轮询
       if (activeSessionId.value) {
-        refreshSession().then(() => {
+        refreshSession().then(async () => {
+          const gen = ++_loadGen
           const detail = sessionDetail.value
           // 重新评估编辑按钮可见性
           if (detail?.status === 'running') {
             pipelineEditDone.value = true  // 还在运行，隐藏按钮
             // 标记最后一个 agent 块为 streaming 并显示阶段进度
             const progress = detail?.output_payload?.pipeline_progress
+            const PHASE_TO_STAGE = {
+              '生成测试接口': 'create_interfaces',
+              '生成基础用例': 'generate_base_cases',
+              '用例编辑确认': 'edit_base_cases',
+              '生成结构化用例': 'structure_cases',
+              '接口用例预执行': 'pre_run',
+            }
             const runningPhase = (progress?.phases || []).find(p => p.status === 'running')
             const stageText = runningPhase ? `正在${runningPhase.name}...` : '正在生成结构化用例和预执行...'
-            const lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
-            if (lastAgentMsg) {
-              lastAgentMsg.isStreaming = true
-              const existingStages = lastAgentMsg.stages || []
-              lastAgentMsg.stages = [...existingStages, { name: 'running', status: 'running', text: stageText, logs: [] }]
+            const stageName = runningPhase ? (PHASE_TO_STAGE[runningPhase.name] || 'processing') : 'processing'
+            let lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
+            // 如果没有 agent 消息（流断开时丢失），创建占位
+            if (!lastAgentMsg) {
+              lastAgentMsg = reactive({
+                id: `agent-reconnect-${Date.now()}`,
+                role: 'agent',
+                isStreaming: true,
+                stages: [],
+                finalText: '',
+                payload: null,
+                streamingText: '',
+              })
+              messages.value = [...messages.value, lastAgentMsg]
             }
-            if (!_runningPollTimer) {
-              _startRunningPoll()
+            lastAgentMsg.isStreaming = true
+            const existingStages = lastAgentMsg.stages || []
+            const existingRunning = existingStages.find(s => s.status === 'running')
+            if (existingRunning) {
+              existingRunning.text = stageText
+              existingRunning.name = stageName
+            } else {
+              lastAgentMsg.stages = [...existingStages, { name: stageName, status: 'running', text: stageText, logs: [] }]
             }
+            // 优先尝试 SSE 重连，失败则降级为轮询
+            _tryReconnect().catch(() => {
+              if (!_runningPollTimer) _startRunningPoll()
+            })
           } else if (detail?.status === 'confirm') {
             pipelineEditDone.value = false // 待确认，显示按钮
             if (!streaming.value) {
-              loadMessages()
+              await loadMessages(gen)
+              loadSessions()
+              if (gen !== _loadGen) return // 竞态保护
+              await _ensureApiTitle()
+              const agentMsg = messages.value.find(m => m.role === 'agent')
+              if (!agentMsg) {
+                _startRunningPoll()
+              }
             }
           } else {
             pipelineEditDone.value = !!detail?.output_payload?.summary
             if (!streaming.value) {
-              // session 在隐藏期间完成了，重新加载消息
-              loadMessages()
+              await loadMessages(gen)
+              loadSessions()
+              if (gen !== _loadGen) return // 竞态保护
+              await _ensureApiTitle()
+              const agentMsg = messages.value.find(m => m.role === 'agent')
+              if (!agentMsg) {
+                _startRunningPoll()
+              }
             }
           }
+        }).finally(() => {
+          _isActiveBusy = false
         })
+      } else {
+        _isActiveBusy = false
       }
     } else {
       // 暂停：中止流式传输和轮询，释放所有 HTTP 连接

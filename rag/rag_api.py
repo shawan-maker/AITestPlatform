@@ -120,6 +120,29 @@ class RAGClient:
         data = resp.json()
         return str(data.get("doc_id") or file_source)
 
+    def get_doc_status(self, doc_id: str, workspace_key: str | None = None) -> str:
+        """Query LightRAG for the indexing status of a document.
+
+        Returns one of: "processed", "processing", "error", "not_found".
+        """
+        try:
+            resp = requests.get(
+                f"{self.url}/documents",
+                headers=self._workspace_headers(workspace_key),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            statuses = data.get("statuses", {})
+            for status, docs in statuses.items():
+                if isinstance(docs, list):
+                    for d in docs:
+                        if d.get("id") == doc_id:
+                            return status
+            return "not_found"
+        except Exception:
+            return "unknown"
+
     def upload_document(
         self,
         file_path: str,

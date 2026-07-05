@@ -91,10 +91,11 @@
         <table v-if="assertInfo && assertInfo.length" class="info-table assert-table">
           <thead><tr><th style="width:40px">结果</th><th>断言目标</th><th>比较方式</th><th>预期值</th><th>实际值</th></tr></thead>
           <tbody>
-            <tr v-for="(item, idx) in assertInfo" :key="idx" :class="item.passed ? 'assert-passed' : 'assert-failed'">
+            <tr v-for="(item, idx) in assertInfo" :key="idx" :class="item.passed === true ? 'assert-passed' : item.passed === false ? 'assert-failed' : ''">
               <td>
-                <el-icon v-if="item.passed" color="#67C23A"><CircleCheckFilled /></el-icon>
-                <el-icon v-else color="#F56C6C"><CircleCloseFilled /></el-icon>
+                <el-icon v-if="item.passed === true" color="#67C23A"><CircleCheckFilled /></el-icon>
+                <el-icon v-else-if="item.passed === false" color="#F56C6C"><CircleCloseFilled /></el-icon>
+                <span v-else>-</span>
               </td>
               <td>{{ item.field || item.target || item.name }}</td>
               <td>{{ item.type || item.method || 'eq' }}</td>
@@ -162,11 +163,19 @@ function formatJson(data) {
 }
 
 function isFormData(result) {
-  if (!result || !result.request_body) return false
-  var ct = ''
-  if (result.request_headers && typeof result.request_headers === 'object') {
-    ct = (result.request_headers['Content-Type'] || result.request_headers['content-type'] || '').toLowerCase()
+  if (!result || !result.request_body) {
+    console.log('[FORM-CHECK] early return: no result or no request_body', { hasResult: !!result, body: result?.request_body })
+    return false
   }
+  var ct = ''
+  // 优先从 props.requestHeaders 读取，其次从 result.request_headers
+  var headers = props.requestHeaders || result.request_headers || {}
+  console.log('[FORM-CHECK] headers:', JSON.stringify(headers).substring(0, 200))
+  console.log('[FORM-CHECK] request_body type:', typeof result.request_body, 'preview:', String(result.request_body).substring(0, 100))
+  if (headers && typeof headers === 'object') {
+    ct = (headers['Content-Type'] || headers['content-type'] || '').toLowerCase()
+  }
+  console.log('[FORM-CHECK] content-type:', ct, '| isForm:', ct.indexOf('form-urlencoded') >= 0, '| bodyIsString:', typeof result.request_body === 'string', '| hasEquals:', String(result.request_body).indexOf('=') >= 0)
   return ct.indexOf('form-urlencoded') >= 0 && typeof result.request_body === 'string' && result.request_body.indexOf('=') >= 0
 }
 

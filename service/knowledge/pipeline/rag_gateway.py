@@ -66,12 +66,49 @@ class RagGateway:
                 doc_id,
                 workspace_key,
             )
+            # 远程 LightRAG 异步索引，轮询等待完成
+            await cls._wait_remote_indexing(rag_doc_id, workspace_key)
             return RagBackend.rag_client, rag_doc_id
         logger.info("RAGManager.index_text 开始 path=%s", absolute_path)
         manager = await cls._get_manager(workspace_key)
         await manager.add_document(absolute_path)
         logger.info("RAGManager.index_text 完成 path=%s", absolute_path)
         return RagBackend.rag_manager, absolute_path
+
+    @classmethod
+    async def _wait_remote_indexing(
+        cls,
+        rag_doc_id: str,
+        workspace_key: str,
+        *,
+        poll_interval: float = 3.0,
+        timeout: float = 300.0,
+    ) -> None:
+        """Poll LightRAG server until the document is fully indexed.
+
+        Raises TimeoutError if indexing takes too long,
+        or RuntimeError if the server reports an error.
+        """
+        import time
+        start = time.monotonic()
+        while True:
+            status = await asyncio.to_thread(
+                cls._get_client().get_doc_status, rag_doc_id, workspace_key
+            )
+            logger.info("[RAG] doc=%s status=%s", rag_doc_id, status)
+
+            if status == "processed":
+                return
+            if status == "error":
+                raise RuntimeError(f"LightRAG 索引失败: doc_id={rag_doc_id}")
+
+            elapsed = time.monotonic() - start
+            if elapsed > timeout:
+                raise TimeoutError(
+                    f"LightRAG 索引超时 ({timeout}s): doc_id={rag_doc_id}, last_status={status}"
+                )
+
+            await asyncio.sleep(poll_interval)
 
     @classmethod
     async def index_multimodal(
@@ -87,6 +124,8 @@ class RagGateway:
                 absolute_path,
                 workspace_key,
             )
+            # 远程 LightRAG 异步索引，轮询等待完成
+            await cls._wait_remote_indexing(rag_doc_id, workspace_key)
             return RagBackend.rag_client, rag_doc_id
         logger.info("RAGManager.index_multimodal 开始 path=%s", absolute_path)
         manager = await cls._get_manager(workspace_key)

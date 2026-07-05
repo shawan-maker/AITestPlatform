@@ -6,5 +6,5 @@ requires-python = ">=3.10"
 
 [tool.aerich]
 tortoise_orm = "service.core.config.TORTOISE_ORM"
-location = "./migrations"
+location = "./scripts/migrations"
 src_folder = "./."

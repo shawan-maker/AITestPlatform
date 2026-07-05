@@ -12,7 +12,7 @@ from tortoise import Tortoise  # noqa: E402
 
 from service.core.config import TORTOISE_ORM  # noqa: E402
 
-MIGRATION_FILE = ROOT / "migrations" / "models" / "8_20260529120000_ai_generation_phase2.py"
+MIGRATION_FILE = ROOT / "scripts" / "migrations" / "models" / "8_20260529120000_ai_generation_phase2.py"
 
 
 def _load_migration():

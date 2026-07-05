@@ -45,7 +45,7 @@ async def main() -> None:
 
         spec = importlib.util.spec_from_file_location(
             "knowledge_migration_v1",
-            ROOT / "migrations" / "models" / "3_20260525200000_knowledge_module_v1.py",
+            ROOT / "scripts" / "migrations" / "models" / "3_20260525200000_knowledge_module_v1.py",
         )
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

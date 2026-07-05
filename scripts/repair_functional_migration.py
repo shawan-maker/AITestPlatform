@@ -44,7 +44,7 @@ async def main() -> None:
     if not await _table_exists(conn, "requirement_candidate"):
         spec = importlib.util.spec_from_file_location(
             "functional_migration_ft_a",
-            ROOT / "migrations" / "models" / "4_20260526100000_functional_module_ft_a.py",
+            ROOT / "scripts" / "migrations" / "models" / "4_20260526100000_functional_module_ft_a.py",
         )
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None

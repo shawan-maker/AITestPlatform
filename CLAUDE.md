@@ -131,5 +131,4 @@ Copy `.env.example` to `.env`. Key vars: `DATABASE_URL` (MySQL), `REDIS_URL`, `J
 - `workflow/` — Workflow orchestration scripts for API case generation pipelines
 - `mcp_tools/` — MCP tool definitions
 - `config/settings.py` — RAG/LLM runtime config (separate from `.env`-based core config)
-- `scripts/` — Management utilities, smoke tests, migration repair scripts
-- `migrations/` — Aerich-generated DB migration files
+- `scripts/` — Management utilities, DB migrations (`scripts/migrations/`), migration repair scripts

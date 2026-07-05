@@ -14,7 +14,7 @@ from tortoise import Tortoise  # noqa: E402
 from service.core.config import TORTOISE_ORM  # noqa: E402
 
 MIGRATION_VERSION = "models_9_20260530120000_env_sit_global_config"
-MIGRATION_FILE = ROOT / "migrations" / "models" / "9_20260530120000_env_sit_global_config.py"
+MIGRATION_FILE = ROOT / "scripts" / "migrations" / "models" / "9_20260530120000_env_sit_global_config.py"
 
 
 async def _table_exists(conn, table: str) -> bool:

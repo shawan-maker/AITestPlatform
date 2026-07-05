@@ -461,7 +461,8 @@ async function loadCaseDetail() {
 
     /* 解析预执行结果（_exec_result） */
     var er = payload._exec_result
-    var er = payload._exec_result
+    console.log('[EXEC-DEBUG] payload._exec_result:', er ? JSON.stringify(er).substring(0, 500) : 'null/undefined')
+    console.log('[EXEC-DEBUG] payload keys:', Object.keys(payload))
     if (er && typeof er === 'object' && Object.keys(er).length > 0) {
       // 兼容两种格式：扁平结构 {status, response_body, ...} 和嵌套结构 {state, cases: [{...}]}
       var firstCase = null
@@ -571,6 +572,16 @@ async function loadCaseDetail() {
     // 加载 run_records（如果 _exec_result 已有数据则仅作为补充）
     var recRes = await getApiCaseRunRecords(caseId.value)
     runRecords.value = recRes.data.data ? (recRes.data.data.items || recRes.data.data) : []
+    console.log('[EXEC-DEBUG] runRecords count:', runRecords.value.length)
+    if (runRecords.value.length > 0) {
+      var lr = runRecords.value[0]
+      console.log('[EXEC-DEBUG] latest record keys:', Object.keys(lr))
+      console.log('[EXEC-DEBUG] latest record status:', lr.status)
+      console.log('[EXEC-DEBUG] has api_requests_info:', !!lr.api_requests_info)
+      if (lr.api_requests_info) {
+        console.log('[EXEC-DEBUG] api_requests_info keys:', Object.keys(lr.api_requests_info))
+      }
+    }
 
     // 如果 payload 中没有执行结果，从最新的执行记录中加载
     if (!execResult.value && runRecords.value.length > 0) {

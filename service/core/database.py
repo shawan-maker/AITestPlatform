@@ -27,7 +27,7 @@ async def auto_migrate() -> None:
     from pathlib import Path
 
     logger = logging.getLogger("auto_migrate")
-    migration_dir = Path(__file__).resolve().parents[2] / "migrations" / "models"
+    migration_dir = Path(__file__).resolve().parents[2] / "scripts" / "migrations" / "models"
 
     if not migration_dir.is_dir():
         return

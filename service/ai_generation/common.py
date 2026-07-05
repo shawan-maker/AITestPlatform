@@ -74,14 +74,21 @@ async def load_knowledge_document_text(document_id: int, project_id: int) -> str
     if version is None:
         raise AppException("知识库文档版本不存在", 404)
 
-    if not version.file_expired and version.file_path:
-        path = KnowledgeStorage.absolute_path(version.file_path)
-        if path.is_file():
-            try:
-                text = path.read_text(encoding="utf-8", errors="ignore").strip()
-            except OSError as exc:
-                raise AppException(f"读取知识库文档失败: {exc}", 500) from exc
-            if text:
-                return text
+    if version.file_expired:
+        raise AppException("该文档版本已过期，请重新上传或选择有效版本", 400)
+    if not version.file_path:
+        raise AppException("文档版本无有效文件，请检查上传是否完成", 400)
 
-    raise AppException("知识库文档内容为空", 400)
+    path = KnowledgeStorage.absolute_path(version.file_path)
+    if not path.is_file():
+        raise AppException("文档文件已丢失，请重新上传", 400)
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError as exc:
+        raise AppException(f"读取知识库文档失败: {exc}", 500) from exc
+
+    if not text:
+        raise AppException("知识库文档内容为空，请确认文档已正确解析", 400)
+
+    return text
