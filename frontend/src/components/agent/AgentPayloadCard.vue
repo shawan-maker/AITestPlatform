@@ -528,7 +528,7 @@ function formatSteps(steps) {
   }
 
   .priority-tag {
-    font-size: 11px;
+    font-size: var(--font-small);
     color: var(--el-text-color-secondary);
     background: var(--el-fill-color);
     padding: 2px 8px;

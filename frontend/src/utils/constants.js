@@ -133,3 +133,115 @@ export const CASE_KIND = {
   PRECONDITION: 'precondition',
   MAIN: 'main',
 }
+
+// ═══════════════════════════════════════════
+// Dialog width constants
+// ═══════════════════════════════════════════
+export const DIALOG_SIZES = {
+  small: 480,
+  medium: 640,
+  large: 960,
+  contentHalf: '50vw',
+}
+
+// ═══════════════════════════════════════════
+// Status color mapping (mirrors CSS tokens in variables.scss)
+// For use in JS/template inline styles where SCSS variables are unavailable
+// ═══════════════════════════════════════════
+export const STATUS_COLORS = {
+  success: '#219653',
+  warning: '#F2994A',
+  danger: '#EB5757',
+  info: '#409EFF',
+  primary: '#5B9BD5',
+  neutral: '#909399',
+}
+
+export const METHOD_COLORS = {
+  GET: '#219653',
+  POST: '#409EFF',
+  PUT: '#F2994A',
+  PATCH: '#F2994A',
+  DELETE: '#EB5757',
+}
+
+// ═══════════════════════════════════════════
+// i18n-aware MAP functions
+// Usage: const map = getDefectStatusMap(t)
+// These return the same structure as the legacy MAP constants
+// but with labels resolved through i18n.
+// ═══════════════════════════════════════════
+
+export const getDefectStatusMap = (t) => ({
+  init: { type: 'info', label: t('defect.status.init') },
+  open: { type: 'danger', label: t('defect.status.open') },
+  in_progress: { type: 'warning', label: t('defect.status.in_progress') },
+  resolved: { type: 'success', label: t('defect.status.resolved') },
+  closed: { type: 'info', label: t('defect.status.closed') },
+})
+
+export const getDefectSeverityMap = (t) => ({
+  minor: t('defect.severity.minor'),
+  normal: t('defect.severity.normal'),
+  serious: t('defect.severity.serious'),
+  critical: t('defect.severity.critical'),
+})
+
+export const getDefectPriorityMap = (t) => ({
+  high: t('defect.priority.high'),
+  medium: t('defect.priority.medium'),
+  low: t('defect.priority.low'),
+})
+
+export const getDefectCategoryMap = (t) => ({
+  functional: t('defect.category.functional'),
+  performance: t('defect.category.performance'),
+  ui: t('defect.category.ui'),
+  compatibility: t('defect.category.compatibility'),
+  security: t('defect.category.security'),
+  other: t('defect.category.other'),
+})
+
+export const getDefectHistoryActionMap = (t) => ({
+  created: t('defect.history.created'),
+  status_change: t('defect_history.statusChange'),
+  field_update: t('defect_history.fieldUpdate'),
+  comment_added: t('defect_history.commentAdded'),
+})
+
+export const getRunStatusMap = (t) => ({
+  pending: { type: 'info', label: t('status.exec.pending') },
+  running: { type: 'warning', label: t('status.exec.running') },
+  completed: { type: 'success', label: t('status.exec.completed') },
+  failed: { type: 'danger', label: t('status.exec.failed') },
+  cancelled: { type: 'info', label: t('status.exec.cancelled') },
+})
+
+export const getCaseResultMap = (t) => ({
+  success: { type: 'success', label: t('status.result.success') },
+  pass: { type: 'success', label: t('status.result.pass') },
+  fail: { type: 'danger', label: t('status.result.fail') },
+  failed: { type: 'danger', label: t('status.result.failed') },
+  error: { type: 'danger', label: t('status.result.error') },
+  skip: { type: 'info', label: t('status.result.skip') },
+  skipped: { type: 'info', label: t('status.result.skipped') },
+  pending: { type: 'info', label: t('status.result.pending') },
+})
+
+export const getSuiteTypeMap = (t) => ({
+  api: { type: 'primary', label: 'API' },
+  functional: { type: 'success', label: t('suite.type.functional') },
+  ui: { type: 'warning', label: 'UI' },
+})
+
+export const getTaskTypeMap = (t) => ({
+  api: { type: 'primary', label: 'API' },
+  functional: { type: 'success', label: t('task.type.functional') },
+  manual: { type: 'info', label: t('task.type.manual') },
+  ui: { type: 'warning', label: 'UI' },
+})
+
+export const getRunModeMap = (t) => ({
+  serial: t('runMode.serial'),
+  parallel: t('runMode.parallel'),
+})

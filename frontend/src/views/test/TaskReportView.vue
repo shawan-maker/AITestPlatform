@@ -80,7 +80,7 @@ function buildDefectSteps(logData) {
     if (ct) reqParts.push('Content-Type: ' + ct)
     var reqBody = reqInfo.body || data.request_body
     if (reqBody) reqParts.push(typeof reqBody === 'string' ? reqBody : JSON.stringify(reqBody, null, 2))
-    if (reqParts.length) parts.push('1、请求内容\n' + reqParts.join('\n'))
+    if (reqParts.length) parts.push(t('page.test.requestContent') + '\n' + reqParts.join('\n'))
     var resParts = []
     if (ri.status_code != null) resParts.push('Status: ' + ri.status_code)
     var resBody = ri.body || data.response_body
@@ -89,7 +89,7 @@ function buildDefectSteps(logData) {
       if (body.length > 2000) body = body.substring(0, 2000) + '\n...(truncated)'
       resParts.push(body)
     }
-    if (resParts.length) parts.push('2、响应内容\n' + resParts.join('\n'))
+    if (resParts.length) parts.push(t('page.test.responseContent') + '\n' + resParts.join('\n'))
   }
   var logLines = []
   if (data) {
@@ -99,7 +99,7 @@ function buildDefectSteps(logData) {
   var log = Array.isArray(logLines) ? logLines.map(function (l) { return Array.isArray(l) ? l.join(' ') : String(l) }).join('\n') : (logData?.log_data || '')
   var errMsg = logData?.error_message || ''
   var errorContent = log || errMsg
-  if (errorContent) parts.push('3、断言错误日志\n' + errorContent)
+  if (errorContent) parts.push(t('page.test.assertErrorLog') + '\n' + errorContent)
   return parts.join('\n\n')
 }
 

@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="mode === 'select' ? '选择用例' : '复用用例'"
+    :title="mode === 'select' ? t('page.apiCases.reuse.selectTitle') : t('page.apiCases.reuse.title')"
     width="80vw"
     :destroy-on-close="true"
     @update:model-value="$emit('update:modelValue', $event)"
@@ -12,7 +12,7 @@
       <div class="reuse-left">
         <el-input
           v-model="treeSearchKey"
-          placeholder="搜索目录/接口"
+          :placeholder="t('page.apiCases.reuse.searchCatalog')"
           clearable
           size="default"
           :prefix-icon="Search"
@@ -44,14 +44,14 @@
       <div class="reuse-right">
         <el-input
           v-model="caseSearchKey"
-          placeholder="搜索用例名称"
+          :placeholder="t('page.apiCases.reuse.searchCaseName')"
           clearable
           size="default"
           :prefix-icon="Search"
           class="case-search"
         />
         <div class="case-list-header" v-if="currentInterfaceName">
-          <span>{{ currentInterfaceName }} 的用例</span>
+          <span>{{ currentInterfaceName }}{{ t('page.apiCases.reuse.casesSuffix') }}</span>
         </div>
         <el-table
           ref="caseTableRef"
@@ -60,14 +60,14 @@
           size="small"
           border
           row-key="id"
-          empty-text="请点击左侧接口查看用例"
+          :empty-text="t('page.apiCases.reuse.selectInterfaceHint')"
           @selection-change="onCaseSelectionChange"
           style="flex: 1"
         >
           <el-table-column type="selection" width="45" />
           <el-table-column prop="id" label="ID" width="70" />
-          <el-table-column prop="title" label="用例名称" min-width="180" show-overflow-tooltip />
-          <el-table-column label="请求URL" min-width="200" show-overflow-tooltip>
+          <el-table-column prop="title" :label="t('page.apiCases.reuse.caseName')" min-width="180" show-overflow-tooltip />
+          <el-table-column :label="t('page.apiCases.reuse.requestUrl')" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
               <template v-if="getCaseUrl(row)">
                 <el-tag size="small" :type="getMethodType(row)" style="margin-right: 4px">{{ getCaseMethod(row) }}</el-tag>
@@ -82,10 +82,10 @@
 
     <template #footer>
       <div class="reuse-footer">
-        <span class="reuse-count">已选择 {{ selectedCaseIds.size }} 条用例</span>
+        <span class="reuse-count">{{ t('page.apiCases.reuse.selectedCount', { count: selectedCaseIds.size }) }}</span>
         <div>
-          <el-button @click="$emit('update:modelValue', false)">取消</el-button>
-          <el-button type="primary" :disabled="!selectedCaseIds.size" :loading="saving" @click="onConfirm">确定</el-button>
+          <el-button @click="$emit('update:modelValue', false)">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :disabled="!selectedCaseIds.size" :loading="saving" @click="onConfirm">{{ t('common.confirm') }}</el-button>
         </div>
       </div>
     </template>
@@ -94,10 +94,13 @@
 
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Search, Document, Folder } from '@element-plus/icons-vue'
 import { getApiCatalogTree, listInterfacesByCatalog, listApiCases, reuseApiCases } from '@/api/apiTest'
 import { useProjectScope } from '@/composables/useProjectScope'
+
+const { t } = useI18n()
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -177,7 +180,7 @@ function buildTreeNodes(nodes) {
     var node = nodes[i]
     var treeNode = {
       nodeKey: 'cat-' + node.id,
-      label: node.name || '未命名目录',
+      label: node.name || t('page.apiCases.reuse.unnamedCatalog'),
       isInterface: false,
       catalogId: node.id,
       children: [],
@@ -297,7 +300,7 @@ async function onLabelClick(data) {
     await loadInterfaceCases(data.interfaceId)
   } else {
     currentInterfaceId.value = null
-    currentInterfaceName.value = data.label + '（全部用例）'
+    currentInterfaceName.value = data.label + t('page.apiCases.reuse.allCases')
     await loadCatalogAllCases(data)
   }
   // 切换接口后，同步已有选择状态到表格
@@ -421,7 +424,7 @@ async function onTreeCheck(data, checkInfo) {
     // 勾选目录 → 递归选中/取消所有用例（同时切换右侧显示）
     // 同时手动勾选/取消目录下的所有接口子节点
     currentInterfaceId.value = null
-    currentInterfaceName.value = data.label + '（全部用例）'
+    currentInterfaceName.value = data.label + t('page.apiCases.reuse.allCases')
     var allCases = []
     await collectCasesRecursive(data, allCases)
     currentCases.value = allCases
@@ -514,7 +517,7 @@ async function onConfirm() {
 
   // reuse 模式：调用复用 API
   if (!props.currentInterfaceId) {
-    ElMessage.warning('未选择目标接口')
+    ElMessage.warning(t('page.apiCases.reuse.noInterfaceSelected'))
     return
   }
   saving.value = true
@@ -526,14 +529,14 @@ async function onConfirm() {
     })
     var data = res.data.data
     if (data && data.failures && data.failures.length) {
-      ElMessage.warning('部分用例复用失败: ' + data.failures.length + ' 条')
+      ElMessage.warning(t('page.apiCases.reuse.reusePartialFail', { count: data.failures.length }))
     } else {
-      ElMessage.success(res.data.message || '复用成功')
+      ElMessage.success(res.data.message || t('page.apiCases.reuse.reuseSuccess'))
     }
     emit('confirmed')
     emit('update:modelValue', false)
   } catch (e) {
-    ElMessage.error(e?.message || '复用失败')
+    ElMessage.error(e?.message || t('page.apiCases.reuse.reuseFailed'))
   } finally {
     saving.value = false
   }

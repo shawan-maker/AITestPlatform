@@ -268,15 +268,16 @@ defineExpose({ selectedList })
   flex-wrap: wrap;
   gap: 4px;
   cursor: pointer;
-  padding: 4px 12px;
-  min-height: 48px;
-  min-width: 200px;
-  max-width: 500px;
-  border: 2px solid var(--el-border-color);
-  border-radius: 12px;
-  font-size: 18px;
+  padding: 2px 8px;
+  min-height: 32px;
+  min-width: 160px;
+  max-width: 320px;
+  border: 1px solid var(--el-border-color);
+  border-radius: $radius-btn;
+  font-size: var(--font-size-base);
   color: var(--el-text-color-primary);
   background: var(--el-bg-color);
+  transition: border-color 0.15s;
 
   &:hover {
     border-color: var(--el-color-primary);

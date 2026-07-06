@@ -1,6 +1,6 @@
 <template>
   <el-dialog :close-on-click-modal="false" :model-value="modelValue" :title="t('page.agent.confirmPreRun')" width="520px" @update:model-value="$emit('update:modelValue', $event)">
-    <el-form label-width="120px">
+    <el-form label-width="auto">
       <el-form-item v-if="!interfaceId" :label="t('page.functional.catalog')" required>
         <el-select v-model="catalogId" filterable style="width: 100%">
           <el-option v-for="c in flatCatalogs" :key="c.id" :label="c.name" :value="c.id" />

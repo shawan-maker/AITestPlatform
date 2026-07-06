@@ -10,10 +10,10 @@
         </template>
         <el-input v-model="filters.q" :placeholder="t('common.keyword')" clearable style="width: 200px" />
         <el-select v-model="filters.type" :placeholder="t('page.test.taskType')" clearable style="width: 140px">
-          <el-option v-for="tt in TASK_TYPES" :key="tt" :label="TASK_TYPE_MAP[tt]?.label || tt" :value="tt" />
+          <el-option v-for="tt in TASK_TYPES" :key="tt" :label="taskTypeMap[tt]?.label || tt" :value="tt" />
         </el-select>
         <el-select v-model="filters.status" :placeholder="t('page.test.execStatus')" clearable style="width: 140px">
-          <el-option v-for="s in RUN_STATUS" :key="s" :label="RUN_STATUS_MAP[s]?.label || s" :value="s" />
+          <el-option v-for="s in RUN_STATUS" :key="s" :label="runStatusMap[s]?.label || s" :value="s" />
         </el-select>
         <el-select v-model="filters.result" :placeholder="t('page.test.execResult')" clearable style="width: 120px">
           <el-option value="success" :label="t('page.test.resultSuccess')" />
@@ -27,11 +27,11 @@
           <template #default="{ row }"><el-button link type="primary" @click="router.push(`/test/tasks/${row.id}`)">{{ row.task_name }}</el-button></template>
         </AppTableColumn>
         <AppTableColumn variant="fixed" :label="t('page.test.taskType')" :width="80">
-          <template #default="{ row }"><el-tag :type="TASK_TYPE_MAP[row.type]?.type" size="small">{{ TASK_TYPE_MAP[row.type]?.label || row.type }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="taskTypeMap[row.type]?.type" size="small">{{ taskTypeMap[row.type]?.label || row.type }}</el-tag></template>
         </AppTableColumn>
         <AppTableColumn prop="case_count" variant="fixed" :label="t('page.test.caseCount')" :width="80" />
         <AppTableColumn variant="fixed" :label="t('page.test.execStatus')" :width="100">
-          <template #default="{ row }"><StatusTag :status="row.last_run?.status" :map="RUN_STATUS_MAP" /></template>
+          <template #default="{ row }"><StatusTag :status="row.last_run?.status" :map="runStatusMap" /></template>
         </AppTableColumn>
         <AppTableColumn variant="fixed" :label="t('page.test.execResult')" :width="80">
           <template #default="{ row }">
@@ -50,7 +50,7 @@
         <AppTableColumn variant="fixed" :label="t('page.test.lastRun')" :width="170">
           <template #default="{ row }">{{ row.last_run?.start_time ? formatTime(row.last_run.start_time) : '-' }}</template>
         </AppTableColumn>
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="180">
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('page.test.stopRun'), t('common.delete')]">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/tasks/${row.id}`)">{{ t('common.view') }}</el-button>
             <el-button v-if="canEdit && isRowRunning(row) && row.type !== 'functional'" link type="danger" @click="stopTaskRow(row)">{{ t('page.test.stopRun') }}</el-button>
@@ -70,7 +70,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -80,7 +80,7 @@ import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import { usePolling } from '@/composables/usePolling'
-import { RUN_STATUS, RUN_STATUS_MAP, TASK_TYPES, TASK_TYPE_MAP } from '@/utils/constants'
+import { RUN_STATUS, getRunStatusMap, TASK_TYPES, getTaskTypeMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
@@ -92,6 +92,8 @@ import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import TaskCreateDialog from '@/components/test-management/TaskCreateDialog.vue'
 
 const { t } = useI18n()
+const runStatusMap = computed(() => getRunStatusMap(t))
+const taskTypeMap = computed(() => getTaskTypeMap(t))
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()

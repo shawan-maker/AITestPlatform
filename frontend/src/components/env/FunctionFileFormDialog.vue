@@ -7,7 +7,7 @@
     :class="dialogClass"
     @closed="reset"
   >
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="auto">
       <el-form-item :label="t('page.env.function.fileName')" prop="file_name">
         <el-input
           v-model="form.file_name"
@@ -59,7 +59,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'saved'])
 const { t } = useI18n()
 const { withProjectParams } = useProjectScope()
-const { editorHeight, dialogWidth, dialogTop, dialogClass } = useHalfScreenDialog(240)
+const { editorHeight, dialogWidth, dialogTop, dialogClass } = useHalfScreenDialog(320)
 const formRef = ref()
 const loading = ref(false)
 const envOptions = ref([])

@@ -33,7 +33,7 @@
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </AppTableColumn>
       <AppTableColumn prop="created_by_username" variant="flex" :label="t('page.knowledge.uploader')" />
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="100">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.download')]">
         <template #default="{ row }">
           <el-button link type="primary" :disabled="row.file_expired" @click="emit('download-version', row)">
             {{ t('common.download') }}

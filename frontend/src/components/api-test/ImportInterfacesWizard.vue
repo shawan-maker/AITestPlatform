@@ -20,7 +20,7 @@
     <div v-if="hasConflicts" style="margin-bottom: 12px">
       <el-alert
         type="warning"
-        :title="'以下接口与目标目录中已有接口冲突，请选择其他目录或修改接口路径'"
+        :title="t('page.apiCases.import.conflictHint')"
         :closable="false"
         show-icon
       />
@@ -38,7 +38,7 @@
       <AppTableColumn variant="fixed" :label="t('common.status')" :width="120">
         <template #default="{ row }">
           <el-tag :type="row._target_conflict ? 'danger' : 'success'">
-            {{ row._target_conflict ? '冲突' : '新建' }}
+            {{ row._target_conflict ? t('page.apiCases.import.statusConflict') : t('page.apiCases.import.statusNew') }}
           </el-tag>
         </template>
       </AppTableColumn>
@@ -117,7 +117,7 @@ async function loadPreview() {
     return
   }
   if (!props.catalogId) {
-    ElMessage.warning('请先选择目标目录')
+    ElMessage.warning(t('page.apiCases.import.selectCatalogFirst'))
     return
   }
   previewing.value = true
@@ -139,7 +139,7 @@ async function loadPreview() {
 
 async function confirm() {
   if (!props.catalogId) {
-    ElMessage.warning('请先选择目标目录')
+    ElMessage.warning(t('page.apiCases.import.selectCatalogFirst'))
     return
   }
   confirming.value = true
@@ -159,7 +159,7 @@ async function confirm() {
     const result = res.data.data
     if (result.failed > 0 && result.conflicts?.length) {
       ElMessage.error(
-        `${result.failed}个接口导入失败（与目标目录已有接口冲突）：` +
+        t('page.apiCases.import.importFailMsg', { count: result.failed }) +
         result.conflicts.map((c) => `${c.method} ${c.path}`).join('; ')
       )
     } else {

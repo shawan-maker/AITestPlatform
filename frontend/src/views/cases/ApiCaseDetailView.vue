@@ -1,14 +1,7 @@
 <template>
   <!-- v2-Q4: 接口用例详情页 - 对照设计稿实现 -->
   <div v-loading="loading" class="api-case-detail">
-    <!-- 顶部工具栏 -->
-    <div class="detail-header">
-      <div class="header-left">
-        <el-button text @click="goBack">
-          <el-icon><ArrowLeft /></el-icon> 返回
-        </el-button>
-      </div>
-    </div>
+    <BreadcrumbNav :items="breadcrumbs" />
 
     <!-- 主内容区：左右分栏 -->
     <SplitView :initial-width="380" :min-width="300" :max-width="560" drawer-title="用例列表">
@@ -93,8 +86,8 @@
                   :class="{ 'is-active': caseEnvId === env.id }"
                   @click="caseEnvId = env.id; currentEnvName = env.env_name"
                 >{{ env.env_name }}</el-dropdown-item>
-                <el-dropdown-item v-if="!environmentList.length" disabled>暂无变量文件</el-dropdown-item>
-                <el-dropdown-item divided @click="loadEnvironments">刷新</el-dropdown-item>
+                <el-dropdown-item v-if="!environmentList.length" disabled>{{ t('page.apiCases.noVarFile') }}</el-dropdown-item>
+                <el-dropdown-item divided @click="loadEnvironments">{{ t('common.refresh') }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -176,6 +169,7 @@ import ApiRequestPanel from '@/components/api-test/ApiRequestPanel.vue'
 import ApiResponsePanel from '@/components/api-test/ApiResponsePanel.vue'
 import PreconditionPanel from '@/components/api-test/PreconditionPanel.vue'
 import SplitView from '@/components/common/SplitView.vue'
+import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import ExecRecordsDrawer from '@/components/api-test/ExecRecordsDrawer.vue'
 import {
   debugRunApiCase,
@@ -194,6 +188,11 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const caseId = computed(function () { return Number(route.params.caseId) })
+
+const breadcrumbs = computed(() => [
+  { label: t('menu.casesApi'), to: '/cases/api' },
+  { label: t('common.breadcrumb.caseDetail') },
+])
 
 const loading = ref(false)
 const caseDetail = ref(null)
@@ -228,7 +227,7 @@ async function onPreconditionIdsUpdate(newIds) {
       caseDetail.value.case_payload = res.data.data.case_payload
     }
   } catch (err) {
-    ElMessage.error(err.message || '保存失败')
+    ElMessage.error(err.message || t('page.apiCases.saveFailed'))
   }
 }
 
@@ -634,7 +633,7 @@ function deleteCase(item) {
 
 async function runDebug() {
   if (!caseEnvId.value) {
-    ElMessage.warning('请先选择测试环境')
+    ElMessage.warning(t('page.apiCases.selectEnvFirst'))
     return
   }
   // 先保存修改后的内容，再调试
@@ -645,7 +644,7 @@ async function runDebug() {
       caseDetail.value.case_payload = saveRes.data.data.case_payload
     }
   } catch (err) {
-    ElMessage.error('保存失败: ' + (err.message || ''))
+    ElMessage.error(t('page.apiCases.saveFailed') + ': ' + (err.message || ''))
     return
   }
   running.value = true
@@ -712,11 +711,11 @@ async function runDebug() {
     refreshPreconditionCases()
   } catch (err) {
     if (err?.response?.status === 404) {
-      ElMessage.warning(err?.response?.data?.message || '用例已被删除，请返回列表')
+      ElMessage.warning(err?.response?.data?.message || t('page.apiCases.caseDeleted'))
       router.push({ path: '/cases/api', query: route.query })
     } else {
-      ElMessage.error(err?.message || '调试执行失败')
-      execResult.value = { success: false, status_code: '', duration_ms: 0, method: '', url: '', error_message: err?.message || '调试执行失败' }
+      ElMessage.error(err?.message || t('page.apiCases.debugExecFailed'))
+      execResult.value = { success: false, status_code: '', duration_ms: 0, method: '', url: '', error_message: err?.message || t('page.apiCases.debugExecFailed') }
     }
   } finally {
     running.value = false
@@ -733,7 +732,7 @@ async function pollDebugRunStatus(caseIdVal, recordId) {
       debugPollTimer.value = setTimeout(resolve, 1000)
     })
     if (!debugPolling.value) {
-      throw new Error('调试已取消')
+      throw new Error(t('page.apiCases.debugCancelled'))
     }
     var res = await getDebugRunStatus(caseIdVal, recordId)
     var data = res.data.data
@@ -741,7 +740,7 @@ async function pollDebugRunStatus(caseIdVal, recordId) {
       return data
     }
   }
-  throw new Error('调试执行超时')
+  throw new Error(t('page.apiCases.debugTimeout'))
 }
 
 function cancelDebug() {
@@ -823,7 +822,7 @@ async function saveDebug() {
     }
     ElMessage.success(t('common.saved'))
   } catch (err) {
-    ElMessage.error(err.message || '保存失败')
+    ElMessage.error(err.message || t('page.apiCases.saveFailed'))
   }
 }
 
@@ -937,7 +936,7 @@ watch(caseId, function (newId) {
       }
 
       .section-count {
-        font-size: 11px;
+        font-size: var(--font-small);
         color: var(--el-text-color-placeholder);
         margin-left: auto;
       }
@@ -1004,7 +1003,7 @@ watch(caseId, function (newId) {
     }
 
     .item-time {
-      font-size: 11px;
+      font-size: var(--font-small);
       color: var(--el-text-color-placeholder);
       margin-left: auto;
       flex-shrink: 0;
@@ -1225,10 +1224,10 @@ watch(caseId, function (newId) {
 }
 
 .pre-op-body {
-  background: #f5f7fa;
+  background: var(--el-fill-color-lighter);
   padding: 4px 8px;
   border-radius: 3px;
-  font-size: 11px;
+  font-size: var(--font-small);
   max-height: 120px;
   overflow: auto;
   margin: 2px 0;
@@ -1236,17 +1235,17 @@ watch(caseId, function (newId) {
 
 .extract-tag, .assert-tag {
   display: inline-block;
-  background: #f0f9eb;
-  color: #67c23a;
+  background: rgba($color-success, 0.1);
+  color: $color-success;
   padding: 1px 6px;
   border-radius: 3px;
   margin: 2px 4px 2px 0;
-  font-size: 11px;
+  font-size: var(--font-small);
 }
 
 .assert-tag {
-  background: #fdf6ec;
-  color: #e6a23c;
+  background: rgba($color-warning, 0.1);
+  color: $color-warning;
 }
 
 /* 后置脚本 */
@@ -1263,8 +1262,8 @@ watch(caseId, function (newId) {
 }
 
 .script-content {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: $bg-code-dark;
+  color: $text-code-dark;
   padding: 8px 12px;
   border-radius: 4px;
   font-family: 'Fira Code', Consolas, monospace;

@@ -6,7 +6,7 @@
     :top="dialogTop"
     :class="dialogClass"
   >
-    <el-form ref="formRef" :model="form" label-width="100px" :rules="formRules">
+    <el-form ref="formRef" :model="form" label-width="auto" :rules="formRules">
       <el-form-item :label="t('page.functional.caseName')" prop="case_name" required>
         <el-input v-model="form.case_name" maxlength="255" show-word-limit />
       </el-form-item>
@@ -23,10 +23,10 @@
         </el-form-item>
         <el-form-item :label="t('page.functional.priority')" prop="priority" required style="flex:1; margin-left: 12px">
           <el-select v-model="form.priority">
-            <el-option label="P0 (紧急)" :value="1" />
-            <el-option label="P1 (高)" :value="2" />
-            <el-option label="P2 (中)" :value="3" />
-            <el-option label="P3 (低)" :value="4" />
+            <el-option :label="t('page.functional.priorityP0')" :value="1" />
+            <el-option :label="t('page.functional.priorityP1')" :value="2" />
+            <el-option :label="t('page.functional.priorityP2')" :value="3" />
+            <el-option :label="t('page.functional.priorityP3')" :value="4" />
           </el-select>
         </el-form-item>
       </div>

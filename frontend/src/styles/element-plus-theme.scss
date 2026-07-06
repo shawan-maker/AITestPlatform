@@ -1,28 +1,126 @@
-@use './variables.scss';
+@use 'sass:color';
+@use './variables.scss' as *;
+
+// ═══════════════════════════════════════════
+// Element Plus 主题变量覆盖
+// 让 EP 组件使用我们的设计Token色系
+// ═══════════════════════════════════════════
 
 :root {
+  // 字号
   --el-font-size-base: var(--font-size-base);
+
+  // 主色覆盖 — 按钮、链接、选中态
+  --el-color-primary: #{$color-primary};
+  --el-color-primary-light-3: #{color.adjust($color-primary, $lightness: 15%)};
+  --el-color-primary-light-5: #{color.adjust($color-primary, $lightness: 25%)};
+  --el-color-primary-light-7: #{color.adjust($color-primary, $lightness: 35%)};
+  --el-color-primary-light-8: #{color.adjust($color-primary, $lightness: 40%)};
+  --el-color-primary-light-9: #{color.adjust($color-primary, $lightness: 45%)};
+  --el-color-primary-dark-2: #{color.adjust($color-primary, $lightness: -10%)};
+
+  // 语义色覆盖 — el-tag、el-alert 等
+  --el-color-success: #{$color-success};
+  --el-color-warning: #{$color-warning};
+  --el-color-danger: #{$color-danger};
+  --el-color-info: #{$color-info};
+
+  // 文本色覆盖
+  --el-text-color-primary: #{$text-primary};
+  --el-text-color-regular: #{$text-primary};
+  --el-text-color-secondary: #{$text-secondary};
+  --el-text-color-placeholder: #{$color-text-placeholder};
+  --el-text-color-disabled: #{$color-text-disabled};
+
+  // 背景色覆盖
+  --el-bg-color: #{$bg-card};
+  --el-bg-color-page: #{$bg-page};
+  --el-fill-color-blank: #{$bg-card};
+
+  // 边框色覆盖
+  --el-border-color: #{$border-color};
+  --el-border-color-light: #{color.adjust($border-color, $lightness: 3%)};
+  --el-border-color-lighter: #{color.adjust($border-color, $lightness: 6%)};
+
+  // 圆角覆盖
+  --el-border-radius-base: #{$radius-btn};
+  --el-border-radius-small: #{$radius-xs};
+  --el-border-radius-round: #{$radius-round};
+
+  // 表头背景
+  --el-table-header-bg-color: #{$bg-table-header};
+
+  // 阴影覆盖
+  --el-box-shadow: #{$shadow-md};
+  --el-box-shadow-light: #{$shadow-sm};
+  --el-box-shadow-lighter: #{$shadow-sm};
 }
 
+// ═══════════════════════════════════════════
+// 按钮样式 — 柔和科技风（纯色 + 可读性优先）
+// ═══════════════════════════════════════════
+
 .el-button--primary {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  border: none;
+  background-color: $color-primary;
+  border-color: $color-primary;
   color: #ffffff;
 
   &:hover,
   &:focus {
-    background: linear-gradient(135deg, var(--color-primary-dark), #5ba8ca);
+    background-color: $color-primary-dark;
+    border-color: $color-primary-dark;
+    color: #ffffff;
+  }
+
+  &:active {
+    // inset shadow 叠加而非加深颜色，确保白色文字始终清晰
+    background-color: $color-primary-dark;
+    border-color: $color-primary-dark;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
   }
 }
 
 .el-button--default {
-  border-color: rgba(142, 202, 230, 0.45);
-  color: var(--color-primary-dark);
+  border-color: $border-color;
+  color: $color-primary-dark;
 
   &:hover,
   &:focus {
-    color: var(--color-primary-dark);
-    border-color: var(--color-primary);
-    background-color: var(--color-primary-light);
+    color: $color-primary;
+    border-color: $color-primary;
+    background-color: $color-primary-light;
   }
+
+  &:active {
+    background-color: color.adjust($color-primary-light, $lightness: -5%);
+    color: $color-primary-dark;
+  }
+}
+
+// ═══════════════════════════════════════════
+// Tag 标签 — 使用语义色
+// ═══════════════════════════════════════════
+
+.el-tag--success {
+  --el-tag-bg-color: #{color.adjust($color-success, $lightness: 40%)};
+  --el-tag-border-color: #{color.adjust($color-success, $lightness: 30%)};
+  --el-tag-text-color: #{color.adjust($color-success, $lightness: -10%)};
+}
+
+.el-tag--danger {
+  --el-tag-bg-color: #{color.adjust($color-danger, $lightness: 35%)};
+  --el-tag-border-color: #{color.adjust($color-danger, $lightness: 25%)};
+  --el-tag-text-color: #{color.adjust($color-danger, $lightness: -10%)};
+}
+
+.el-tag--warning {
+  --el-tag-bg-color: #{color.adjust($color-warning, $lightness: 35%)};
+  --el-tag-border-color: #{color.adjust($color-warning, $lightness: 25%)};
+  --el-tag-text-color: #{color.adjust($color-warning, $lightness: -10%)};
+}
+
+.el-tag--info {
+  --el-tag-bg-color: #{color.adjust($color-info, $lightness: 35%)};
+  --el-tag-border-color: #{color.adjust($color-info, $lightness: 25%)};
+  --el-tag-text-color: #{color.adjust($color-info, $lightness: -10%)};
 }

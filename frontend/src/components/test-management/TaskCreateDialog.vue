@@ -2,7 +2,7 @@
   <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.test.tasks.create')" width="1100px" @closed="onClosed">
     <div class="task-create-body">
       <!-- 表单区 -->
-      <el-form label-width="100px" class="task-form">
+      <el-form label-width="auto" class="task-form">
         <el-row :gutter="24">
           <el-col :span="12">
             <el-form-item :label="t('page.test.tasks.taskName')" required>
@@ -56,11 +56,13 @@
           <el-table-column prop="id" label="ID" :width="60" />
           <el-table-column prop="suite_name" :label="t('page.test.suites.suiteName')" />
           <el-table-column prop="case_count" :label="t('page.test.caseCount')" :width="80" />
-          <el-table-column :label="t('common.actions')" :width="180">
+          <el-table-column :label="t('common.actions')" :width="250">
             <template #default="{ row, $index }">
-              <el-button link :disabled="$index === 0" @click="moveSuite(row, -1)">{{ t('page.test.moveUp') }}</el-button>
-              <el-button link :disabled="$index === associatedSuites.length - 1" @click="moveSuite(row, 1)">{{ t('page.test.moveDown') }}</el-button>
-              <el-button link type="danger" @click="removeSuite(row)">{{ t('common.delete') }}</el-button>
+              <div class="table-cell-actions">
+                <el-button link :disabled="$index === 0" @click="moveSuite(row, -1)">{{ t('page.test.moveUp') }}</el-button>
+                <el-button link :disabled="$index === associatedSuites.length - 1" @click="moveSuite(row, 1)">{{ t('page.test.moveDown') }}</el-button>
+                <el-button link type="danger" @click="removeSuite(row)">{{ t('common.delete') }}</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -93,7 +95,9 @@
           </el-table-column>
           <el-table-column :label="t('common.actions')" :width="80">
             <template #default="{ row }">
-              <el-button link type="danger" @click="removeCase(row)">{{ t('common.delete') }}</el-button>
+              <div class="table-cell-actions">
+                <el-button link type="danger" @click="removeCase(row)">{{ t('common.delete') }}</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>

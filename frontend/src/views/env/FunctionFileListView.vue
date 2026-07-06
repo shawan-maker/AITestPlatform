@@ -42,7 +42,7 @@
         <AppTableColumn prop="environment_names" variant="content" :label="t('page.env.function.boundEnvNames')">
           <template #default="{ row }">{{ formatNames(row.environment_names) }}</template>
         </AppTableColumn>
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="320">
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.env.function.detail'), t('common.edit'), t('page.env.function.debug'), t('common.delete')]">
           <template #default="{ row }">
             <el-button link @click="openDetail(row)">{{ t('common.detail') }}</el-button>
             <el-button v-if="canEdit" link @click="openEdit(row)">{{ t('common.edit') }}</el-button>

@@ -5,7 +5,7 @@
   border: 1px solid var(--el-border-color);
   border-radius: var(--radius-sm);
   background: var(--bg-card);
-  margin-bottom: 20px;
+  margin-bottom: $space-xl;
   overflow: hidden;
   max-width: 100%;
   box-sizing: border-box;
@@ -13,9 +13,9 @@
 
 .ui-section-panel__title {
   margin: 0;
-  padding: 14px 20px 12px;
-  text-align: center;
-  font-size: calc(var(--font-size-base) + 2px);
+  padding: 14px $space-page $space-md;
+  text-align: left;
+  font-size: var(--font-section-title);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -23,11 +23,11 @@
 .ui-section-panel__divider {
   height: 1px;
   background: var(--el-border-color-lighter);
-  margin: 0 16px;
+  margin: 0 $space-lg;
 }
 
 .ui-section-panel__body {
-  padding: 16px 20px 20px;
+  padding: $space-lg $space-page $space-page;
 }
 
 /* Param table */
@@ -47,11 +47,11 @@
   border-collapse: collapse;
 
   th {
-    background: #f3f4f6;
-    font-size: calc(var(--font-size-base) + 2px);
+    background: var(--color-bg-table-header);
+    font-size: var(--font-section-title);
     font-weight: 600;
     color: var(--text-primary);
-    padding: 10px 12px;
+    padding: 10px $space-md;
     border-bottom: 1px solid var(--el-border-color);
     border-right: 1px solid var(--el-border-color);
     text-align: center;
@@ -66,7 +66,7 @@
   }
 
   td {
-    padding: 8px 12px;
+    padding: $space-sm $space-md;
     border-bottom: 1px solid var(--el-border-color-lighter);
     border-right: 1px solid var(--el-border-color-lighter);
     vertical-align: middle;
@@ -92,7 +92,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 12px 16px;
+  padding: $space-md $space-lg;
   margin: 0;
   border: none;
   border-top: 1px solid var(--el-border-color-lighter);
@@ -117,19 +117,19 @@
 .ui-form-actions {
   display: flex;
   justify-content: center;
-  gap: 16px;
-  padding: 20px 0 8px;
-  margin-top: 8px;
+  gap: $space-lg;
+  padding: $space-page 0 $space-sm;
+  margin-top: $space-sm;
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
 /* Tree sidebar */
 .ui-tree-sidebar {
-  padding: 4px 0;
+  padding: $space-xs 0;
 
   .ui-tree-node-row {
-    padding: 7px 8px;
-    gap: 4px;
+    padding: 7px $space-sm;
+    gap: $space-xs;
   }
 }
 
@@ -184,7 +184,7 @@
 
 .ui-tree-node-icon {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: $font-card-title;
   line-height: 1;
 }
 
@@ -214,16 +214,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  margin: 8px 0 4px;
+  padding: $space-sm 10px;
+  margin: $space-sm 0 $space-xs;
   font-weight: 600;
-  font-size: calc(var(--font-size-base) + 1px);
+  font-size: var(--font-card-title);
   color: var(--text-primary);
   background: var(--el-fill-color-lighter);
   border-radius: var(--radius-sm);
 }
 
-/* Tree row “more” menu trigger — compact horizontal dots */
+/* Tree row "more" menu trigger — compact horizontal dots */
 .ui-tree-menu-trigger {
   display: inline-flex;
   align-items: center;
@@ -236,7 +236,7 @@
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #6b7280;
+  color: $text-secondary;
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 
@@ -254,7 +254,27 @@
 
 .ui-tree-node-row:hover .ui-tree-menu-trigger,
 .ui-tree-section-header:hover .ui-tree-menu-trigger {
-  color: #4b5563;
+  color: var(--text-primary);
+}
+
+/* 弹窗高度自适应：禁止弹窗外层出现浏览器滚动条（v1.6） */
+.el-overlay .el-overlay-dialog {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.el-dialog {
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  margin: 0 !important;
+}
+
+.el-dialog__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* 半屏内容弹窗：宽 50vw，高 50vh，垂直居中 */
@@ -286,7 +306,48 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: $space-sm;
+  margin-bottom: $space-lg;
   flex-wrap: wrap;
+}
+
+/* ═══════════════════════════════════════════
+ * Dark code block — shared style for code/JSON display areas
+ * ═══════════════════════════════════════════ */
+.ui-code-block-dark {
+  background: $bg-code-dark;
+  color: $text-code-dark;
+  padding: $space-lg;
+  border-radius: $radius-sm;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: $font-small;
+  line-height: 1.6;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Readonly code block — light gray background */
+.ui-code-block-readonly {
+  background: $bg-code-readonly;
+  color: var(--text-primary);
+  padding: $space-lg;
+  border-radius: $radius-sm;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: $font-small;
+  line-height: 1.6;
+  overflow: auto;
+  position: relative;
+}
+
+/* 只读标签 — 在模板中使用 HTML 元素 + i18n 渲染，不使用 CSS ::after 伪元素 */
+.ui-code-readonly-badge {
+  position: absolute;
+  top: $space-sm;
+  right: $space-sm;
+  font-size: $font-xs;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px $space-sm;
+  border-radius: $radius-xs;
 }

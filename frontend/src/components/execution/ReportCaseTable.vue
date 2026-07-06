@@ -36,7 +36,7 @@
       </AppTableColumn>
       <AppTableColumn variant="fixed" :label="t('execution.execResult')" :width="100">
         <template #default="{ row }">
-          <StatusTag :status="row.status" :map="CASE_RESULT_MAP" />
+          <StatusTag :status="row.status" :map="caseResultMap" />
         </template>
       </AppTableColumn>
       <AppTableColumn variant="fixed" :label="t('execution.linkDefect')" :width="140">
@@ -47,7 +47,7 @@
           <span v-else>-</span>
         </template>
       </AppTableColumn>
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="180">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('execution.viewLog'), t('execution.linkDefect')]">
         <template #default="{ row }">
           <el-button link type="primary" :disabled="!row.id" @click="$emit('view-log', row)">{{ t('execution.viewLog') }}</el-button>
           <el-button v-if="canEdit && isFailed(row)" link type="danger" @click="$emit('create-defect', row)">{{ t('execution.linkDefect') }}</el-button>
@@ -62,7 +62,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { batchLinkDefects } from '@/api/testExecution'
-import { CASE_RESULT_MAP } from '@/utils/constants'
+import { getCaseResultMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
@@ -77,15 +77,16 @@ const props = defineProps({
 
 const emit = defineEmits(['view-log', 'linked', 'create-defect'])
 
-// Filter status options: success, fail, error, pending(not started)
-const FILTER_STATUS_MAP = {
-  success: CASE_RESULT_MAP.success,
-  fail: CASE_RESULT_MAP.fail,
-  error: CASE_RESULT_MAP.error,
-  pending: { type: 'info', label: '未开始' },
-}
-
 const { t } = useI18n()
+const caseResultMap = computed(() => getCaseResultMap(t))
+
+// Filter status options: success, fail, error, pending(not started)
+const FILTER_STATUS_MAP = computed(() => ({
+  success: caseResultMap.value.success,
+  fail: caseResultMap.value.fail,
+  error: caseResultMap.value.error,
+  pending: { type: 'info', label: t('status.result.pending') },
+}))
 const selectedIds = ref([])
 const showBatchLink = ref(false)
 const linking = ref(false)

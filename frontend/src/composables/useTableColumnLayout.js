@@ -33,8 +33,18 @@ function measureTextWidth(col, data, { min = MIN_COL, max = MAX_TIGHT, fallback 
 
 function measureColumnWidth(col, data) {
   if (col.actions) {
-    const labelWidth = stringDisplayWidth(col.label ?? '') + CELL_PADDING
-    const hint = col.width ?? 360
+    if (col.buttonLabels && col.buttonLabels.length > 0) {
+      var BTN_PAD = 24
+      var BTN_GAP = 8
+      var widths = col.buttonLabels.map(function (label) {
+        return stringDisplayWidth(String(label)) + BTN_PAD
+      })
+      var total = widths.reduce(function (s, w) { return s + w }, 0)
+        + Math.max(0, widths.length - 1) * BTN_GAP
+      return Math.max(total + CELL_PADDING, 80)
+    }
+    var labelWidth = stringDisplayWidth(col.label ?? '') + CELL_PADDING
+    var hint = col.width ?? 360
     return Math.max(labelWidth, hint)
   }
   if (col.variant === 'content') {

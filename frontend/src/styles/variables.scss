@@ -1,63 +1,229 @@
-// Neutral + cool light-blue accent — see service/design/05-前端页面的页面功能设计.md §1.1
+// ═══════════════════════════════════════════
+// Design Tokens — 巧乐AI智能体测试平台
+// 设计风格：白冰蓝极简科技色（数码白底 + 冰蓝字体 + 磨砂哑光黑）
+// 参考：service/design/02-设计系统规范与改造方案.md v1.5
+// ═══════════════════════════════════════════
 
-// 强调色：低饱和、高明度冷调淡蓝（按钮、选中态、装饰）
-$color-primary: #8ecae6;
-$color-primary-dark: #6dbad9;
-$color-primary-light: #eaf6fc;
-$color-primary-muted: #b5e0f4;
+// ═══════════════════════════════════════════
+// 主色系（Primary Colors）— 柔和科技蓝
+// ═══════════════════════════════════════════
+$color-primary: #5B9BD5;
+$color-primary-dark: #4A89C4;
+$color-primary-light: #D6E8F7;
+$color-primary-muted: #9DC4E4;
 
-// 主色基底：高亮白 / 浅灰
+// ═══════════════════════════════════════════
+// 语义色（Semantic Colors）
+// ═══════════════════════════════════════════
+$color-success: #219653;
+$color-warning: #F2994A;
+$color-danger: #EB5757;
+$color-info: #409EFF;
+
+// ═══════════════════════════════════════════
+// AI模块专用色（AI Module Colors）
+// 低饱和蓝紫色系，保留AI辨识度
+// ═══════════════════════════════════════════
+$color-ai-primary: #7B93DB;
+$color-ai-light: #9BB0E8;
+$color-ai-bg: #EEF1FA;
+
+// ═══════════════════════════════════════════
+// 背景色（Background Colors）— 数码白/冷调白
+// ═══════════════════════════════════════════
 $bg-card: #ffffff;
-$bg-page-start: #ffffff;
-$bg-page-end: #f2f3f5;
-$bg-page: #f6f7f9;
-$bg-sidebar-start: #ffffff;
-$bg-sidebar-end: #f3f4f6;
-$bg-sidebar-submenu: #f7f8fa;
-$bg-sidebar: linear-gradient(180deg, $bg-sidebar-start 0%, $bg-sidebar-end 100%);
-$bg-page-header-start: #dceef8;
-$bg-page-header-end: #c5e3f4;
-$bg-filter-bar-start: #eef6fb;
-$bg-filter-bar-end: #dceef8;
+$bg-page: #F5F7FA;               // 冷调白渐变起始（数码白）
+$bg-page-end: #EDF1F5;           // 冷调白渐变终止（极淡冷灰）
+
+// 白底侧栏（白冰蓝极简）
+$bg-sidebar: #FFFFFF;
+$bg-sidebar-hover: #E8F4FD;      // 极淡冰蓝 hover
+$bg-sidebar-active: #D4EDFC;     // 浅冰蓝选中
+$bg-sidebar-submenu: #F5F7FA;    // 冷调浅灰子菜单
+
+// 页头（冷调冰蓝渐变）/ 筛选栏（白底）
+$bg-page-header: linear-gradient(135deg, #E8F4FD 0%, #D4EDFC 100%);
+$bg-filter-bar: #FFFFFF;
+
+// 表头背景
+$bg-table-header: #F1F5F9;
+
+// 代码编辑器
+$bg-code-dark: #1E1E1E;
+$text-code-dark: #D4D4D4;
+$bg-code-readonly: #FAFAFA;
+
+// 登录页（保留）
 $bg-auth-card: rgba(255, 255, 255, 0.92);
 $bg-auth-page-start: #fafafa;
 $bg-auth-page-mid: #f4f5f7;
 $bg-auth-page-end: #eceef1;
 
-$text-primary: #1f2937;
-$text-secondary: #6b7280;
-$border-color: #e5e7eb;
+// ═══════════════════════════════════════════
+// 侧栏文字色（Sidebar — 冰蓝极简）
+// ═══════════════════════════════════════════
+$sidebar-text: #5BA8D4;           // 浅冰蓝默认文字
+$sidebar-text-active: #4A9ACB;    // 深冰蓝选中文字
+$sidebar-text-muted: #8CB8D4;     // 淡冰蓝次要文字
+$sidebar-icon: #5BA8D4;           // 与文字同色
+$sidebar-icon-active: #4A9ACB;    // 深冰蓝选中图标
+$sidebar-brand: #5BA8D4;          // 品牌名（冰蓝）
+$sidebar-border: #DEE2E6;         // 冷调浅灰分隔线
 
+// ═══════════════════════════════════════════
+// 文本色（Text Colors）
+// ═══════════════════════════════════════════
+$text-dark: #2D3436;              // 磨砂哑光黑（重要标题/强调）
+$text-primary: #2D3436;           // 正文（磨砂黑）
+$text-secondary: #6b7280;         // 辅助说明
+$color-text-placeholder: #C0C4CC;
+$color-text-disabled: #C0C4CC;
+
+// ═══════════════════════════════════════════
+// 边框色（Border Color）— 冷调浅灰
+// ═══════════════════════════════════════════
+$border-color: #DEE2E6;
+
+// ═══════════════════════════════════════════
+// HTTP方法色（HTTP Method Colors）
+// ═══════════════════════════════════════════
+$color-method-get: #219653;
+$color-method-post: #409EFF;
+$color-method-put: #F2994A;
+$color-method-delete: #EB5757;
+
+// ═══════════════════════════════════════════
+// 间距Token（Spacing Scale, 4px grid）
+// ═══════════════════════════════════════════
+$space-xs: 4px;
+$space-sm: 8px;
+$space-md: 12px;
+$space-lg: 16px;
+$space-xl: 24px;
+$space-2xl: 32px;
+$space-page: 20px;
+$space-form-item: 18px;
+
+// ═══════════════════════════════════════════
+// 圆角Token（Border Radius Scale）
+// ═══════════════════════════════════════════
+$radius-xs: 4px;
+$radius-btn: 6px;
 $radius-sm: 8px;
 $radius-md: 12px;
 $radius-lg: 16px;
+$radius-round: 9999px;
 
-$shadow-card: 0 1px 3px rgba(109, 186, 217, 0.1), 0 4px 12px rgba(0, 0, 0, 0.04);
+// ═══════════════════════════════════════════
+// 字号Token（Font Size Scale）
+// ═══════════════════════════════════════════
+$font-page-title: 22px;
+$font-section-title: 17px;
+$font-card-title: 16px;
+$font-caption: 13px;
+$font-small: 12px;
+$font-xs: 11px;
 
+// ═══════════════════════════════════════════
+// 阴影Token（Shadow Scale）
+// ═══════════════════════════════════════════
+$shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+$shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.04);
+$shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px rgba(0, 0, 0, 0.04);
+
+// ═══════════════════════════════════════════
+// CSS自定义属性（:root CSS Custom Properties）
+// ═══════════════════════════════════════════
 :root {
+  // 主色
   --color-primary: #{$color-primary};
   --color-primary-dark: #{$color-primary-dark};
   --color-primary-light: #{$color-primary-light};
   --color-primary-muted: #{$color-primary-muted};
+
+  // 语义色
+  --color-success: #{$color-success};
+  --color-warning: #{$color-warning};
+  --color-danger: #{$color-danger};
+  --color-info: #{$color-info};
+  --color-text-placeholder: #{$color-text-placeholder};
+  --color-text-disabled: #{$color-text-disabled};
+
+  // AI模块色
+  --color-ai-primary: #{$color-ai-primary};
+  --color-ai-light: #{$color-ai-light};
+  --color-ai-bg: #{$color-ai-bg};
+
+  // 背景
   --bg-page: #{$bg-page};
-  --bg-page-start: #{$bg-page-start};
   --bg-page-end: #{$bg-page-end};
   --bg-card: #{$bg-card};
-  --bg-sidebar-start: #{$bg-sidebar-start};
-  --bg-sidebar-end: #{$bg-sidebar-end};
+  --bg-sidebar: #{$bg-sidebar};
+  --bg-sidebar-hover: #{$bg-sidebar-hover};
+  --bg-sidebar-active: #{$bg-sidebar-active};
   --bg-sidebar-submenu: #{$bg-sidebar-submenu};
-  --bg-page-header-start: #{$bg-page-header-start};
-  --bg-page-header-end: #{$bg-page-header-end};
-  --bg-filter-bar-start: #{$bg-filter-bar-start};
-  --bg-filter-bar-end: #{$bg-filter-bar-end};
+  --bg-filter-bar: #{$bg-filter-bar};
   --bg-auth-card: #{$bg-auth-card};
+
+  // 代码编辑器
+  --bg-code-dark: #{$bg-code-dark};
+  --text-code-dark: #{$text-code-dark};
+  --bg-code-readonly: #{$bg-code-readonly};
+
+  // 表头
+  --color-bg-table-header: #{$bg-table-header};
+
+  // 文本
+  --text-dark: #{$text-dark};
   --text-primary: #{$text-primary};
   --text-secondary: #{$text-secondary};
+
+  // 边框
   --border-color: #{$border-color};
+
+  // HTTP方法色
+  --color-method-get: #{$color-method-get};
+  --color-method-post: #{$color-method-post};
+  --color-method-put: #{$color-method-put};
+  --color-method-delete: #{$color-method-delete};
+
+  // 间距
+  --space-xs: #{$space-xs};
+  --space-sm: #{$space-sm};
+  --space-md: #{$space-md};
+  --space-lg: #{$space-lg};
+  --space-xl: #{$space-xl};
+  --space-2xl: #{$space-2xl};
+  --space-page: #{$space-page};
+  --space-form-item: #{$space-form-item};
+
+  // 圆角
+  --radius-xs: #{$radius-xs};
+  --radius-btn: #{$radius-btn};
+  --radius-sm: #{$radius-sm};
   --radius-md: #{$radius-md};
+  --radius-round: #{$radius-round};
+
+  // 阴影
   --shadow-card: #{$shadow-card};
-  --el-color-primary: #{$color-primary};
-  --sidebar-width: 240px;
+  --shadow-sm: #{$shadow-sm};
+  --shadow-md: #{$shadow-md};
+  --shadow-lg: #{$shadow-lg};
+
+  // 字号
   --font-size-base: 15px;
   --font-size-sidebar: 16px;
+  --font-page-title: #{$font-page-title};
+  --font-section-title: #{$font-section-title};
+  --font-card-title: #{$font-card-title};
+  --font-caption: #{$font-caption};
+  --font-small: #{$font-small};
+  --font-xs: #{$font-xs};
+
+  // Element Plus 主色覆盖
+  --el-color-primary: #{$color-primary};
+
+  // 布局
+  --sidebar-width: 240px;
 }

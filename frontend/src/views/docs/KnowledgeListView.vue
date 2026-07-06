@@ -95,7 +95,7 @@
         variant="flex"
         :label="t('page.admin.projects.name')"
       />
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="420">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('common.download'), t('page.knowledge.reupload'), t('page.knowledge.versionHistory'), t('page.knowledge.saveInterfaces'), t('common.delete')]">
         <template #default="{ row }">
           <el-button link type="primary" @click="goDetail(row)">{{ t('common.view') }}</el-button>
           <el-button link @click="downloadRow(row)">{{ t('common.download') }}</el-button>
@@ -178,13 +178,16 @@ import { useKnowledgeStore } from '@/stores/knowledge'
 const INDEX_STATUS_FILTER = INDEX_STATUS.filter((s) => s !== 'na' && s !== 'parsing')
 
 const DOC_TYPE_MAP = {
-  requirement: { label: '需求文档', tagType: '' },
-  api_doc: { label: '接口文档', tagType: 'success' },
-  other: { label: '其他', tagType: 'info' },
+  requirement: { tagType: '' },
+  api_doc: { tagType: 'success' },
+  other: { tagType: 'info' },
 }
 
 function docTypeLabel(docType) {
-  return DOC_TYPE_MAP[docType]?.label ?? docType ?? '—'
+  if (docType === 'requirement') return t('page.knowledge.docTypeRequirement')
+  if (docType === 'api_doc') return t('page.knowledge.docTypeApi')
+  if (docType === 'other') return t('page.knowledge.docTypeOther')
+  return docType ?? '—'
 }
 
 function docTypeTagType(docType) {

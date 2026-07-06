@@ -38,7 +38,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'debug'])
 const { t } = useI18n()
 const { withProjectParams } = useProjectScope()
-const { editorHeight, dialogWidth, dialogTop, dialogClass } = useHalfScreenDialog(200)
+const { editorHeight, dialogWidth, dialogTop, dialogClass } = useHalfScreenDialog(280)
 const file = ref(null)
 const envMap = ref({})
 

@@ -376,7 +376,7 @@ function formatTime(value) {
 
 .agent-session-sidebar__title {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--font-card-title);
 }
 
 // SIT-F7: Search box
@@ -447,7 +447,7 @@ function formatTime(value) {
 }
 
 .session-item__title {
-  font-size: 13px;
+  font-size: var(--font-size-base);
   font-weight: 500;
   margin-bottom: 6px;
   overflow: hidden;
@@ -463,7 +463,7 @@ function formatTime(value) {
 }
 
 .session-item__time {
-  font-size: 11px;
+  font-size: var(--font-caption);
   color: var(--el-text-color-secondary);
 }
 

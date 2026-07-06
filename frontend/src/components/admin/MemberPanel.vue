@@ -28,7 +28,7 @@
           <span v-else>{{ t(`role.${PROJECT_ROLE_LABEL[row.role] || 'viewer'}`) }}</span>
         </template>
       </AppTableColumn>
-      <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="120">
+      <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.delete')]">
         <template #default="{ row }">
           <ConfirmDelete
             v-if="!row.is_super_admin && row.role !== PROJECT_ROLE.OWNER"

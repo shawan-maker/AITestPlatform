@@ -139,62 +139,70 @@ async function onUserCommand(cmd) {
   width: var(--sidebar-width);
   height: 100%;
   background: $bg-sidebar;
-  border-right: 1px solid rgba($color-primary, 0.12);
+  border-right: 1px solid $sidebar-border;
 }
 
 .app-sidebar__header {
   flex-shrink: 0;
-  padding: 20px 16px 12px;
-  border-bottom: 1px solid rgba($color-primary, 0.1);
+  padding: $space-page $space-lg $space-md;
+  border-bottom: 1px solid $sidebar-border;
 }
 
 .app-sidebar__brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: inherit;
   text-decoration: none;
 }
 
 .app-sidebar__logo-img {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
   flex-shrink: 0;
 }
 
 .app-sidebar__name {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.3;
-  color: $text-primary;
+  white-space: nowrap;
+  color: $sidebar-brand;
 }
 
 .app-sidebar__name-short {
   display: none;
-  font-size: 17px;
+  font-size: $font-section-title;
   font-weight: 600;
+  color: $sidebar-brand;
 }
 
 .app-sidebar__menu {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 0;
+  padding: $space-sm 0;
 }
 
 .app-sidebar__menu-inner {
   border-right: none;
   background: transparent;
   --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: rgba($color-primary, 0.08);
-  --el-menu-text-color: #{$text-primary};
+  --el-menu-hover-bg-color: #{$bg-sidebar-hover};
+  --el-menu-text-color: #{$sidebar-text};
 }
 
 :deep(.el-sub-menu__title) {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: $space-sm;
   background: transparent !important;
+  color: $sidebar-text;
+
+  &:hover {
+    background: $bg-sidebar-hover !important;
+    color: $sidebar-text-active;
+  }
 }
 
 :deep(.el-sub-menu__title .app-sidebar__menu-icon) {
@@ -203,6 +211,7 @@ async function onUserCommand(cmd) {
   height: 1em;
   font-size: 18px;
   margin: 0;
+  color: $sidebar-icon;
 }
 
 :deep(.el-menu-item .app-sidebar__menu-icon) {
@@ -211,6 +220,7 @@ async function onUserCommand(cmd) {
   height: 1em;
   font-size: 18px;
   margin: 0;
+  color: $sidebar-icon;
 }
 
 :deep(.el-menu--inline) {
@@ -220,10 +230,16 @@ async function onUserCommand(cmd) {
 :deep(.el-sub-menu .el-menu-item) {
   background: transparent !important;
   min-width: auto;
+  color: $sidebar-text;
 }
 
 :deep(.el-sub-menu .el-menu-item.is-active) {
-  background: $color-primary-light !important;
+  background: $bg-sidebar-active !important;
+  color: $sidebar-text-active !important;
+
+  .app-sidebar__menu-icon {
+    color: $sidebar-icon-active;
+  }
 }
 
 .app-sidebar__footer {
@@ -232,14 +248,19 @@ async function onUserCommand(cmd) {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 12px 16px 16px;
-  border-top: 1px solid rgba($color-primary, 0.1);
+  gap: $space-sm;
+  padding: $space-md $space-lg $space-lg;
+  border-top: 1px solid $sidebar-border;
 }
 
 .app-sidebar__locale {
   flex-shrink: 0;
-  padding: 4px 8px;
+  padding: $space-xs $space-sm;
+  color: $sidebar-text-muted;
+
+  &:hover {
+    color: $sidebar-text-active;
+  }
 }
 
 .app-sidebar__user {
@@ -247,7 +268,7 @@ async function onUserCommand(cmd) {
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  padding: 4px 0;
+  padding: $space-xs 0;
   min-width: 0;
   flex: 1;
 }
@@ -255,6 +276,7 @@ async function onUserCommand(cmd) {
 .app-sidebar__username {
   font-size: var(--font-size-sidebar);
   font-weight: 500;
+  color: $sidebar-text;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,6 +284,9 @@ async function onUserCommand(cmd) {
 
 .menu-admin-tag {
   margin-left: auto;
+  --el-tag-bg-color: rgba($color-primary, 0.2);
+  --el-tag-text-color: #{$sidebar-text-active};
+  --el-tag-border-color: rgba($color-primary, 0.3);
 }
 
 :deep(.el-menu-item),
@@ -272,28 +297,37 @@ async function onUserCommand(cmd) {
 :deep(.el-menu-item) {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: $space-sm;
+  color: $sidebar-text;
 }
 
 :deep(.el-menu-item.is-active) {
-  background: $color-primary-light !important;
-  color: $color-primary-dark !important;
+  background: $bg-sidebar-active !important;
+  color: $sidebar-text-active !important;
   border-left: 3px solid $color-primary;
+
+  .app-sidebar__menu-icon {
+    color: $sidebar-icon-active;
+  }
 }
 
 :deep(.el-menu-item.menu-item--featured:not(.is-active)) {
-  background: linear-gradient(90deg, rgba($color-primary, 0.12), transparent);
-  color: $color-primary-dark;
+  background: linear-gradient(90deg, rgba($color-ai-primary, 0.15), transparent);
+  color: $sidebar-text-active;
   font-weight: 600;
+
+  .app-sidebar__menu-icon {
+    color: $color-ai-primary;
+  }
 }
 
 :deep(.el-menu-item.menu-item--admin:not(.is-active)) {
-  color: $text-secondary;
+  color: $sidebar-text-muted;
 }
 
 :deep(.el-sub-menu__title:hover),
 :deep(.el-menu-item:hover) {
-  background: rgba($color-primary, 0.06);
+  background: $bg-sidebar-hover;
 }
 
 @media (max-width: 991px) {

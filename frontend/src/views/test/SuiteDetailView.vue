@@ -1,28 +1,29 @@
 <template>
   <div v-loading="loading" class="suite-detail-view app-card">
+    <BreadcrumbNav :items="breadcrumbs" />
     <PageHeader :title="suite?.suite_name || t('page.test.suites.title')" />
 
-    <div class="suite-actions">
-      <el-button @click="router.push('/test/suites')">{{ t('common.back') }}</el-button>
-      <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
-      <el-button v-if="canEdit && isRunning" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
-      <el-button v-else-if="canEdit" type="primary" :loading="running" @click="run(suiteId)">{{ t('page.test.run') }}</el-button>
-    </div>
+    <div class="detail-tabs-wrap">
+      <div class="detail-actions">
+        <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
+        <el-button v-if="canEdit && isRunning" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
+        <el-button v-else-if="canEdit" type="primary" :loading="running" @click="run(suiteId)">{{ t('page.test.run') }}</el-button>
+      </div>
 
     <el-tabs v-model="activeTab">
       <!-- 基本信息 -->
       <el-tab-pane :label="t('page.test.tabBasic')" name="basic">
         <el-descriptions v-if="suite" :column="2" border>
           <el-descriptions-item :label="t('page.test.suites.suiteName')">{{ suite.suite_name }}</el-descriptions-item>
-          <el-descriptions-item :label="t('page.test.suiteType')"><el-tag :type="SUITE_TYPE_MAP[suite.type]?.type" size="small">{{ SUITE_TYPE_MAP[suite.type]?.label || suite.type }}</el-tag></el-descriptions-item>
+          <el-descriptions-item :label="t('page.test.suiteType')"><el-tag :type="suiteTypeMap[suite.type]?.type" size="small">{{ suiteTypeMap[suite.type]?.label || suite.type }}</el-tag></el-descriptions-item>
           <el-descriptions-item :label="t('common.description')">{{ suite.description || '-' }}</el-descriptions-item>
-          <el-descriptions-item :label="t('page.test.runMode')">{{ RUN_MODE_MAP[suite.run_mode] || suite.run_mode }}</el-descriptions-item>
+          <el-descriptions-item :label="t('page.test.runMode')">{{ runModeMap[suite.run_mode] || suite.run_mode }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.apiCases.selectEnv')">{{ suite.environment_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.test.caseCount')">{{ suite.case_count }}</el-descriptions-item>
           <el-descriptions-item :label="t('common.createdAt')">{{ formatTime(suite.created_at) }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.test.lastRun')">
             <template v-if="suite.last_run?.status">
-              <StatusTag :status="suite.last_run.status" :map="RUN_STATUS_MAP" />
+              <StatusTag :status="suite.last_run.status" :map="runStatusMap" />
               <span style="margin-left: 8px">{{ suite.last_run.success_rate || '' }}</span>
             </template>
             <span v-else>-</span>
@@ -58,7 +59,7 @@
           <AppTableColumn variant="fixed" :label="t('page.test.useDependency')" :width="100">
             <template #default="{ row }"><el-switch :model-value="row.use_dependency" @change="toggleDep(row)" /></template>
           </AppTableColumn>
-          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="160">
+          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.test.moveUp'), t('page.test.moveDown'), t('common.delete')]">
             <template #default="{ row, $index }">
               <el-button link :disabled="$index === 0" @click="moveCase(row, -1)">{{ t('page.test.moveUp') }}</el-button>
               <el-button link :disabled="$index === cases.length - 1" @click="moveCase(row, 1)">{{ t('page.test.moveDown') }}</el-button>
@@ -92,7 +93,7 @@
           <AppTableColumn variant="fixed" :label="t('page.test.execResult')" :width="80">
             <template #default="{ row }">
               <el-tag v-if="getRunResult(row)" :type="getRunResult(row) === 'success' ? 'success' : getRunResult(row) === 'error' ? 'warning' : 'danger'" size="small">{{ getRunResultLabel(row) }}</el-tag>
-              <StatusTag v-else :status="row.status" :map="RUN_STATUS_MAP" />
+              <StatusTag v-else :status="row.status" :map="runStatusMap" />
             </template>
           </AppTableColumn>
           <AppTableColumn variant="fixed" :label="t('page.test.successRate')" :width="120">
@@ -107,7 +108,7 @@
           <AppTableColumn variant="fixed" :label="t('page.test.startedAt')" :width="170">
             <template #default="{ row }">{{ formatTime(row.start_time) }}</template>
           </AppTableColumn>
-          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="140">
+          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.test.rerun'), t('page.test.report')]">
             <template #default="{ row }">
               <el-button link type="primary" @click="rerunHistory(row)">{{ t('page.test.rerun') || '重新执行' }}</el-button>
               <el-button link type="primary" @click="viewReport(row)">{{ t('page.test.report') }}</el-button>
@@ -116,6 +117,7 @@
         </AppTable>
       </el-tab-pane>
     </el-tabs>
+    </div>
 
     <!-- 报告跳转由此处 viewReport 处理 -->
 
@@ -156,23 +158,32 @@ import { runSuite, getSuiteProgress, getSuiteHistory } from '@/api/testExecution
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import { useRunExecution } from '@/composables/useRunExecution'
-import { RUN_STATUS_MAP, SUITE_TYPE_MAP, RUN_MODE_MAP } from '@/utils/constants'
+import { getRunStatusMap, getSuiteTypeMap, getRunModeMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
 import ReuseCaseDialog from '@/components/api-test/ReuseCaseDialog.vue'
 
 const { t } = useI18n()
+const runStatusMap = computed(() => getRunStatusMap(t))
+const suiteTypeMap = computed(() => getSuiteTypeMap(t))
+const runModeMap = computed(() => getRunModeMap(t))
 const route = useRoute()
 const router = useRouter()
 const { canEdit } = usePermission()
 const { page: casePage, pageSize: casePageSize, total: caseTotal } = usePagination()
 const suiteId = computed(() => Number(route.params.suiteId))
+
+const breadcrumbs = computed(() => [
+  { label: t('menu.testSuites'), to: '/test/suites' },
+  { label: t('common.breadcrumb.suiteDetail') },
+])
 
 const loading = ref(false)
 const suite = ref(null)
@@ -403,10 +414,13 @@ onMounted(load)
 .suite-detail-view {
   position: relative;
 }
-.suite-actions {
+.detail-tabs-wrap {
+  position: relative;
+}
+.detail-actions {
   position: absolute;
-  top: 87px;
-  right: 16px;
+  top: 3px;
+  right: 0;
   z-index: 2;
 }
 </style>

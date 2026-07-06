@@ -1,9 +1,9 @@
 <template>
   <div v-loading="loading" class="knowledge-detail-view app-card">
+    <BreadcrumbNav :items="breadcrumbs" />
     <PageHeader :title="doc?.title || t('page.knowledge.title')" />
 
     <div class="page-toolbar">
-      <el-button @click="router.push('/docs/knowledge')">{{ t('common.back') }}</el-button>
       <el-button v-if="canEdit" @click="showReupload = true">{{ t('page.knowledge.reupload') }}</el-button>
       <el-button @click="showHistory = true">{{ t('page.knowledge.versionHistory') }}</el-button>
       <el-button @click="download">{{ t('common.download') }}</el-button>
@@ -103,6 +103,7 @@ import {
   resolveParseDisplayStatus,
 } from '@/utils/knowledge'
 import PageHeader from '@/components/common/PageHeader.vue'
+import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import AsyncJobBanner from '@/components/common/AsyncJobBanner.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import IndexStatusBadge from '@/components/common/IndexStatusBadge.vue'
@@ -117,6 +118,11 @@ const router = useRouter()
 const { canEdit } = usePermission()
 
 const docId = computed(() => Number(route.params.documentId))
+
+const breadcrumbs = computed(() => [
+  { label: t('menu.docsKnowledge'), to: '/docs' },
+  { label: t('common.breadcrumb.documentDetail') },
+])
 const doc = ref(null)
 const loading = ref(false)
 const contentLoading = ref(false)

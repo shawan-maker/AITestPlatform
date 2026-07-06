@@ -44,7 +44,7 @@
       <AppTableColumn variant="fixed" :label="t('page.admin.users.superAdmin')" :width="100">
         <template #default="{ row }">{{ row.is_super_admin ? t('common.yes') : t('common.no') }}</template>
       </AppTableColumn>
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="320">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('page.admin.deactivate'), t('page.admin.users.resetPassword'), t('common.delete')]">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/admin/users/${row.id}`)">{{ t('common.view') }}</el-button>
           <el-button link @click="toggleStatus(row)">

@@ -36,7 +36,8 @@
       "verifyPassword": "Confirm Password",
       "submit": "Register",
       "reset": "Reset",
-      "toLogin": "Back to sign in"
+      "toLogin": "Back to sign in",
+      "registerSuccess": "Registration successful, please sign in"
     },
     "profile": {
       "title": "Profile",
@@ -206,7 +207,9 @@
         "copy": "Copy",
         "copyNameHint": "Leave empty to auto-append _copy",
         "copyResult": "Copied as {name}",
-        "importExport": "Import / Export"
+        "importExport": "Import / Export",
+        "importById": "Import By ID",
+        "importFile": "Import File"
       },
       "paramType": "Type",
       "encrypt": "Encrypt?",
@@ -216,7 +219,7 @@
         "edit": "Edit Connection",
         "detail": "Connection Detail",
         "connectionName": "Connection Name",
-        "serverName": "Server Name (engine db name)",
+        "serverName": "Server Name",
         "dbType": "Database Type",
         "host": "Host",
         "port": "Port",
@@ -407,7 +410,46 @@
       "saveAndStructure": "Save & Generate Structured Cases",
       "duplicateInterfaceSkipped": "Interface \"{name}\" already exists in the same catalog, skipped",
       "interfaceMultiSelectTitle": "Select Interfaces",
-      "interfaceMultiSelectHint": "Check interfaces to generate cases for. Supports batch selection by catalog"
+      "interfaceMultiSelectHint": "Check interfaces to generate cases for. Supports batch selection by catalog",
+      "caseGen": {
+        "generateHint": "Will auto-generate test case preview from interface docs",
+        "generating": "Analyzing interface docs, generating test cases...",
+        "generatingHint": "AI is understanding parameters, scenarios and edge cases, expect 30-120 seconds",
+        "structuring": "Generating structured interface cases...",
+        "structuringHint": "AI is converting base cases to executable HTTP parameters...",
+        "colNo": "No.",
+        "colName": "Name",
+        "colDeps": "Dependencies",
+        "colSteps": "Steps",
+        "colExpected": "Expected Result",
+        "commaSep": "Comma separated",
+        "savedAndVerifying": "Saved {count} cases, running pre-verification...",
+        "execFailed": "Execution failed",
+        "userCancelled": "User cancelled generation",
+        "previewFailed": "Preview generation failed"
+      },
+      "loadingSession": "Loading session...",
+      "loadSessionFailed": "Failed to load session, please retry",
+      "generatingWait": "Generating, please wait...",
+      "reqDocPhaseComplete": "Requirement doc retrieval complete, preparing to generate test cases...",
+      "phaseGenInterfaces": "Generate Test Interfaces",
+      "phaseGenBaseCases": "Generate Base Cases",
+      "phaseCaseEditConfirm": "Edit & Confirm Cases",
+      "phaseGenStructuredCases": "Generate Structured Cases",
+      "phasePreExec": "Pre-run Test Cases",
+      "generatingStructured": "Generating structured cases and pre-executing...",
+      "baseCasesGenerated": "Generated base cases for {count} interfaces:",
+      "skippedExists": "(Already exists, skipped)",
+      "genComplete": "Generation complete: {interfaces} interfaces, {cases} cases",
+      "catFunctional": "Functional",
+      "catSecurity": "Security",
+      "catCompatibility": "Compatibility",
+      "catUsability": "Usability",
+      "catPerformance": "Performance",
+      "editAction": "Edit",
+      "contextDocBased": "Chatting based on \"{title}\"",
+      "contextInterfaceBased": "Chatting based on interface {name}",
+      "contextPasteBased": "Chatting based on pasted interface docs"
     },
     "functional": {
       "title": "Manual Cases",
@@ -494,7 +536,11 @@
       "confirmDelete": "Delete {count} selected cases?",
       "deleteSuccess": "Delete success",
       "sortByPriority": "Sort by priority",
-      "sortByUpdatedAt": "Sort by updated time"
+      "sortByUpdatedAt": "Sort by updated time",
+      "priorityP0": "P0 (Critical)",
+      "priorityP1": "P1 (High)",
+      "priorityP2": "P2 (Medium)",
+      "priorityP3": "P3 (Low)"
     },
     "apiCases": {
       "title": "Interface Cases",
@@ -599,7 +645,154 @@
       "compareMethod": "Compare Method",
       "expectedValue": "Expected Value",
       "operation": "Operation",
-      "predefinedMethods": "Predefined Methods & Examples"
+      "predefinedMethods": "Predefined Methods & Examples",
+      "deleteInterfaceConfirm": "Delete interface \"{name}\"?",
+      "deleteCaseConfirm": "Delete case \"{name}\"?",
+      "batchRunAllSuccess": "Batch run completed. All {count} case(s) passed",
+      "batchRunPartial": "Batch run completed. {success} passed, {fail} failed",
+      "responseCode": "Response Codes",
+      "statusCode": "Status Code",
+      "responseExample": "Response Example",
+      "description": "Description",
+      "refresh": "Refresh",
+      "noVarFile": "No variable files",
+      "batchRun": "Batch Run",
+      "reuseCase": "Reuse Cases",
+      "selectVarFileFirst": "Please select a variable file first",
+      "multipartNeedsFile": "multipart/form-data requires at least one file parameter. If no file upload, use x-www-form-urlencoded instead",
+      "debugExecFailed": "Debug execution failed",
+      "execSuccess": "Execution successful",
+      "execFailed": "Execution failed",
+      "execUnknown": "Unknown status",
+      "saveFailed": "Save failed",
+      "selectEnvFirst": "Please select a test environment first",
+      "caseDeleted": "Case has been deleted, please go back to the list",
+      "debugCancelled": "Debug cancelled",
+      "debugTimeout": "Debug execution timed out",
+      "precondition": {
+        "running": "Running",
+        "unlinkConfirmFallback": "Confirm unlink this pre-dependency? The precondition case itself will not be deleted.",
+        "unlinkSuccessFallback": "Pre-dependency unlinked",
+        "unlinkFailed": "Failed to unlink"
+      },
+      "import": {
+        "conflictHint": "The following interfaces conflict with existing ones in the target directory. Please choose another directory or modify the interface paths",
+        "statusConflict": "Conflict",
+        "statusNew": "New",
+        "selectCatalogFirst": "Please select a target catalog first",
+        "importFailMsg": "{count} interface(s) failed to import (conflict with existing interfaces in target directory): "
+      },
+      "assertEqual": "Equals",
+      "assertEqualIgnoreCase": "Equals (ignore case)",
+      "assertNotEqual": "Not Equals",
+      "assertContains": "Contains",
+      "assertNotContains": "Not Contains",
+      "assertGreaterThan": "Greater Than",
+      "assertLessThan": "Less Than",
+      "assertGreaterEqual": "Greater or Equal",
+      "assertLessEqual": "Less or Equal",
+      "assertRegex": "Regex Match",
+      "resultSuccess": "Success",
+      "resultFailed": "Failed",
+      "resultError": "Error",
+      "resultRunning": "Running",
+      "resultPending": "Pending",
+      "reuse": {
+        "title": "Reuse Cases",
+        "selectTitle": "Select Cases",
+        "searchCatalog": "Search catalog/interface",
+        "searchCaseName": "Search case name",
+        "casesSuffix": "'s cases",
+        "selectInterfaceHint": "Click an interface on the left to view cases",
+        "caseName": "Case Name",
+        "requestUrl": "Request URL",
+        "selectedCount": "{count} case(s) selected",
+        "unnamedCatalog": "Unnamed",
+        "allCases": "(All Cases)",
+        "noInterfaceSelected": "No target interface selected",
+        "reusePartialFail": "Some cases failed to reuse: {count}",
+        "reuseSuccess": "Reuse successful",
+        "reuseFailed": "Reuse failed"
+      },
+      "execRecords": {
+        "title": "Execution Records",
+        "empty": "No execution records",
+        "colInterfaceCase": "Interface/Case",
+        "colExecutor": "Executor",
+        "colExecTime": "Execution Time",
+        "colResult": "Result",
+        "colActions": "Actions",
+        "view": "View",
+        "running": "Running",
+        "backToList": "← Back to list",
+        "operator": "Operator",
+        "statusRunning": "Running",
+        "statusSuccess": "Success",
+        "statusFailed": "Failed",
+        "statusError": "Error"
+      },
+      "response": {
+        "tabHeaders": "Response Headers",
+        "tabLog": "Log",
+        "duration": "Duration",
+        "errorMsg": "Error",
+        "requestMethod": "Method",
+        "requestUrl": "URL",
+        "formDataParams": "Parameters (form-data)",
+        "paramName": "Param Name",
+        "paramValue": "Param Value",
+        "varName": "Variable",
+        "expression": "Expression",
+        "value": "Value",
+        "result": "Result",
+        "assertTarget": "Assert Target",
+        "compareMethod": "Compare Method",
+        "expectedValue": "Expected",
+        "actualValue": "Actual",
+        "noExecResult": "No execution result",
+        "noHeaders": "No response headers",
+        "noRequestData": "No request data",
+        "noRequestHeaders": "No request headers",
+        "noExtractData": "No extract data",
+        "noAssertData": "No assertion data",
+        "noLogData": "No log data"
+      },
+      "request": {
+        "queryParamLabel": "QUERY Params",
+        "preOpsTemplateHeader": "Pre-ops Template",
+        "postOpsTemplateHeader": "Post-ops Template",
+        "tplSaveEnvVar": "Save Env (Temp) Variable",
+        "tplSaveGlobalVar": "Save Global Variable",
+        "tplExecSql": "Execute SQL",
+        "tplGetEnvVar": "Get Env (Temp) Variable",
+        "tplGetGlobalVar": "Get Global Variable",
+        "tplSendRequest": "Send Request",
+        "tplWait": "Wait",
+        "tplExecFunction": "Execute Custom Function",
+        "tplGetResponseBody": "Get Response Body",
+        "tplGetJsonResponse": "Get JSON Response",
+        "tplJsonPathSingle": "JSONPath Extract Single",
+        "tplJsonPathList": "JSONPath Extract List",
+        "tplRegexSingle": "Regex Extract Single",
+        "tplRegexList": "Regex Extract List",
+        "tplAssertResult": "Assert Result",
+        "tplDeleteEnvVar": "Delete Env (Temp) Variable",
+        "tplDeleteGlobalVar": "Delete Global Variable",
+        "tplSaveToFile": "Save to File",
+        "tplLog": "Log",
+        "formParamName": "Param Name",
+        "formType": "Type",
+        "formParamValue": "Param Value",
+        "formDesc": "Description"
+      },
+      "list": {
+        "interfaceName": "Interface Name",
+        "requestMethod": "Method",
+        "requestPath": "Path",
+        "catalog": "Catalog",
+        "createdAt": "Created",
+        "updatedAt": "Updated"
+      }
     },
     "test": {
       "suites": {
@@ -680,7 +873,13 @@
       "apiType": "API",
       "uiType": "UI",
       "manualType": "Manual",
-      "functionalType": "Functional"
+      "functionalType": "Functional",
+      "requestContent": "1. Request Content",
+      "responseContent": "2. Response Content",
+      "assertErrorLog": "3. Assertion Error Log",
+      "preconditionsLabel": "Preconditions:",
+      "testStepsLabel": "Test Steps:",
+      "expectedResultLabel": "Expected Result:"
     },
     "defects": {
       "title": "Defect Management",
@@ -732,7 +931,10 @@
       "addCommentPlaceholder": "Enter note...",
       "transitionCommentPlaceholder": "Optional: add a note while handling",
       "currentState": "Current State",
-      "projectSelector": "Project"
+      "projectSelector": "Project",
+      "sourceApiCase": "API Case",
+      "sourceFunctionalCase": "Functional Case",
+      "sourceManual": "Manual"
     },
     "placeholder": {
       "title": "Under Development",
@@ -758,19 +960,23 @@
   },
   "common": {
     "index": "#",
-    "appName": "ChocoTest AI Agent Test Platform",
+    "appName": "ChocoTest AItesting Platform",
     "appNameShort": "ChocoTest",
     "save": "Save",
     "saved": "Saved successfully",
     "cancel": "Cancel",
     "confirm": "OK",
     "confirmDelete": "Confirm delete?",
+    "deleteConfirm": "Are you sure to delete? This action cannot be undone.",
     "delete": "Delete",
     "deleted": "Deleted",
+    "deleteSuccess": "Deleted successfully",
+    "deleteFailed": "Delete failed",
     "batchDelete": "Batch Delete",
     "batchDeleteConfirm": "Delete {count} selected item(s)?",
     "batchDeleteSuccess": "Successfully deleted {count} item(s)",
     "batchDeletePartial": "Some items could not be deleted",
+    "batchDeleteFailed": "Batch delete failed",
     "edit": "Edit",
     "configure": "Configure",
     "copy": "Copy",
@@ -815,10 +1021,20 @@
     "no": "No",
     "error": "Error",
     "success": "Success",
-    "failed": "Parse failed",
+    "failed": "Failed",
     "message": "Message",
     "time": "Time",
-    "warning": "Warning"
+    "warning": "Warning",
+    "readonly": "Read Only",
+    "breadcrumb": {
+      "projectDetail": "Project Detail",
+      "userDetail": "User Detail",
+      "documentDetail": "Document Detail",
+      "caseDetail": "Case Detail",
+      "suiteDetail": "Suite Detail",
+      "taskDetail": "Task Detail",
+      "defectDetail": "Defect Detail"
+    }
   },
   "role": {
     "viewer": "Viewer",
@@ -834,6 +1050,31 @@
       "in_progress": "In Progress",
       "resolved": "Resolved",
       "closed": "Closed"
+    },
+    "severity": {
+      "minor": "Minor",
+      "normal": "Normal",
+      "serious": "Serious",
+      "critical": "Critical"
+    },
+    "priority": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "category": {
+      "functional": "Functional",
+      "performance": "Performance",
+      "ui": "UI",
+      "compatibility": "Compatibility",
+      "security": "Security",
+      "other": "Other"
+    },
+    "history": {
+      "created": "Created Defect",
+      "statusChange": "Status Change",
+      "fieldUpdate": "Field Update",
+      "commentAdded": "Comment Added"
     }
   },
   "execution": {
@@ -895,11 +1136,40 @@
   "status": {
     "exec": {
       "pending": "Pending",
+      "running": "Running",
+      "completed": "Completed",
       "passed": "Passed",
       "failed": "Failed",
+      "cancelled": "Cancelled",
       "blocked": "Blocked",
       "skipped": "Skipped"
+    },
+    "result": {
+      "success": "Success",
+      "pass": "Passed",
+      "fail": "Failed",
+      "failed": "Failed",
+      "error": "Error",
+      "skip": "Skipped",
+      "skipped": "Skipped",
+      "pending": "Not Started"
     }
+  },
+  "suite": {
+    "type": {
+      "functional": "Functional",
+      "ui": "UI"
+    }
+  },
+  "task": {
+    "type": {
+      "functional": "Manual",
+      "manual": "Manual"
+    }
+  },
+  "runMode": {
+    "serial": "Serial",
+    "parallel": "Parallel"
   },
   "configGroup": {
     "base": "Base",

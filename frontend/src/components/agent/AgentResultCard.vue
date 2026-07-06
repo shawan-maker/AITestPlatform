@@ -47,7 +47,7 @@ const caseCountText = computed(() => {
 <style scoped lang="scss">
 .agent-result-card {
   margin-top: 12px;
-  border: 1.5px solid #f56c6c;
+  border: 1.5px solid $color-danger;
   border-radius: 10px;
   padding: 14px 16px;
   cursor: pointer;
@@ -57,8 +57,8 @@ const caseCountText = computed(() => {
   transition: all 0.2s ease;
 
   &:hover {
-    border-color: #f23;
-    box-shadow: 0 2px 12px rgba(245, 108, 108, 0.15);
+    border-color: $color-danger;
+    box-shadow: 0 2px 12px rgba($color-danger, 0.15);
     transform: translateY(-1px);
   }
 
@@ -73,8 +73,8 @@ const caseCountText = computed(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(245, 108, 108, 0.08);
-    color: #f56c6c;
+    background: rgba($color-danger, 0.08);
+    color: $color-danger;
     flex-shrink: 0;
   }
 

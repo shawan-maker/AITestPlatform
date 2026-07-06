@@ -1,10 +1,7 @@
 <template>
   <div v-loading="loading" class="user-detail-view app-card">
+    <BreadcrumbNav :items="breadcrumbs" />
     <PageHeader :title="user?.username || t('page.admin.users.title')" />
-
-    <div class="page-toolbar">
-      <el-button @click="router.push('/admin/users')">{{ t('common.back') }}</el-button>
-    </div>
 
     <el-descriptions v-if="user" :column="2" border class="user-detail-view__info">
       <el-descriptions-item label="ID">{{ user.id }}</el-descriptions-item>
@@ -41,6 +38,7 @@ import { useI18n } from 'vue-i18n'
 import { getUser } from '@/api/users'
 import { PROJECT_ROLE_LABEL } from '@/utils/constants'
 import PageHeader from '@/components/common/PageHeader.vue'
+import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 
@@ -50,6 +48,11 @@ const router = useRouter()
 const userId = computed(() => Number(route.params.id))
 const user = ref(null)
 const loading = ref(false)
+
+const breadcrumbs = computed(() => [
+  { label: t('menu.adminUsers'), to: '/admin/users' },
+  { label: t('common.breadcrumb.userDetail') },
+])
 
 async function load() {
   loading.value = true

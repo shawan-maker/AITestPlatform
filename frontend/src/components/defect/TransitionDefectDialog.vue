@@ -3,7 +3,7 @@
     <el-form label-width="100px">
       <el-form-item :label="t('common.status')">
         <el-select v-model="form.status">
-          <el-option v-for="s in validStatuses" :key="s" :label="DEFECT_STATUS_MAP[s]?.label || s" :value="s" />
+          <el-option v-for="s in validStatuses" :key="s" :label="defectStatusMap[s]?.label || s" :value="s" />
         </el-select>
       </el-form-item>
       <el-form-item :label="t('page.defects.assignee')">
@@ -27,7 +27,7 @@
 <script setup>
 import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DEFECT_STATUS_MAP, DEFECT_ALLOWED_TRANSITIONS } from '@/utils/constants'
+import { getDefectStatusMap, DEFECT_ALLOWED_TRANSITIONS } from '@/utils/constants'
 import UserSearchPicker from '@/components/picker/UserSearchPicker.vue'
 
 const props = defineProps({
@@ -36,6 +36,8 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'submit'])
 const { t } = useI18n()
+
+const defectStatusMap = computed(() => getDefectStatusMap(t))
 
 const visible = computed({
   get: () => props.modelValue,

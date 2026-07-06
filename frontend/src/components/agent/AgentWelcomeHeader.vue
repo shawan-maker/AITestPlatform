@@ -18,25 +18,25 @@ const { t } = useI18n()
 .agent-welcome-header {
   display: flex;
   align-items: center;
-  gap: 16px; /* 加倍：从 8px 改为 16px */
-  padding: 16px 0 32px; /* 加倍：从 8px 0 16px 改为 16px 0 32px */
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0 var(--space-lg);
   flex-shrink: 0;
 }
 
 .agent-welcome-header__emoji {
-  font-size: 56px; /* 加倍：从 28px 改为 56px */
+  font-size: 28px;
   line-height: 1;
 }
 
 .agent-welcome-header__text {
-  font-size: 44px; /* 加倍：从 22px 改为 44px */
+  font-size: var(--font-page-title);
   font-weight: 500;
   color: var(--el-text-color-primary);
 }
 
 .agent-welcome-header__brand {
   font-weight: 700;
-  background: linear-gradient(90deg, #409eff 0%, #7c3aed 100%);
+  background: linear-gradient(90deg, $color-ai-primary 0%, $color-ai-light 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

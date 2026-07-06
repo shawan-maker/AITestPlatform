@@ -26,7 +26,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, onUnmounted, useAttrs, useId } from 'vue'
+import { computed, inject, onMounted, onUnmounted, useAttrs, useId, watch } from 'vue'
 import { TABLE_LAYOUT_KEY } from '@/components/common/tableLayoutKey'
 
 const props = defineProps({
@@ -44,6 +44,7 @@ const props = defineProps({
   maxWidth: { type: [Number, String], default: undefined },
   showOverflowTooltip: { type: Boolean, default: true },
   actions: { type: Boolean, default: false },
+  buttonLabels: { type: Array, default: () => [] },
 })
 
 const attrs = useAttrs()
@@ -83,7 +84,7 @@ const columnCellClass = computed(() =>
 
 const columnHeaderClass = computed(() => `${columnCellClass.value} app-table-col__header`)
 
-onMounted(() => {
+function registerColumn() {
   layout?.register({
     id: columnId,
     type: props.type,
@@ -92,11 +93,20 @@ onMounted(() => {
     label: props.label,
     columnKey: props.columnKey,
     actions: props.actions,
+    buttonLabels: props.buttonLabels,
     width: props.type === 'selection' ? (props.width ?? 48) : props.width,
     minWidth: props.minWidth ? Number(props.minWidth) : undefined,
     maxWidth: props.maxWidth ? Number(props.maxWidth) : undefined,
   })
+}
+
+onMounted(() => {
+  registerColumn()
 })
+
+watch(() => props.buttonLabels, () => {
+  registerColumn()
+}, { deep: true })
 
 onUnmounted(() => {
   layout?.unregister(columnId)
@@ -110,12 +120,6 @@ onUnmounted(() => {
   justify-content: center;
   flex-wrap: nowrap;
   width: 100%;
-  gap: 2px 4px;
-
-  :deep(.el-button) {
-    margin: 0;
-    padding-left: 6px;
-    padding-right: 6px;
-  }
+  gap: 8px;
 }
 </style>

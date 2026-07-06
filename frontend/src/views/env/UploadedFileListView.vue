@@ -43,7 +43,7 @@
           <template #default="{ row }">{{ uploaderLabel(row.uploaded_by_id) }}</template>
         </AppTableColumn>
         <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')" />
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('common.download'), t('common.delete')]">
           <template #default="{ row }">
             <el-button link @click="openPreview(row)">{{ t('common.view') }}</el-button>
             <el-button link @click="download(row)">{{ t('common.download') }}</el-button>

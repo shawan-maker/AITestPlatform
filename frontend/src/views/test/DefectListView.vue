@@ -11,16 +11,16 @@
         <el-input v-model="filters.q" :placeholder="t('page.defects.searchTitle')" clearable style="width: 160px" />
         <el-input v-model="filters.id" placeholder="ID" clearable style="width: 80px" />
         <el-select v-model="filters.status" :placeholder="t('common.status')" clearable style="width: 120px">
-          <el-option v-for="(cfg, val) in DEFECT_STATUS_MAP" :key="val" :label="cfg.label" :value="val" />
+          <el-option v-for="(cfg, val) in defectStatusMap" :key="val" :label="cfg.label" :value="val" />
         </el-select>
         <el-select v-model="filters.severity" :placeholder="t('page.defects.severity')" clearable style="width: 120px">
-          <el-option v-for="(label, val) in DEFECT_SEVERITY_MAP" :key="val" :label="label" :value="val" />
+          <el-option v-for="(label, val) in defectSeverityMap" :key="val" :label="label" :value="val" />
         </el-select>
         <el-select v-model="filters.priority" :placeholder="t('page.defects.priority')" clearable style="width: 120px">
-          <el-option v-for="(label, val) in DEFECT_PRIORITY_MAP" :key="val" :label="label" :value="val" />
+          <el-option v-for="(label, val) in defectPriorityMap" :key="val" :label="label" :value="val" />
         </el-select>
         <el-select v-model="filters.defect_category" :placeholder="t('page.defects.category')" clearable style="width: 120px">
-          <el-option v-for="(label, val) in DEFECT_CATEGORY_MAP" :key="val" :label="label" :value="val" />
+          <el-option v-for="(label, val) in defectCategoryMap" :key="val" :label="label" :value="val" />
         </el-select>
         <el-date-picker v-model="filters.dateRange" type="daterange" :start-placeholder="t('page.defects.submitTime')" :end-placeholder="t('page.defects.submitTime')" format="YYYY-MM-DD" value-format="YYYY-MM-DD" style="width: 240px" />
       </FilterBar>
@@ -31,16 +31,16 @@
         </AppTableColumn>
         <AppTableColumn prop="title" variant="content" :label="t('page.defects.title')" />
         <AppTableColumn variant="fixed" :label="t('page.defects.severity')" :width="90">
-          <template #default="{ row }"><el-tag :type="severityType(row.severity)" size="small">{{ DEFECT_SEVERITY_MAP[row.severity] || row.severity }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="severityType(row.severity)" size="small">{{ defectSeverityMap[row.severity] || row.severity }}</el-tag></template>
         </AppTableColumn>
         <AppTableColumn variant="fixed" :label="t('page.defects.priority')" :width="80">
-          <template #default="{ row }">{{ DEFECT_PRIORITY_MAP[row.priority] || row.priority }}</template>
+          <template #default="{ row }">{{ defectPriorityMap[row.priority] || row.priority }}</template>
         </AppTableColumn>
         <AppTableColumn variant="fixed" :label="t('common.status')" :width="100">
           <template #default="{ row }"><DefectStatusTag :status="row.status" /></template>
         </AppTableColumn>
         <AppTableColumn variant="fixed" :label="t('page.defects.category')" :width="80">
-          <template #default="{ row }">{{ DEFECT_CATEGORY_MAP[row.defect_category] || row.defect_category }}</template>
+          <template #default="{ row }">{{ defectCategoryMap[row.defect_category] || row.defect_category }}</template>
         </AppTableColumn>
         <AppTableColumn variant="fixed" :label="t('page.defects.assignee')" :width="100">
           <template #default="{ row }">{{ row.assignee_name || '-' }}</template>
@@ -51,7 +51,7 @@
         <AppTableColumn variant="fixed" :label="t('page.defects.submitTime')" :width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </AppTableColumn>
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="220">
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('common.edit'), t('page.defects.transition')]">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/defects/${row.id}`)">{{ t('common.view') }}</el-button>
             <el-button link type="primary" @click="router.push(`/test/defects/${row.id}?edit=1`)">{{ t('common.edit') }}</el-button>
@@ -69,17 +69,17 @@
         </el-form-item>
         <el-form-item :label="t('page.defects.category')">
           <el-select v-model="createForm.defect_category" style="width: 100%">
-            <el-option v-for="(label, val) in DEFECT_CATEGORY_MAP" :key="val" :label="label" :value="val" />
+            <el-option v-for="(label, val) in defectCategoryMap" :key="val" :label="label" :value="val" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('page.defects.severity')">
           <el-select v-model="createForm.severity" style="width: 100%">
-            <el-option v-for="(label, val) in DEFECT_SEVERITY_MAP" :key="val" :label="label" :value="val" />
+            <el-option v-for="(label, val) in defectSeverityMap" :key="val" :label="label" :value="val" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('page.defects.priority')">
           <el-select v-model="createForm.priority" style="width: 100%">
-            <el-option v-for="(label, val) in DEFECT_PRIORITY_MAP" :key="val" :label="label" :value="val" />
+            <el-option v-for="(label, val) in defectPriorityMap" :key="val" :label="label" :value="val" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('page.defects.steps')">
@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -119,7 +119,7 @@ import { batchDeleteDefects, createDefect, listDefects, transitionDefect } from 
 import { useProjectScope } from '@/composables/useProjectScope'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
-import { DEFECT_STATUS_MAP, DEFECT_SEVERITY_MAP, DEFECT_PRIORITY_MAP, DEFECT_CATEGORY_MAP } from '@/utils/constants'
+import { getDefectStatusMap, getDefectSeverityMap, getDefectPriorityMap, getDefectCategoryMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
 import FilterBar from '@/components/common/FilterBar.vue'
@@ -131,6 +131,10 @@ import TransitionDefectDialog from '@/components/defect/TransitionDefectDialog.v
 import UserSearchPicker from '@/components/picker/UserSearchPicker.vue'
 
 const { t } = useI18n()
+const defectStatusMap = computed(() => getDefectStatusMap(t))
+const defectSeverityMap = computed(() => getDefectSeverityMap(t))
+const defectPriorityMap = computed(() => getDefectPriorityMap(t))
+const defectCategoryMap = computed(() => getDefectCategoryMap(t))
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
 const { canEdit } = usePermission()

@@ -5,7 +5,7 @@
         <el-button @click="doExport">{{ t('common.export') }} JSON</el-button>
       </el-tab-pane>
       <el-tab-pane :label="t('common.import')" name="import">
-        <el-form label-width="100px">
+        <el-form label-width="auto">
           <el-form-item :label="t('page.env.variables.importById')">
             <el-input-number v-model="importEnvId" :min="1" />
             <el-button style="margin-left: 8px" @click="doImportById">{{ t('common.import') }}</el-button>

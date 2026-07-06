@@ -21,7 +21,7 @@
 
       <!-- Params -->
       <el-tab-pane :label="t('page.apiCases.subTabParams')" name="params">
-        <h4 class="param-type-label">QUERY参数</h4>
+        <h4 class="param-type-label">{{ t('page.apiCases.request.queryParamLabel') }}</h4>
         <ParamTable v-model="query" :columns="paramColumns" :add-label="t('page.apiCases.addParam')" />
       </el-tab-pane>
 
@@ -39,10 +39,10 @@
             <MonacoJsonEditor v-model="body" height="100%" language="json" />
           </div>
           <div v-else-if="bodyType === 'urlencoded'">
-            <ParamTable v-model="urlencodedRows" :columns="paramColumns" add-label="添加参数" />
+            <ParamTable v-model="urlencodedRows" :columns="paramColumns" :add-label="t('page.apiCases.addParam')" />
           </div>
           <div v-else>
-            <ParamTable v-model="formDataRows" :columns="formColumns" add-label="添加参数" />
+            <ParamTable v-model="formDataRows" :columns="formColumns" :add-label="t('page.apiCases.addParam')" />
           </div>
         </div>
       </el-tab-pane>
@@ -65,7 +65,7 @@
               <MonacoJsonEditor v-model="preOpsScript" height="100%" language="python" />
             </div>
             <div class="prepost-template">
-              <div class="template-header">前置操作模板</div>
+              <div class="template-header">{{ t('page.apiCases.request.preOpsTemplateHeader') }}</div>
               <div class="template-list">
                 <div class="template-item" v-for="(tpl, idx) in preTemplates" :key="idx" @click="insertTemplate('pre', tpl.code)">
                   <span class="template-name">{{ tpl.label }}</span>
@@ -84,7 +84,7 @@
               <MonacoJsonEditor v-model="postOpsScript" height="100%" language="python" />
             </div>
             <div class="prepost-template">
-              <div class="template-header">后置操作模板</div>
+              <div class="template-header">{{ t('page.apiCases.request.postOpsTemplateHeader') }}</div>
               <div class="template-list">
                 <div class="template-item" v-for="(tpl, idx) in postTemplates" :key="idx" @click="insertTemplate('post', tpl.code)">
                   <span class="template-name">{{ tpl.label }}</span>
@@ -174,10 +174,10 @@ var extractColumns = [
 var assertColumns = [
   { prop: 'target', label: t('page.apiCases.assertTarget'), minWidth: 160, placeholder: '$.status_code' },
   { prop: 'method', label: t('page.apiCases.compareMethod'), minWidth: 130, type: 'select', options: [
-    { value: 'eq', label: '相等' }, { value: 'ne', label: '不相等' },
-    { value: 'contains', label: '包含' }, { value: 'not_contains', label: '不包含' },
-    { value: 'gt', label: '大于' }, { value: 'lt', label: '小于' },
-    { value: 'regex', label: '正则匹配' },
+    { value: 'eq', label: t('page.apiCases.assertEqual') }, { value: 'ne', label: t('page.apiCases.assertNotEqual') },
+    { value: 'contains', label: t('page.apiCases.assertContains') }, { value: 'not_contains', label: t('page.apiCases.assertNotContains') },
+    { value: 'gt', label: t('page.apiCases.assertGreaterThan') }, { value: 'lt', label: t('page.apiCases.assertLessThan') },
+    { value: 'regex', label: t('page.apiCases.assertRegex') },
   ]},
   { prop: 'expected', label: 'Expected', minWidth: 120 },
 ]
@@ -193,41 +193,41 @@ function insertTemplate(type, code) {
 }
 
 var preTemplates = [
-  { label: '保存环境（临时）变量', code: '# 保存环境（临时）变量\ntest.save_env_variable("变量名", "变量值")' },
-  { label: '保存全局变量', code: '# 保存全局变量\ntest.save_global_variable("变量名", "变量值")' },
-  { label: '执行SQL', code: '# 执行SQL\nresult = db.服务器名称.execute_all("SELECT * FROM table LIMIT 1")' },
-  { label: '获取环境（临时）变量', code: '# 获取环境（临时）变量\nval = test.get_env_variable("变量名")' },
-  { label: '获取全局变量', code: '# 获取全局变量\nval = test.get_global_variable("变量名")' },
-  { label: '发送请求', code: '# 发送HTTP请求\nresp = test.request("POST", "/api/path", json={"key": "value"})' },
-  { label: '等待', code: '# 等待\ntest.sleep(1)' },
-  { label: '执行自定义函数', code: '# 调用自定义函数\nresult = global_func.方法名()' },
+  { label: t('page.apiCases.request.tplSaveEnvVar'), code: '# 保存环境（临时）变量\ntest.save_env_variable("变量名", "变量值")' },
+  { label: t('page.apiCases.request.tplSaveGlobalVar'), code: '# 保存全局变量\ntest.save_global_variable("变量名", "变量值")' },
+  { label: t('page.apiCases.request.tplExecSql'), code: '# 执行SQL\nresult = db.服务器名称.execute_all("SELECT * FROM table LIMIT 1")' },
+  { label: t('page.apiCases.request.tplGetEnvVar'), code: '# 获取环境（临时）变量\nval = test.get_env_variable("变量名")' },
+  { label: t('page.apiCases.request.tplGetGlobalVar'), code: '# 获取全局变量\nval = test.get_global_variable("变量名")' },
+  { label: t('page.apiCases.request.tplSendRequest'), code: '# 发送HTTP请求\nresp = test.request("POST", "/api/path", json={"key": "value"})' },
+  { label: t('page.apiCases.request.tplWait'), code: '# 等待\ntest.sleep(1)' },
+  { label: t('page.apiCases.request.tplExecFunction'), code: '# 调用自定义函数\nresult = global_func.方法名()' },
 ]
 
 var postTemplates = [
-  { label: '获取响应体', code: '# 获取响应体\nbody = response.data' },
-  { label: '获取JSON响应', code: '# 获取JSON响应\njson_body = response.json()' },
-  { label: 'JSONPath提取单个', code: '# JSONPath提取单个值\nval = test.json_extract(json_body, "$.data.token")' },
-  { label: 'JSONPath提取列表', code: '# JSONPath提取列表\nvals = test.json_extract_list(json_body, "$.data[*].id")' },
-  { label: '正则提取单个', code: '# 正则提取单个\nval = test.re_extract(body, r"pattern")' },
-  { label: '正则提取列表', code: '# 正则提取列表\nvals = test.re_extract_list(body, r"pattern")' },
-  { label: '断言结果', code: '# 断言\ntest.assertion("eq", expected, actual)' },
-  { label: '保存环境（临时）变量', code: '# 保存环境（临时）变量\ntest.save_env_variable("变量名", val)' },
-  { label: '保存全局变量', code: '# 保存全局变量\ntest.save_global_variable("变量名", val)' },
-  { label: '删除环境（临时）变量', code: '# 删除环境（临时）变量\ntest.del_evn_variable("变量名")' },
-  { label: '删除全局变量', code: '# 删除全局变量\ntest.del_global_variable("变量名")' },
-  { label: '执行SQL', code: '# 执行SQL\nresult = db.服务器名称.execute_all("SELECT * FROM table")' },
-  { label: '保存到文件', code: '# 保存到文件\ntest.save_to_file("data.json", body)' },
-  { label: '记录日志', code: '# 记录日志\ntest.log("debug message")' },
-  { label: '执行自定义函数', code: '# 调用自定义函数\nresult = global_func.方法名()' },
+  { label: t('page.apiCases.request.tplGetResponseBody'), code: '# 获取响应体\nbody = response.data' },
+  { label: t('page.apiCases.request.tplGetJsonResponse'), code: '# 获取JSON响应\njson_body = response.json()' },
+  { label: t('page.apiCases.request.tplJsonPathSingle'), code: '# JSONPath提取单个值\nval = test.json_extract(json_body, "$.data.token")' },
+  { label: t('page.apiCases.request.tplJsonPathList'), code: '# JSONPath提取列表\nvals = test.json_extract_list(json_body, "$.data[*].id")' },
+  { label: t('page.apiCases.request.tplRegexSingle'), code: '# 正则提取单个\nval = test.re_extract(body, r"pattern")' },
+  { label: t('page.apiCases.request.tplRegexList'), code: '# 正则提取列表\nvals = test.re_extract_list(body, r"pattern")' },
+  { label: t('page.apiCases.request.tplAssertResult'), code: '# 断言\ntest.assertion("eq", expected, actual)' },
+  { label: t('page.apiCases.request.tplSaveEnvVar'), code: '# 保存环境（临时）变量\ntest.save_env_variable("变量名", val)' },
+  { label: t('page.apiCases.request.tplSaveGlobalVar'), code: '# 保存全局变量\ntest.save_global_variable("变量名", val)' },
+  { label: t('page.apiCases.request.tplDeleteEnvVar'), code: '# 删除环境（临时）变量\ntest.del_evn_variable("变量名")' },
+  { label: t('page.apiCases.request.tplDeleteGlobalVar'), code: '# 删除全局变量\ntest.del_global_variable("变量名")' },
+  { label: t('page.apiCases.request.tplExecSql'), code: '# 执行SQL\nresult = db.服务器名称.execute_all("SELECT * FROM table")' },
+  { label: t('page.apiCases.request.tplSaveToFile'), code: '# 保存到文件\ntest.save_to_file("data.json", body)' },
+  { label: t('page.apiCases.request.tplLog'), code: '# 记录日志\ntest.log("debug message")' },
+  { label: t('page.apiCases.request.tplExecFunction'), code: '# 调用自定义函数\nresult = global_func.方法名()' },
 ]
 
 var formColumns = [
-  { prop: 'name', label: '参数名', minWidth: 130 },
-  { prop: 'type', label: '类型', minWidth: 110, type: 'select', options: [
+  { prop: 'name', label: t('page.apiCases.request.formParamName'), minWidth: 130 },
+  { prop: 'type', label: t('page.apiCases.request.formType'), minWidth: 110, type: 'select', options: [
     { value: 'string', label: 'string' }, { value: 'file', label: 'file' },
   ]},
-  { prop: 'value', label: '参数值', minWidth: 180 },
-  { prop: 'desc', label: '说明', minWidth: 100 },
+  { prop: 'value', label: t('page.apiCases.request.formParamValue'), minWidth: 180 },
+  { prop: 'desc', label: t('page.apiCases.request.formDesc'), minWidth: 100 },
 ]
 </script>
 
@@ -250,8 +250,8 @@ var formColumns = [
 }
 
 .btn-debug-run {
-  background-color: #409eff !important;
-  border-color: #409eff !important;
+  background-color: $color-info !important;
+  border-color: $color-info !important;
   color: #fff !important;
 
   &:hover {
@@ -365,7 +365,7 @@ var formColumns = [
     border: 1px solid transparent;
 
     &:hover {
-      background: #ecf5ff;
+      background: rgba($color-info, 0.1);
       border-color: #b3d8ff;
     }
 

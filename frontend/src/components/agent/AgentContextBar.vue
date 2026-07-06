@@ -9,7 +9,10 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { InfoFilled } from '@element-plus/icons-vue'
+
+const { t } = useI18n()
 
 const props = defineProps({
   knowledgeDocTitle: { type: String, default: '' },
@@ -22,13 +25,13 @@ const visible = computed(() => !!(props.knowledgeDocTitle || props.inputRefType)
 
 const contextText = computed(() => {
   if (props.knowledgeDocTitle) {
-    return `当前基于《${props.knowledgeDocTitle}》对话`
+    return t('page.agent.contextDocBased', { title: props.knowledgeDocTitle })
   }
   if (props.inputRefType === 'interface' && props.interfacePath) {
-    return `当前基于接口 ${props.interfaceMethod || ''} ${props.interfacePath} 对话`
+    return t('page.agent.contextInterfaceBased', { name: `${props.interfaceMethod || ''} ${props.interfacePath}`.trim() })
   }
   if (props.inputRefType === 'api_doc') {
-    return '当前基于粘贴接口文档对话'
+    return t('page.agent.contextPasteBased')
   }
   return ''
 })

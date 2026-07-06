@@ -17,8 +17,7 @@ body,
 body {
   font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   font-size: var(--font-size-base);
-  background: linear-gradient(180deg, var(--bg-page-start) 0%, var(--bg-page-end) 100%);
-  background-attachment: fixed;
+  background: linear-gradient(180deg, var(--bg-page) 0%, var(--bg-page-end) 100%);
   color: var(--text-primary);
 }
 
@@ -37,9 +36,9 @@ a {
   overflow: hidden;
 
   th.el-table__cell {
-    background-color: #f3f4f6 !important;
+    background-color: var(--color-bg-table-header) !important;
     font-weight: 600;
-    font-size: calc(var(--font-size-base) + 2px);
+    font-size: var(--font-section-title);
     color: var(--text-primary);
     text-align: center !important;
     border-right: 1px solid var(--el-border-color) !important;
@@ -82,14 +81,38 @@ a {
 .app-table-column__actions {
   display: flex;
   align-items: center;
-  justify-content: space-evenly;
+  justify-content: center;
+  flex-wrap: nowrap;
   width: 100%;
-  gap: 4px;
+  gap: 8px;
 
   .el-button {
     margin: 0;
-    padding-left: 6px;
-    padding-right: 6px;
+    border: 1px solid $border-color;
+    border-radius: $radius-btn;
+    padding: 4px 12px;
+    font-size: 12px;
+    background-color: $bg-card;
+    transition: all 0.15s ease;
+
+    &:hover {
+      border-color: $color-primary;
+      color: $color-primary;
+      background-color: $color-primary-light;
+    }
+    &.el-button--danger:hover {
+      border-color: $color-danger;
+      color: $color-danger;
+      background-color: rgba($color-danger, 0.06);
+    }
+    &.el-button--primary {
+      border-color: rgba($color-primary, 0.3);
+      color: $color-primary;
+    }
+    &.el-button--danger {
+      border-color: rgba($color-danger, 0.3);
+      color: $color-danger;
+    }
   }
 }
 

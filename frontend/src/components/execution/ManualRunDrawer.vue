@@ -13,7 +13,7 @@
               <span v-else>-</span>
             </template>
           </AppTableColumn>
-          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="140">
+          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('page.test.linkDefect')]">
             <template #default="{ row }">
               <el-button link type="primary" @click="openCase(row)">{{ t('common.view') }}</el-button>
               <el-button v-if="row.exec_result === 'failed'" link type="danger" @click="createDefectForRow(row)">{{ t('page.test.linkDefect') }}</el-button>

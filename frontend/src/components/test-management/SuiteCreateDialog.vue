@@ -9,7 +9,7 @@
     @open="onOpen"
   >
     <!-- 上部：表单输入 -->
-    <el-form label-width="100px" class="suite-form">
+    <el-form label-width="auto" class="suite-form">
       <el-row :gutter="24">
         <el-col :span="12">
           <el-form-item :label="t('page.test.suites.suiteName')" required>
@@ -102,11 +102,13 @@
             <el-switch v-model="row.use_dependency" />
           </template>
         </el-table-column>
-        <el-table-column :label="t('common.actions')" :width="160" align="center">
+        <el-table-column :label="t('common.actions')" :width="250" align="center">
           <template #default="{ row, $index }">
-            <el-button link :disabled="$index === 0" @click="moveCase(row, -1)">{{ t('page.test.moveUp') }}</el-button>
-            <el-button link :disabled="$index === filteredCases.length - 1" @click="moveCase(row, 1)">{{ t('page.test.moveDown') }}</el-button>
-            <el-button link type="danger" @click="removeCase(row)">{{ t('common.delete') }}</el-button>
+            <div class="table-cell-actions">
+              <el-button link :disabled="$index === 0" @click="moveCase(row, -1)">{{ t('page.test.moveUp') }}</el-button>
+              <el-button link :disabled="$index === filteredCases.length - 1" @click="moveCase(row, 1)">{{ t('page.test.moveDown') }}</el-button>
+              <el-button link type="danger" @click="removeCase(row)">{{ t('common.delete') }}</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>

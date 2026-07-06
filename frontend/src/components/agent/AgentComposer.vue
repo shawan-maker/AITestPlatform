@@ -337,7 +337,7 @@ onMounted(async () => {
     max-width: none;
     width: 100%; /* 与chat panel对齐 */
     margin: 0 auto; /* 居中 */
-    padding: 0 40px 24px; /* 加倍：从 20px 12px 改为 40px 24px */
+    padding: 0 20px 12px; /* compact mode padding */
     box-sizing: border-box;
   }
 
@@ -348,11 +348,11 @@ onMounted(async () => {
 }
 
 .agent-composer__box {
-  border: 2px solid rgba($color-primary, 0.35); /* 加粗边框：从 1px 改为 2px */
-  border-radius: 24px; /* 加倍：从 12px 改为 24px */
+  border: 1px solid rgba($color-primary, 0.35);
+  border-radius: 12px;
   background: var(--el-bg-color);
-  padding: 32px 36px 24px; /* 加倍：从 16px 18px 12px 改为 32px 36px 24px */
-  box-shadow: 0 4px 24px rgba($color-primary, 0.06); /* 加倍：从 0 2px 12px 改为 0 4px 24px */
+  padding: 16px 18px 12px;
+  box-shadow: 0 2px 12px rgba($color-primary, 0.06);
 }
 
 .agent-composer__prompt-row {
@@ -362,9 +362,9 @@ onMounted(async () => {
   gap: 12px 16px;
   margin-bottom: 24px;
   padding-bottom: 24px;
-  font-size: 24px;
+  font-size: var(--font-card-title);
   color: var(--el-text-color-primary);
-  line-height: 48px;
+  line-height: 24px;
   border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
 }
 
@@ -375,7 +375,7 @@ onMounted(async () => {
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--el-border-color-lighter, #ebeef5);
-  font-size: 20px;
+  font-size: var(--font-card-title);
   color: var(--el-text-color-primary);
 }
 
@@ -389,31 +389,31 @@ onMounted(async () => {
 
   :deep(.el-select__wrapper) {
     box-shadow: none !important;
-    border: 2px solid var(--el-border-color);
-    border-radius: 12px;
-    min-height: 48px;
-    padding: 0 16px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 6px;
+    min-height: 24px;
+    padding: 0 8px;
   }
 }
 
 .agent-composer__inline-select {
   :deep(.el-select__wrapper) {
     box-shadow: none !important;
-    border: 2px solid var(--el-border-color); /* 加粗边框：从 1px 改为 2px */
-    border-radius: 12px; /* 加倍：从 6px 改为 12px */
-    min-height: 64px; /* 加倍：从 32px 改为 64px */
-    padding: 0 16px; /* 加倍：从 0 8px 改为 0 16px */
+    border: 1px solid var(--el-border-color);
+    border-radius: 6px;
+    min-height: 32px;
+    padding: 0 8px;
   }
 
   /* 下拉框内文字字号比其它字体小一号 */
   :deep(.el-input__wrapper) {
-    font-size: 22px !important;
+    font-size: var(--font-size-base) !important;
   }
   :deep(.el-input__inner) {
-    font-size: 22px !important;
+    font-size: var(--font-size-base) !important;
   }
   :deep(.el-select__placeholder) {
-    font-size: 22px !important;
+    font-size: var(--font-size-base) !important;
   }
 
   &--project {
@@ -433,7 +433,7 @@ onMounted(async () => {
   border: none;
   outline: none;
   resize: vertical;
-  font-size: 20px; /* 比消息内容(约14-19px)大一号 */
+  font-size: var(--font-size-base);
   line-height: 1.6; /* 调整行高以适应字体 */
   color: var(--el-text-color-primary);
   background: transparent;
@@ -457,16 +457,16 @@ onMounted(async () => {
   }
 
   .agent-composer__icon-btn {
-    width: 32px; /* 从 64px 减半 */
-    height: 32px; /* 从 64px 减半 */
-    font-size: 16px; /* 从 32px 减半 */
-    border-radius: 6px; /* 从 12px 减半 */
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    border-radius: 6px;
   }
 
   .agent-composer__send-btn {
-    width: 36px; /* 从 72px 减半 */
-    height: 36px; /* 从 72px 减半 */
-    font-size: 18px; /* 从 36px 减半 */
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
   }
 
   .agent-composer__footer {
@@ -491,9 +491,9 @@ onMounted(async () => {
   border: none;
   background: none;
   color: $color-primary;
-  font-size: 24px; /* 比tab字号(28px)小两号，统一字号 */
+  font-size: var(--font-size-base);
   cursor: pointer;
-  padding: 8px 0; /* 加倍：从 4px 0 改为 8px 0 */
+  padding: 4px 0;
 
   &:disabled {
     opacity: 0.5;
@@ -504,21 +504,21 @@ onMounted(async () => {
 .agent-composer__actions {
   display: flex;
   align-items: center;
-  gap: 20px; /* 加倍：从 10px 改为 20px */
+  gap: 10px;
 }
 
 .agent-composer__icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 64px; /* 加倍：从 32px 改为 64px */
-  height: 64px; /* 加倍：从 32px 改为 64px */
+  width: 32px;
+  height: 32px;
   border: none;
   background: none;
   color: var(--el-text-color-secondary);
   cursor: pointer;
-  border-radius: 12px; /* 加倍：从 6px 改为 12px */
-  font-size: 32px; /* 新增：增大图标字体大小 */
+  border-radius: 6px;
+  font-size: 18px;
 
   &:hover:not(:disabled) {
     background: var(--el-fill-color-light);
@@ -535,15 +535,15 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 72px; /* 加倍：从 36px 改为 72px */
-  height: 72px; /* 加倍：从 36px 改为 72px */
+  width: 36px;
+  height: 36px;
   border: none;
   border-radius: 50%;
   background: linear-gradient(135deg, $color-primary, $color-primary-dark);
   color: #fff;
   cursor: pointer;
   transition: opacity 0.2s, transform 0.15s;
-  font-size: 36px; /* 新增：增大图标字体大小 */
+  font-size: 20px;
 
   &:hover:not(:disabled) {
     transform: scale(1.04);
@@ -559,9 +559,9 @@ onMounted(async () => {
 <!-- 非 scoped 样式：修复 el-select-dropdown 字号（Teleport 到 body 导致 scoped 样式失效） -->
 <style>
 .agent-composer-select-dropdown .el-select-dropdown__item {
-  font-size: 22px !important;
+  font-size: var(--font-size-base) !important;
 }
 .agent-composer-select-dropdown .el-select-dropdown__empty {
-  font-size: 22px !important;
+  font-size: var(--font-size-base) !important;
 }
 </style>

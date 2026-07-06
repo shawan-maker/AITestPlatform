@@ -21,7 +21,7 @@
     <SectionPanel :title="t('page.env.variables.bindFunctions')">
       <AppTable :data="draftFunctionRows">
         <AppTableColumn prop="file_name" variant="content" :label="t('common.name')" />
-        <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="200">
+        <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :button-labels="['↑', '↓', t('common.delete')]">
           <template #default="{ $index }">
             <el-button link :disabled="$index === 0" @click="moveUp($index)">↑</el-button>
             <el-button link :disabled="$index === draftFunctionRows.length - 1" @click="moveDown($index)">↓</el-button>

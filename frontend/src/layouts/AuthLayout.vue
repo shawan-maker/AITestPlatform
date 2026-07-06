@@ -48,7 +48,7 @@ const baseBgStyle = computed(() => ({
   position: fixed;
   inset: 0;
   z-index: 0;
-  background-color: var(--bg-page-end);
+  background-color: #f2f3f5;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

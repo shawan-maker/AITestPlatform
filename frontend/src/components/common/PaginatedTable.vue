@@ -34,6 +34,7 @@ import { computed, onMounted, onUnmounted, provide, ref, toRef, watch } from 'vu
 import { DEFAULT_PAGE_SIZE } from '@/utils/constants'
 import { useTableColumnLayout } from '@/composables/useTableColumnLayout'
 import { TABLE_LAYOUT_KEY } from '@/components/common/tableLayoutKey'
+import { useLocaleStore } from '@/stores/locale'
 
 const props = defineProps({
   data: { type: Array, default: () => [] },
@@ -51,6 +52,7 @@ const rootRef = ref()
 const tableRef = ref()
 const dataRef = toRef(props, 'data')
 const layout = useTableColumnLayout(tableRef, dataRef)
+const localeStore = useLocaleStore()
 
 provide(TABLE_LAYOUT_KEY, layout)
 
@@ -95,6 +97,8 @@ watch(
   () => layout.scheduleLayout(),
   { deep: true },
 )
+
+watch(() => localeStore.locale, () => layout.scheduleLayout())
 
 defineExpose({ tableRef })
 </script>

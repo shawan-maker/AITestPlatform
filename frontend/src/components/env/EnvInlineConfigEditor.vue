@@ -284,7 +284,7 @@ watch(() => props.environmentId, load, { immediate: true })
 
 .basic-info-field {
   display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 12px 16px;
   align-items: center;
   width: 100%;
@@ -292,6 +292,7 @@ watch(() => props.environmentId, load, { immediate: true })
 
 .basic-info-label {
   margin: 0;
+  padding-right: 8px;
   font-size: var(--font-size-base);
   color: var(--text-primary);
   text-align: right;

@@ -72,7 +72,7 @@
                 <el-table-column prop="path" :label="t('page.apiCases.fieldPath')" min-width="220" align="left" />
                 <el-table-column prop="type" :label="t('page.apiCases.fieldType')" width="120" align="left" />
                 <el-table-column prop="required" :label="t('page.apiCases.fieldRequired')" width="70" align="center">
-                  <template #default="{ row }">{{ row.required ? '是' : '否' }}</template>
+                  <template #default="{ row }">{{ row.required ? t('common.yes') : t('common.no') }}</template>
                 </el-table-column>
                 <el-table-column prop="desc" :label="t('page.apiCases.fieldDesc')" min-width="200" align="left" show-overflow-tooltip />
               </el-table>
@@ -87,13 +87,13 @@
               </el-table>
             </section>
             <section class="doc-section">
-              <h4>返回码</h4>
+              <h4>{{ t('page.apiCases.responseCode') }}</h4>
               <el-table :data="responseCodes" border size="small" empty-text="-" class="doc-preview-table">
-                <el-table-column prop="http_code" label="状态码" width="100" align="left" />
-                <el-table-column prop="response_example" label="响应示例" min-width="260" align="left" show-overflow-tooltip>
+                <el-table-column prop="http_code" :label="t('page.apiCases.statusCode')" width="100" align="left" />
+                <el-table-column prop="response_example" :label="t('page.apiCases.responseExample')" min-width="260" align="left" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.response_example || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="description" label="说明" min-width="200" align="left" show-overflow-tooltip>
+                <el-table-column prop="description" :label="t('page.apiCases.description')" min-width="200" align="left" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.description || '-' }}</template>
                 </el-table-column>
               </el-table>
@@ -116,7 +116,7 @@
                 <el-button :icon="Filter" circle size="default" />
               </div>
               <div class="case-toolbar-right">
-                <el-button :icon="Refresh" :loading="casesLoading" @click="loadCases">刷新</el-button>
+                <el-button :icon="Refresh" :loading="casesLoading" @click="loadCases">{{ t('common.refresh') }}</el-button>
                 <el-dropdown trigger="click" popper-class="var-file-dropdown">
                   <el-button>
                     <el-icon><Document /></el-icon> {{ caseEnvName || t('page.apiCases.selectVarFile') }}<el-icon class="el-icon--right"><ArrowDown /></el-icon>
@@ -129,12 +129,12 @@
                         :class="{ 'is-active': caseEnvId === env.id }"
                         @click="selectCaseEnvironment(env.id)"
                       >{{ env.env_name }}</el-dropdown-item>
-                      <el-dropdown-item v-if="!environmentList.length" disabled>暂无变量文件</el-dropdown-item>
-                      <el-dropdown-item divided @click="refreshEnvironmentList">刷新</el-dropdown-item>
+                      <el-dropdown-item v-if="!environmentList.length" disabled>{{ t('page.apiCases.noVarFile') }}</el-dropdown-item>
+                      <el-dropdown-item divided @click="refreshEnvironmentList">{{ t('page.apiCases.refresh') }}</el-dropdown-item>
                     </el-dropdown-menu>
                   </template>
                 </el-dropdown>
-                <el-button type="success" :disabled="!selectedCaseIds.length" @click="batchRunCases">批量运行 ({{ selectedCaseIds.length }})</el-button>
+                <el-button type="success" :disabled="!selectedCaseIds.length" @click="batchRunCases">{{ t('page.apiCases.batchRun') }} ({{ selectedCaseIds.length }})</el-button>
                 <el-button v-if="canEdit && selectedCaseIds.length" type="danger" @click="batchDeleteCases">{{ t('common.batchDelete') }} ({{ selectedCaseIds.length }})</el-button>
                 <el-button v-if="canEdit" type="primary" :icon="MagicStick" @click="showGenerate = true">{{ t('page.apiCases.generateCases') }}</el-button>
               </div>
@@ -146,7 +146,7 @@
                 <template #title>
                   <span class="collapse-title">{{ t('page.apiCases.preconditionCases') }}</span>
                   <el-badge :value="filteredPreconditionCases.length" type="info" class="collapse-badge" />
-                  <el-button size="small" type="primary" plain @click.stop="showReusePre = true" style="margin-left: 8px">复用用例</el-button>
+                  <el-button size="small" type="primary" plain @click.stop="showReusePre = true" style="margin-left: 8px">{{ t('page.apiCases.reuseCase') }}</el-button>
                 </template>
                 <el-table :data="filteredPreconditionCases" border size="small" row-key="id" empty_text="-" @selection-change="onPreCaseSelectionChange" @row-click="(row) => router.push('/cases/api/cases/' + row.id)">
                   <el-table-column type="selection" width="50" />
@@ -184,7 +184,7 @@
                 <template #title>
                   <span class="collapse-title">{{ t('page.apiCases.mainCases') }}</span>
                   <el-badge :value="filteredMainCases.length" type="info" class="collapse-badge" />
-                  <el-button size="small" type="primary" plain @click.stop="showReuseMain = true" style="margin-left: 8px">复用用例</el-button>
+                  <el-button size="small" type="primary" plain @click.stop="showReuseMain = true" style="margin-left: 8px">{{ t('page.apiCases.reuseCase') }}</el-button>
                 </template>
                 <el-table :data="filteredMainCases" border size="small" row-key="id" empty_text="-" @selection-change="onMainCaseSelectionChange" @row-click="onMainCaseRowClick">
                   <el-table-column type="selection" width="50" />
@@ -241,8 +241,8 @@
                       :class="{ 'is-active': debugEnvId === env.id }"
                       @click="selectDebugEnvironment(env.id)"
                     >{{ env.env_name }}</el-dropdown-item>
-                    <el-dropdown-item v-if="!environmentList.length" disabled>暂无变量文件</el-dropdown-item>
-                    <el-dropdown-item divided @click="refreshEnvironmentList">刷新</el-dropdown-item>
+                    <el-dropdown-item v-if="!environmentList.length" disabled>{{ t('page.apiCases.noVarFile') }}</el-dropdown-item>
+                    <el-dropdown-item divided @click="refreshEnvironmentList">{{ t('page.apiCases.refresh') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -706,18 +706,17 @@ const hasConfiguredAsserts = computed(function () {
 })
 
 const assertMethods = computed(function () {
-  var isZh = locale.value === 'zh-cn' || locale.value === 'zh-CN'
   return [
-    { value: 'eq', label: isZh ? '相等' : 'Equals' },
-    { value: 'eq_ignore_case', label: isZh ? '相等(忽略大小写)' : 'Equals (ignore case)' },
-    { value: 'ne', label: isZh ? '不相等' : 'Not Equals' },
-    { value: 'contains', label: isZh ? '包含' : 'Contains' },
-    { value: 'not_contains', label: isZh ? '不包含' : 'Not Contains' },
-    { value: 'gt', label: isZh ? '大于' : 'Greater Than' },
-    { value: 'lt', label: isZh ? '小于' : 'Less Than' },
-    { value: 'ge', label: isZh ? '大于等于' : 'Greater or Equal' },
-    { value: 'le', label: isZh ? '小于等于' : 'Less or Equal' },
-    { value: 'regex', label: isZh ? '正则匹配' : 'Regex Match' },
+    { value: 'eq', label: t('page.apiCases.assertEqual') },
+    { value: 'eq_ignore_case', label: t('page.apiCases.assertEqualIgnoreCase') },
+    { value: 'ne', label: t('page.apiCases.assertNotEqual') },
+    { value: 'contains', label: t('page.apiCases.assertContains') },
+    { value: 'not_contains', label: t('page.apiCases.assertNotContains') },
+    { value: 'gt', label: t('page.apiCases.assertGreaterThan') },
+    { value: 'lt', label: t('page.apiCases.assertLessThan') },
+    { value: 'ge', label: t('page.apiCases.assertGreaterEqual') },
+    { value: 'le', label: t('page.apiCases.assertLessEqual') },
+    { value: 'regex', label: t('page.apiCases.assertRegex') },
   ]
 })
 
@@ -1012,9 +1011,9 @@ function getStatusColor(status) {
 
 function getStatusLabel(status) {
   const s = (status || '').toLowerCase()
-  if (s.indexOf('success') >= 0 || s.indexOf('pass') >= 0) return '执行成功'
-  if (s.indexOf('fail') >= 0 || s.indexOf('error') >= 0) return '执行失败'
-  return status || '未知状态'
+  if (s.indexOf('success') >= 0 || s.indexOf('pass') >= 0) return t('page.apiCases.execSuccess')
+  if (s.indexOf('fail') >= 0 || s.indexOf('error') >= 0) return t('page.apiCases.execFailed')
+  return status || t('page.apiCases.execUnknown')
 }
 
 function formatSize(bytes) {
@@ -1227,11 +1226,11 @@ function execStatusTag(status) {
 
 function execStatusLabel(status) {
   var s = String(status).toLowerCase()
-  if (s === 'success') return '成功'
-  if (s === 'fail') return '失败'
-  if (s === 'error') return '错误'
-  if (s === 'running') return '运行中'
-  if (s === 'pending') return '待执行'
+  if (s === 'success') return t('page.apiCases.resultSuccess')
+  if (s === 'fail') return t('page.apiCases.resultFailed')
+  if (s === 'error') return t('page.apiCases.resultError')
+  if (s === 'running') return t('page.apiCases.resultRunning')
+  if (s === 'pending') return t('page.apiCases.resultPending')
   return status
 }
 
@@ -1838,7 +1837,7 @@ async function loadLinkedPreconditions() {
 async function batchRunCases() {
   if (!selectedCaseIds.value.length) return
   if (!caseEnvId.value) {
-    ElMessage.warning('请先选择变量文件')
+    ElMessage.warning(t('page.apiCases.selectVarFileFirst'))
     return
   }
   // 乐观更新：将选中用例状态设为 running
@@ -1859,9 +1858,9 @@ async function batchRunCases() {
     }
   }
   if (failCount === 0) {
-    ElMessage.success('批量运行完成，' + successCount + ' 个用例全部成功')
+    ElMessage.success(t('page.apiCases.batchRunAllSuccess', { count: successCount }))
   } else {
-    ElMessage.warning('批量运行完成，成功 ' + successCount + ' 个，失败 ' + failCount + ' 个')
+    ElMessage.warning(t('page.apiCases.batchRunPartial', { success: successCount, fail: failCount }))
   }
   // 从后端刷新真实状态
   loadCases()
@@ -1870,7 +1869,7 @@ async function batchRunCases() {
 async function deleteSingleCase(row) {
   try {
     await ElMessageBox.confirm(
-      `确定删除用例「${row.title || row.name}」？`,
+      t('page.apiCases.deleteCaseConfirm', { name: row.title || row.name }),
       t('common.warning'),
       { type: 'warning' }
     )
@@ -1881,7 +1880,7 @@ async function deleteSingleCase(row) {
     if (e === 'cancel' || e?.message === 'cancel') return
     // 409 引用冲突错误已由拦截器展示，不重复提示
     if (e?.response?.status === 409) return
-    ElMessage.error(e?.message || '删除失败')
+    ElMessage.error(e?.message || t('common.deleteFailed'))
   }
 }
 
@@ -1903,7 +1902,7 @@ async function batchDeleteCases() {
     if (e === 'cancel' || e?.message === 'cancel') return
     // 409 引用冲突错误已由拦截器展示，不重复提示
     if (e?.response?.status === 409) return
-    ElMessage.error(e?.response?.data?.message || e?.message || '批量删除失败')
+    ElMessage.error(e?.response?.data?.message || e?.message || t('common.batchDeleteFailed'))
   }
 }
 
@@ -1923,7 +1922,7 @@ async function loadDocPreview() {
 async function runDebug() {
   // 检查是否选择了变量文件
   if (!debugEnvId.value) {
-    ElMessage.warning('请先选择变量文件')
+    ElMessage.warning(t('page.apiCases.selectVarFileFirst'))
     return
   }
 
@@ -1933,7 +1932,7 @@ async function runDebug() {
       return i < formDataRows.value.length - 1 && r.type === 'file' && r.name && r.name.trim() && r.fileId
     })
     if (!hasFile) {
-      ElMessage.warning('multipart/form-data 需要至少一个 file 类型的参数。如无文件上传，请使用 x-www-form-urlencoded')
+      ElMessage.warning(t('page.apiCases.multipartNeedsFile'))
       return
     }
   }
@@ -1978,7 +1977,7 @@ async function runDebug() {
         parseDebugResponse(err.response.data.data || err.response.data)
       }
       
-      ElMessage.error(err.message || '调试执行失败')
+      ElMessage.error(err.message || t('page.apiCases.debugExecFailed'))
     }
   } finally {
     debugging.value = false
@@ -2038,7 +2037,7 @@ function openEditInterface(row) {
 
 async function removeInterfaceItem(row) {
   var id = row && row.id ? row.id : selectedInterfaceId.value
-  await ElMessageBox.confirm(t('page.apiCases.interface') + '「' + (row.summary || row.name || row.path || '') + '」？', t('common.confirmDelete'), { type: 'warning' })
+  await ElMessageBox.confirm(t('page.apiCases.deleteInterfaceConfirm', { name: row.summary || row.name || row.path || '' }), t('common.confirmDelete'), { type: 'warning' })
   await deleteInterface(id)
   if (selectedInterfaceId.value === id) selectedInterfaceId.value = null
   await refreshAfterInterfaceChange()
@@ -2275,6 +2274,8 @@ watch(selectedInterfaceId, async function () {
   responseSubTab.value = 'result'
 
   if (selectedInterfaceId.value) {
+    // 自动展开左侧目录树到该接口所在的目录和父目录
+    expandToInterface(selectedInterfaceId.value)
     await loadTemplate()         // 先加载模板（含 response_info），避免与 loadLatestDebugResult 竞态
     loadCases()
     loadDeps()
@@ -2327,10 +2328,12 @@ onMounted(async function () {
   }
 })
 
-// keep-alive 恢复时刷新数据
-onActivated(function () {
+// keep-alive 恢复时刷新数据，并确保目录树展开到选中的接口
+onActivated(async function () {
   if (selectedInterfaceId.value) {
     loadCases()
+    // 从用例详情页返回时，重新展开左侧目录树到该接口所在的目录
+    await expandToInterface(selectedInterfaceId.value)
   }
 })
 
@@ -2408,7 +2411,7 @@ onUnmounted(function () {
   align-items: center;
   gap: 10px;
   padding: 6px 14px;
-  background: #f0f9eb;
+  background: rgba($color-success, 0.1);
   border-radius: 4px;
   font-family: monospace;
 
@@ -2419,10 +2422,10 @@ onUnmounted(function () {
     border-radius: 3px;
     color: #fff;
 
-    &.method-get { background: #67c23a; }
-    &.method-post { background: #409eff; }
-    &.method-put, &.method-patch { background: #e6a23c; }
-    &.method-delete { background: #f56c6c; }
+    &.method-get { background: $color-success; }
+    &.method-post { background: $color-info; }
+    &.method-put, &.method-patch { background: $color-warning; }
+    &.method-delete { background: $color-danger; }
     &.method-head, &.method-options { background: #909399; }
   }
 
@@ -2459,7 +2462,7 @@ onUnmounted(function () {
   overflow: hidden;
 
   :deep(.el-collapse-item__header) {
-    background: #fafafa;
+    background: $bg-code-readonly;
     font-weight: 600;
     font-size: 14px;
     padding: 0 14px;
@@ -2486,7 +2489,7 @@ onUnmounted(function () {
 
 .collapse-badge {
   :deep(.el-badge__content) {
-    font-size: 11px;
+    font-size: var(--font-small);
   }
 }
 
@@ -2506,8 +2509,8 @@ onUnmounted(function () {
 }
 
 .btn-debug-run {
-  background-color: #409eff !important;
-  border-color: #409eff !important;
+  background-color: $color-info !important;
+  border-color: $color-info !important;
   color: #fff !important;
 }
 
@@ -2564,7 +2567,7 @@ onUnmounted(function () {
 }
 
 .methods-helper {
-  background: #f5f7fa;
+  background: var(--el-fill-color-lighter);
   border-radius: 6px;
   padding: 10px 14px;
   margin-bottom: 8px;
@@ -2622,7 +2625,7 @@ onUnmounted(function () {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   padding: 10px;
-  background: #fafafa;
+  background: $bg-code-readonly;
 }
 
 .run-result-block {
@@ -2630,14 +2633,14 @@ onUnmounted(function () {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f0f9eb;
+  background: rgba($color-success, 0.1);
   border-radius: 4px;
   margin-bottom: 8px;
   font-size: 13px;
 
   .result-label {
     font-weight: 600;
-    color: #67c23a;
+    color: $color-success;
   }
 
   .result-meta {
@@ -2663,7 +2666,7 @@ onUnmounted(function () {
 
 .form-data-box {
   padding: 16px;
-  background: #fafafa;
+  background: $bg-code-readonly;
   border-radius: 6px;
   
   .tip {
@@ -2711,7 +2714,7 @@ onUnmounted(function () {
         transition: all 0.2s;
 
         &:hover {
-          background: #ecf5ff;
+          background: rgba($color-info, 0.1);
           border-color: #b3d8ff;
         }
 
@@ -2721,11 +2724,11 @@ onUnmounted(function () {
           font-weight: 500;
           color: var(--el-text-color-primary);
         }
-        
+
         code {
           display: block;
           font-family: 'Fira Code', Consolas, monospace;
-          font-size: 11px;
+          font-size: var(--font-small);
           color: #c7254e;
           background: #f5f5f5;
           padding: 4px 6px;
@@ -2751,7 +2754,7 @@ onUnmounted(function () {
     }
 
     code {
-      background: #f5f7fa;
+      background: var(--el-fill-color-lighter);
       padding: 2px 6px;
       border-radius: 3px;
       font-family: monospace;
@@ -2780,7 +2783,7 @@ onUnmounted(function () {
     }
 
     th {
-      background: #fafafa;
+      background: $bg-code-readonly;
       font-weight: 600;
     }
   }
@@ -2788,9 +2791,9 @@ onUnmounted(function () {
 
 .error-message {
   padding: 10px 14px;
-  background: #fef0f0;
+  background: rgba($color-danger, 0.1);
   border-radius: 4px;
-  color: #f56c6c;
+  color: $color-danger;
   font-size: 13px;
   margin-top: 8px;
   
@@ -2802,10 +2805,10 @@ onUnmounted(function () {
 /* 断言表格 */
 .assert-table {
   tr.assert-passed {
-    background: #f0f9eb;
+    background: rgba($color-success, 0.1);
   }
   tr.assert-failed {
-    background: #fef0f0;
+    background: rgba($color-danger, 0.1);
   }
 }
 
@@ -2815,8 +2818,8 @@ onUnmounted(function () {
   overflow-y: auto;
   font-family: 'Fira Code', Consolas, monospace;
   font-size: 12px;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: $bg-code-dark;
+  color: $text-code-dark;
   padding: 12px;
   border-radius: 4px;
   
@@ -2832,7 +2835,7 @@ onUnmounted(function () {
       display: inline-block;
       padding: 1px 6px;
       border-radius: 3px;
-      font-size: 11px;
+      font-size: var(--font-small);
       font-weight: 600;
       margin-right: 8px;
       min-width: 50px;
@@ -2931,7 +2934,7 @@ onUnmounted(function () {
   padding: 10px;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
-  background: #fafafa;
+  background: $bg-code-readonly;
 
   .log-container {
     height: 100%;

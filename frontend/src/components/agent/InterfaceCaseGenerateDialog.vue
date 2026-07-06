@@ -16,7 +16,7 @@
       </el-form-item>
       <!-- v2-Q2: 不再显示user_prompt输入框，点击生成即直接调用API -->
       <p style="color: var(--el-text-color-secondary); font-size: 13px; margin: 0">
-        {{ t('page.apiCases.generateHint') || '将基于接口文档自动生成测试用例预览' }}
+        {{ t('page.agent.caseGen.generateHint') }}
       </p>
     </div>
 
@@ -24,8 +24,8 @@
       <!-- 生成中状态 -->
       <div v-if="previewLoading" class="generating-status">
         <el-icon class="generating-icon is-loading" :size="32" color="#409eff"><Loading /></el-icon>
-        <div class="generating-text">正在分析接口文档，智能生成测试用例...</div>
-        <div class="generating-hint">AI 正在理解接口参数、业务场景和边界条件，预计需要 30-120 秒，请耐心等待</div>
+        <div class="generating-text">{{ t('page.agent.caseGen.generating') }}</div>
+        <div class="generating-hint">{{ t('page.agent.caseGen.generatingHint') }}</div>
       </div>
       <el-alert v-else-if="sessionError" type="error" :title="sessionError" show-icon :closable="false" />
       <template v-else>
@@ -33,7 +33,7 @@
         <div v-if="pollingStatus === 'running'" ref="pollingStatusRef" class="structuring-status">
           <div class="structuring-header">
             <el-icon class="is-loading" color="var(--el-color-primary)"><Loading /></el-icon>
-            <span class="structuring-title">正在生成结构化接口用例...</span>
+            <span class="structuring-title">{{ t('page.agent.caseGen.structuring') }}</span>
             <span class="structuring-count">({{ pollingCompleted }}/{{ pollingTotal }})</span>
           </div>
           <el-progress
@@ -41,7 +41,7 @@
             :stroke-width="12"
             :color="'var(--el-color-primary)'"
           />
-          <div class="structuring-hint">AI 正在将基础用例转换为可执行的 HTTP 请求参数，请稍候...</div>
+          <div class="structuring-hint">{{ t('page.agent.caseGen.structuringHint') }}</div>
         </div>
         <div v-if="baseCases.length" class="table-toolbar">
           <div class="table-toolbar-left"></div>
@@ -60,25 +60,25 @@
           class="case-preview-table"
         >
           <el-table-column type="selection" width="40" />
-          <el-table-column label="编号" width="55" align="center">
+          <el-table-column :label="t('page.agent.caseGen.colNo')" width="55" align="center">
             <template #default="{ $index }">{{ $index + 1 }}</template>
           </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="160" align="left">
+          <el-table-column prop="name" :label="t('page.agent.caseGen.colName')" min-width="160" align="left">
             <template #default="{ row }">
               <el-input v-model="row.name" size="small" />
             </template>
           </el-table-column>
-          <el-table-column label="依赖" min-width="140" align="left">
+          <el-table-column :label="t('page.agent.caseGen.colDeps')" min-width="140" align="left">
             <template #default="{ row }">
               <el-input
                 v-model="row._depsText"
                 size="small"
-                placeholder="逗号分隔"
+                :placeholder="t('page.agent.caseGen.commaSep')"
                 @blur="syncDepsFromText(row)"
               />
             </template>
           </el-table-column>
-          <el-table-column label="步骤" min-width="260" align="left">
+          <el-table-column :label="t('page.agent.caseGen.colSteps')" min-width="260" align="left">
             <template #default="{ row }">
               <el-input
                 v-model="row._stepsText"
@@ -89,7 +89,7 @@
               />
             </template>
           </el-table-column>
-          <el-table-column label="预期结果" min-width="240" align="left">
+          <el-table-column :label="t('page.agent.caseGen.colExpected')" min-width="240" align="left">
             <template #default="{ row }">
               <el-input
                 v-model="row._expectedText"
@@ -316,16 +316,16 @@ function startPolling() {
           const savedCount = confirmResult?.created_case_ids?.length || pollingTotal.value
           const hasEnv = !!confirmEnvId.value
           if (hasEnv) {
-            ElMessage.success(`已保存 ${savedCount} 条用例，正在后台执行预验证...`)
+            ElMessage.success(t('page.agent.caseGen.savedAndVerifying', { count: savedCount }))
           } else {
             ElMessage.success(t('page.agent.saved'))
           }
           emit('confirmed')
           emit('update:modelValue', false)
         } else if (status === 'failed') {
-          sessionError.value = statusData.error_message || '执行失败'
+          sessionError.value = statusData.error_message || t('page.agent.caseGen.execFailed')
         } else {
-          sessionError.value = '用户取消了本次生成'
+          sessionError.value = t('page.agent.caseGen.userCancelled')
         }
         confirming.value = false
       } else {
@@ -384,7 +384,7 @@ function startPreviewPolling() {
       } else if (status === 'failed') {
         stopPreviewPolling()
         previewLoading.value = false
-        sessionError.value = statusData.error_message || '预览生成失败'
+        sessionError.value = statusData.error_message || t('page.agent.caseGen.previewFailed')
       }
       // status === 'running' 则继续轮询
     } catch {

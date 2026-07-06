@@ -1,5 +1,5 @@
 <template>
-  <el-form ref="formRef" :model="form" :rules="rules" label-width="120px" @submit.prevent>
+  <el-form ref="formRef" :model="form" :rules="rules" label-width="auto" @submit.prevent>
     <el-form-item :label="t('page.profile.oldPassword')" prop="old_password">
       <el-input v-model="form.old_password" type="password" show-password autocomplete="current-password" />
     </el-form-item>

@@ -36,7 +36,8 @@
       "verifyPassword": "确认密码",
       "submit": "注册",
       "reset": "重置",
-      "toLogin": "返回登录"
+      "toLogin": "返回登录",
+      "registerSuccess": "注册成功，请登录"
     },
     "profile": {
       "title": "个人中心",
@@ -206,7 +207,9 @@
         "copy": "复制",
         "copyNameHint": "留空则自动追加 _copy",
         "copyResult": "已复制为 {name}",
-        "importExport": "导入 / 导出"
+        "importExport": "导入 / 导出",
+        "importById": "按 ID 导入",
+        "importFile": "文件导入"
       },
       "paramType": "类型",
       "encrypt": "是否加密",
@@ -216,7 +219,7 @@
         "edit": "编辑连接",
         "detail": "连接详情",
         "connectionName": "连接名称",
-        "serverName": "服务器名称（引擎 db 名）",
+        "serverName": "服务器名称",
         "dbType": "数据库类型",
         "host": "主机",
         "port": "端口",
@@ -407,7 +410,46 @@
       "saveAndStructure": "保存并生成结构化用例",
       "duplicateInterfaceSkipped": "同目录下已存在同名接口「{name}」，已跳过",
       "interfaceMultiSelectTitle": "选择接口",
-      "interfaceMultiSelectHint": "勾选要生成用例的接口，支持按目录批量选择"
+      "interfaceMultiSelectHint": "勾选要生成用例的接口，支持按目录批量选择",
+      "caseGen": {
+        "generateHint": "将基于接口文档自动生成测试用例预览",
+        "generating": "正在分析接口文档，智能生成测试用例...",
+        "generatingHint": "AI 正在理解接口参数、业务场景和边界条件，预计需要 30-120 秒，请耐心等待",
+        "structuring": "正在生成结构化接口用例...",
+        "structuringHint": "AI 正在将基础用例转换为可执行的 HTTP 请求参数，请稍候...",
+        "colNo": "编号",
+        "colName": "名称",
+        "colDeps": "依赖",
+        "colSteps": "步骤",
+        "colExpected": "预期结果",
+        "commaSep": "逗号分隔",
+        "savedAndVerifying": "已保存 {count} 条用例，正在后台执行预验证...",
+        "execFailed": "执行失败",
+        "userCancelled": "用户取消了本次生成",
+        "previewFailed": "预览生成失败"
+      },
+      "loadingSession": "正在加载会话...",
+      "loadSessionFailed": "加载会话失败，请稍后重试",
+      "generatingWait": "正在生成中，请稍候...",
+      "reqDocPhaseComplete": "检索需求文档阶段完成，正在准备生成测试用例，请稍候...",
+      "phaseGenInterfaces": "生成测试接口",
+      "phaseGenBaseCases": "生成基础用例",
+      "phaseCaseEditConfirm": "用例编辑确认",
+      "phaseGenStructuredCases": "生成结构化用例",
+      "phasePreExec": "接口用例预执行",
+      "generatingStructured": "正在生成结构化用例和预执行...",
+      "baseCasesGenerated": "已为 {count} 个接口生成基础用例：",
+      "skippedExists": "（已存在，跳过创建）",
+      "genComplete": "生成完成: {interfaces} 个接口, {cases} 条用例",
+      "catFunctional": "功能",
+      "catSecurity": "安全",
+      "catCompatibility": "兼容",
+      "catUsability": "易用",
+      "catPerformance": "性能",
+      "editAction": "编辑",
+      "contextDocBased": "当前基于《{title}》对话",
+      "contextInterfaceBased": "当前基于接口 {name} 对话",
+      "contextPasteBased": "当前基于粘贴接口文档对话"
     },
     "functional": {
       "title": "手工用例",
@@ -494,7 +536,11 @@
       "confirmDelete": "确定删除选中的 {count} 条用例？",
       "deleteSuccess": "删除成功",
       "sortByPriority": "按优先级排序",
-      "sortByUpdatedAt": "按更新时间排序"
+      "sortByUpdatedAt": "按更新时间排序",
+      "priorityP0": "P0 (紧急)",
+      "priorityP1": "P1 (高)",
+      "priorityP2": "P2 (中)",
+      "priorityP3": "P3 (低)"
     },
     "apiCases": {
       "title": "接口用例",
@@ -599,7 +645,154 @@
       "compareMethod": "比较方式",
       "expectedValue": "期待值",
       "operation": "操作",
-      "predefinedMethods": "预定义方法 & 示例"
+      "predefinedMethods": "预定义方法 & 示例",
+      "deleteInterfaceConfirm": "确定删除接口「{name}」？",
+      "deleteCaseConfirm": "确定删除用例「{name}」？",
+      "batchRunAllSuccess": "批量运行完成，{count} 个用例全部成功",
+      "batchRunPartial": "批量运行完成，成功 {success} 个，失败 {fail} 个",
+      "responseCode": "返回码",
+      "statusCode": "状态码",
+      "responseExample": "响应示例",
+      "description": "说明",
+      "refresh": "刷新",
+      "noVarFile": "暂无变量文件",
+      "batchRun": "批量运行",
+      "reuseCase": "复用用例",
+      "selectVarFileFirst": "请先选择变量文件",
+      "multipartNeedsFile": "multipart/form-data 需要至少一个 file 类型的参数。如无文件上传，请使用 x-www-form-urlencoded",
+      "debugExecFailed": "调试执行失败",
+      "execSuccess": "执行成功",
+      "execFailed": "执行失败",
+      "execUnknown": "未知状态",
+      "saveFailed": "保存失败",
+      "selectEnvFirst": "请先选择测试环境",
+      "caseDeleted": "用例已被删除，请返回列表",
+      "debugCancelled": "调试已取消",
+      "debugTimeout": "调试执行超时",
+      "precondition": {
+        "running": "运行中",
+        "unlinkConfirmFallback": "确认移除该前置操作关联？前置用例本身不会被删除。",
+        "unlinkSuccessFallback": "已移除关联",
+        "unlinkFailed": "移除关联失败"
+      },
+      "import": {
+        "conflictHint": "以下接口与目标目录中已有接口冲突，请选择其他目录或修改接口路径",
+        "statusConflict": "冲突",
+        "statusNew": "新建",
+        "selectCatalogFirst": "请先选择目标目录",
+        "importFailMsg": "{count}个接口导入失败（与目标目录已有接口冲突）："
+      },
+      "assertEqual": "相等",
+      "assertEqualIgnoreCase": "相等(忽略大小写)",
+      "assertNotEqual": "不相等",
+      "assertContains": "包含",
+      "assertNotContains": "不包含",
+      "assertGreaterThan": "大于",
+      "assertLessThan": "小于",
+      "assertGreaterEqual": "大于等于",
+      "assertLessEqual": "小于等于",
+      "assertRegex": "正则匹配",
+      "resultSuccess": "成功",
+      "resultFailed": "失败",
+      "resultError": "错误",
+      "resultRunning": "运行中",
+      "resultPending": "待执行",
+      "reuse": {
+        "title": "复用用例",
+        "selectTitle": "选择用例",
+        "searchCatalog": "搜索目录/接口",
+        "searchCaseName": "搜索用例名称",
+        "casesSuffix": "的用例",
+        "selectInterfaceHint": "请点击左侧接口查看用例",
+        "caseName": "用例名称",
+        "requestUrl": "请求URL",
+        "selectedCount": "已选择 {count} 条用例",
+        "unnamedCatalog": "未命名目录",
+        "allCases": "（全部用例）",
+        "noInterfaceSelected": "未选择目标接口",
+        "reusePartialFail": "部分用例复用失败: {count} 条",
+        "reuseSuccess": "复用成功",
+        "reuseFailed": "复用失败"
+      },
+      "execRecords": {
+        "title": "执行记录",
+        "empty": "暂无执行记录",
+        "colInterfaceCase": "接口/用例",
+        "colExecutor": "执行人",
+        "colExecTime": "执行时间",
+        "colResult": "结果",
+        "colActions": "操作",
+        "view": "查看",
+        "running": "执行中",
+        "backToList": "← 返回列表",
+        "operator": "操作人",
+        "statusRunning": "执行中",
+        "statusSuccess": "成功",
+        "statusFailed": "失败",
+        "statusError": "错误"
+      },
+      "response": {
+        "tabHeaders": "请求头信息",
+        "tabLog": "日志信息",
+        "duration": "耗时",
+        "errorMsg": "错误信息",
+        "requestMethod": "请求方法",
+        "requestUrl": "请求URL",
+        "formDataParams": "请求参数 (form-data)",
+        "paramName": "参数名",
+        "paramValue": "参数值",
+        "varName": "变量名",
+        "expression": "表达式",
+        "value": "值",
+        "result": "结果",
+        "assertTarget": "断言目标",
+        "compareMethod": "比较方式",
+        "expectedValue": "预期值",
+        "actualValue": "实际值",
+        "noExecResult": "暂无执行结果",
+        "noHeaders": "暂无响应头信息",
+        "noRequestData": "暂无请求数据",
+        "noRequestHeaders": "暂无请求头信息",
+        "noExtractData": "暂无提取数据",
+        "noAssertData": "暂无断言数据",
+        "noLogData": "暂无日志信息"
+      },
+      "request": {
+        "queryParamLabel": "QUERY参数",
+        "preOpsTemplateHeader": "前置操作模板",
+        "postOpsTemplateHeader": "后置操作模板",
+        "tplSaveEnvVar": "保存环境（临时）变量",
+        "tplSaveGlobalVar": "保存全局变量",
+        "tplExecSql": "执行SQL",
+        "tplGetEnvVar": "获取环境（临时）变量",
+        "tplGetGlobalVar": "获取全局变量",
+        "tplSendRequest": "发送请求",
+        "tplWait": "等待",
+        "tplExecFunction": "执行自定义函数",
+        "tplGetResponseBody": "获取响应体",
+        "tplGetJsonResponse": "获取JSON响应",
+        "tplJsonPathSingle": "JSONPath提取单个",
+        "tplJsonPathList": "JSONPath提取列表",
+        "tplRegexSingle": "正则提取单个",
+        "tplRegexList": "正则提取列表",
+        "tplAssertResult": "断言结果",
+        "tplDeleteEnvVar": "删除环境（临时）变量",
+        "tplDeleteGlobalVar": "删除全局变量",
+        "tplSaveToFile": "保存到文件",
+        "tplLog": "记录日志",
+        "formParamName": "参数名",
+        "formType": "类型",
+        "formParamValue": "参数值",
+        "formDesc": "说明"
+      },
+      "list": {
+        "interfaceName": "接口名称",
+        "requestMethod": "请求方法",
+        "requestPath": "请求路径",
+        "catalog": "接口目录",
+        "createdAt": "创建时间",
+        "updatedAt": "更新时间"
+      }
     },
     "test": {
       "suites": {
@@ -680,7 +873,13 @@
       "apiType": "API",
       "uiType": "UI",
       "manualType": "手工",
-      "functionalType": "功能"
+      "functionalType": "功能",
+      "requestContent": "1、请求内容",
+      "responseContent": "2、响应内容",
+      "assertErrorLog": "3、断言错误日志",
+      "preconditionsLabel": "前置条件:",
+      "testStepsLabel": "测试步骤:",
+      "expectedResultLabel": "预期结果:"
     },
     "defects": {
       "title": "缺陷管理",
@@ -732,7 +931,10 @@
       "addCommentPlaceholder": "输入备注内容...",
       "transitionCommentPlaceholder": "可选：处理时添加备注",
       "currentState": "当前状态",
-      "projectSelector": "所属项目"
+      "projectSelector": "所属项目",
+      "sourceApiCase": "API用例",
+      "sourceFunctionalCase": "功能用例",
+      "sourceManual": "手工"
     },
     "placeholder": {
       "title": "功能开发中",
@@ -765,12 +967,16 @@
     "cancel": "取消",
     "confirm": "确定",
     "confirmDelete": "确认删除",
+    "deleteConfirm": "确定要删除吗？此操作不可恢复。",
     "delete": "删除",
     "deleted": "已删除",
+    "deleteSuccess": "删除成功",
+    "deleteFailed": "删除失败",
     "batchDelete": "批量删除",
     "batchDeleteConfirm": "确定要删除选中的 {count} 条记录吗？",
     "batchDeleteSuccess": "已成功删除 {count} 条记录",
     "batchDeletePartial": "部分记录未能删除",
+    "batchDeleteFailed": "批量删除失败",
     "edit": "编辑",
     "configure": "配置",
     "copy": "复制",
@@ -818,7 +1024,17 @@
     "failed": "失败",
     "message": "消息",
     "time": "时间",
-    "warning": "警告"
+    "warning": "警告",
+    "readonly": "只读",
+    "breadcrumb": {
+      "projectDetail": "项目详情",
+      "userDetail": "用户详情",
+      "documentDetail": "文档详情",
+      "caseDetail": "用例详情",
+      "suiteDetail": "套件详情",
+      "taskDetail": "任务详情",
+      "defectDetail": "缺陷详情"
+    }
   },
   "role": {
     "viewer": "查看者",
@@ -834,6 +1050,31 @@
       "in_progress": "处理中",
       "resolved": "已解决",
       "closed": "已关闭"
+    },
+    "severity": {
+      "minor": "轻微",
+      "normal": "一般",
+      "serious": "严重",
+      "critical": "致命"
+    },
+    "priority": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "category": {
+      "functional": "功能",
+      "performance": "性能",
+      "ui": "界面",
+      "compatibility": "兼容",
+      "security": "安全",
+      "other": "其他"
+    },
+    "history": {
+      "created": "创建缺陷",
+      "statusChange": "状态变更",
+      "fieldUpdate": "字段修改",
+      "commentAdded": "添加备注"
     }
   },
   "execution": {
@@ -895,11 +1136,40 @@
   "status": {
     "exec": {
       "pending": "待执行",
+      "running": "执行中",
+      "completed": "已完成",
       "passed": "通过",
       "failed": "失败",
+      "cancelled": "已停止",
       "blocked": "阻塞",
       "skipped": "跳过"
+    },
+    "result": {
+      "success": "成功",
+      "pass": "通过",
+      "fail": "失败",
+      "failed": "失败",
+      "error": "错误",
+      "skip": "跳过",
+      "skipped": "跳过",
+      "pending": "未开始"
     }
+  },
+  "suite": {
+    "type": {
+      "functional": "功能",
+      "ui": "UI"
+    }
+  },
+  "task": {
+    "type": {
+      "functional": "手工",
+      "manual": "手工"
+    }
+  },
+  "runMode": {
+    "serial": "串行",
+    "parallel": "并行"
   },
   "configGroup": {
     "base": "基础",

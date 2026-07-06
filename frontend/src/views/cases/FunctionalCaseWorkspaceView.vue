@@ -121,7 +121,7 @@
             <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
           </AppTableColumn>
           <!-- 操作列 - 字体与知识库一致，不使用 size="small" -->
-          <AppTableColumn v-if="canEdit" :label="t('common.actions')" variant="fixed" width="200" align="center">
+          <AppTableColumn v-if="canEdit" actions :label="t('common.actions')" variant="fixed" :button-labels="[t('common.edit'), t('page.functional.copy'), t('common.delete')]" align="center">
             <template #default="{ row }">
               <el-button link type="primary" @click.stop="editCase(row)">{{ t('common.edit') }}</el-button>
               <el-button link type="primary" @click.stop="handleCopyCase(row)">{{ t('page.functional.copy') }}</el-button>

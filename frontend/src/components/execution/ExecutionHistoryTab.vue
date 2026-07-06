@@ -4,7 +4,7 @@
     <AppTable :data="history">
       <AppTableColumn prop="id" variant="fixed" label="ID" :width="70" />
       <AppTableColumn variant="fixed" :label="t('common.status')" :width="100">
-        <template #default="{ row }"><StatusTag :status="row.status" :map="RUN_STATUS_MAP" /></template>
+        <template #default="{ row }"><StatusTag :status="row.status" :map="runStatusMap" /></template>
       </AppTableColumn>
       <AppTableColumn variant="fixed" :label="t('page.test.totalCases')" :width="90">
         <template #default="{ row }">{{ row.total_cases ?? '-' }}</template>
@@ -21,7 +21,7 @@
       <AppTableColumn variant="fixed" :label="t('page.test.startedAt')" :width="170">
         <template #default="{ row }">{{ formatTime(row.start_time) }}</template>
       </AppTableColumn>
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="100">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.test.report')]">
         <template #default="{ row }">
           <el-button link type="primary" @click="$emit('viewReport', row)">{{ t('page.test.report') }}</el-button>
         </template>
@@ -31,8 +31,9 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RUN_STATUS_MAP } from '@/utils/constants'
+import { getRunStatusMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
@@ -40,6 +41,7 @@ import StatusTag from '@/components/common/StatusTag.vue'
 import RunProgressPanel from './RunProgressPanel.vue'
 
 const { t } = useI18n()
+const runStatusMap = computed(() => getRunStatusMap(t))
 
 defineProps({
   history: { type: Array, default: () => [] },

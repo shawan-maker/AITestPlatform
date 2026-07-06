@@ -8,7 +8,7 @@
       <AppTableColumn prop="created_at" variant="flex" :label="t('common.createdAt')">
         <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </AppTableColumn>
-      <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="180">
+      <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.edit'), t('common.delete')]">
         <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">{{ t('common.edit') }}</el-button>
           <ConfirmDelete @confirm="$emit('delete', row)">
@@ -19,7 +19,7 @@
     </AppTable>
 
     <el-dialog :close-on-click-modal="false" v-model="dialogVisible" :title="editRow ? t('common.edit') : t('page.projectSettings.addModule')" width="400px">
-      <el-form label-width="80px">
+      <el-form label-width="auto">
         <el-form-item :label="t('page.projectSettings.moduleName')">
           <el-input v-model="formName" />
         </el-form-item>

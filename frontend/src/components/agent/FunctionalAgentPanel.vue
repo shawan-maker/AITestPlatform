@@ -302,7 +302,7 @@ async function loadMessages(gen) {
     const visibleStages = agentBlock.stages.filter(s => s.name !== 'history' && s.name !== 'processing')
     const hasProcessing = agentBlock.stages.some(s => s.name === 'processing')
     if (visibleStages.length === 0 && !hasProcessing && !agentBlock.finalText) {
-      agentBlock.stages.push({ name: 'processing', status: 'running', text: '正在生成中，请稍候...', logs: [] })
+      agentBlock.stages.push({ name: 'processing', status: 'running', text: t('page.agent.generatingWait'), logs: [] })
     }
   }
 
@@ -362,7 +362,7 @@ async function selectSession(id) {
     id: 'loading-placeholder',
     role: 'agent',
     isStreaming: true,
-    stages: [{ name: 'processing', status: 'running', text: '正在加载会话...', logs: [] }],
+    stages: [{ name: 'processing', status: 'running', text: t('page.agent.loadingSession'), logs: [] }],
     finalText: '',
     payload: null,
     streamingText: '',
@@ -386,7 +386,7 @@ async function selectSession(id) {
     await _ensureSessionTitle()
   } catch (e) {
     if (gen !== _loadGen) return // 过期请求不弹错误提示
-    ElMessage.error('加载会话失败，请稍后重试')
+    ElMessage.error(t('page.agent.loadSessionFailed'))
     return
   }
   // 如果 session 仍在后台执行中，启动轮询
@@ -702,7 +702,7 @@ async function sendMessage(content) {
         // 问题2修复：在检索需求文档阶段完成后，添加等待状态提示
         if (stageName === 'search_requirement_done') {
           // 添加一个提示，让用户知道程序还在处理
-          stage.logs = [...stage.logs, `[${time}] 检索需求文档阶段完成，正在准备生成测试用例，请稍候...`]
+          stage.logs = [...stage.logs, `[${time}] ${t('page.agent.reqDocPhaseComplete')}`]
         }
       }
     }

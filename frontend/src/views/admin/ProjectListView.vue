@@ -32,7 +32,7 @@
       <AppTableColumn prop="name" variant="content" :label="t('page.admin.projects.name')" />
       <AppTableColumn prop="description" variant="content" :label="t('page.admin.projects.description')" />
       <AppTableColumn prop="member_count" variant="flex" :label="t('page.projectSettings.members')" />
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="240">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('common.edit'), t('common.delete')]">
         <template #default="{ row }">
           <el-button link type="primary" @click="goDetail(row)">{{ t('common.view') }}</el-button>
           <el-button v-if="canManageProject(row)" link type="primary" @click="goDetail(row)">{{ t('common.edit') }}</el-button>

@@ -1,9 +1,9 @@
 <template>
   <div v-loading="loading" ref="viewRef" class="defect-detail-view">
+    <BreadcrumbNav :items="breadcrumbs" />
     <PageHeader :title="defect?.title || t('page.defects.title')" />
 
     <div class="page-toolbar">
-      <el-button @click="router.push('/test/defects')">{{ t('common.back') }}</el-button>
       <el-button v-if="canEdit && !editing" @click="startEdit">{{ t('common.edit') }}</el-button>
       <el-button v-if="canEdit && editing" type="primary" :loading="saving" @click="saveEdit">{{ t('common.save') }}</el-button>
       <el-button v-if="canEdit && editing" @click="cancelEdit">{{ t('common.cancel') }}</el-button>
@@ -25,10 +25,10 @@
               <el-descriptions-item label="ID">{{ defect.defect_code || ('#' + defect.id) }}</el-descriptions-item>
               <el-descriptions-item :label="t('common.status')"><DefectStatusTag :status="defect.status" /></el-descriptions-item>
               <el-descriptions-item :label="t('page.defects.severity')">
-                <el-tag :type="severityType(defect.severity)" size="small">{{ DEFECT_SEVERITY_MAP[defect.severity] || defect.severity }}</el-tag>
+                <el-tag :type="severityType(defect.severity)" size="small">{{ defectSeverityMap[defect.severity] || defect.severity }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item :label="t('page.defects.priority')">{{ DEFECT_PRIORITY_MAP[defect.priority] || defect.priority }}</el-descriptions-item>
-              <el-descriptions-item :label="t('page.defects.category')">{{ DEFECT_CATEGORY_MAP[defect.defect_category] || defect.defect_category }}</el-descriptions-item>
+              <el-descriptions-item :label="t('page.defects.priority')">{{ defectPriorityMap[defect.priority] || defect.priority }}</el-descriptions-item>
+              <el-descriptions-item :label="t('page.defects.category')">{{ defectCategoryMap[defect.defect_category] || defect.defect_category }}</el-descriptions-item>
               <el-descriptions-item :label="t('page.defects.assignee')">{{ defect.assignee_name || '-' }}</el-descriptions-item>
               <el-descriptions-item :label="t('page.defects.submitter')">{{ defect.created_by_name || '-' }}</el-descriptions-item>
               <el-descriptions-item :label="t('page.defects.submitTime')">{{ formatTime(defect.created_at) }}</el-descriptions-item>
@@ -66,7 +66,7 @@
                 <el-col :span="12">
                   <el-form-item :label="t('page.defects.category')">
                     <el-select v-model="editForm.defect_category" style="width: 100%">
-                      <el-option v-for="(label, val) in DEFECT_CATEGORY_MAP" :key="val" :label="label" :value="val" />
+                      <el-option v-for="(label, val) in defectCategoryMap" :key="val" :label="label" :value="val" />
                     </el-select>
                   </el-form-item>
                 </el-col>
@@ -75,14 +75,14 @@
                 <el-col :span="12">
                   <el-form-item :label="t('page.defects.severity')">
                     <el-select v-model="editForm.severity" style="width: 100%">
-                      <el-option v-for="(label, val) in DEFECT_SEVERITY_MAP" :key="val" :label="label" :value="val" />
+                      <el-option v-for="(label, val) in defectSeverityMap" :key="val" :label="label" :value="val" />
                     </el-select>
                   </el-form-item>
                 </el-col>
                 <el-col :span="12">
                   <el-form-item :label="t('page.defects.priority')">
                     <el-select v-model="editForm.priority" style="width: 100%">
-                      <el-option v-for="(label, val) in DEFECT_PRIORITY_MAP" :key="val" :label="label" :value="val" />
+                      <el-option v-for="(label, val) in defectPriorityMap" :key="val" :label="label" :value="val" />
                     </el-select>
                   </el-form-item>
                 </el-col>
@@ -260,17 +260,27 @@ import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 import { addDefectComment, getDefect, transitionDefect, updateDefect } from '@/api/testManagement'
 import { listProjects } from '@/api/projects'
 import { usePermission } from '@/composables/usePermission'
-import { DEFECT_SEVERITY_MAP, DEFECT_PRIORITY_MAP, DEFECT_CATEGORY_MAP, DEFECT_STATUS_MAP } from '@/utils/constants'
+import { getDefectSeverityMap, getDefectPriorityMap, getDefectCategoryMap, getDefectStatusMap } from '@/utils/constants'
 import { formatTime, formatDuration, calcStatusDurations } from '@/utils/format'
 import PageHeader from '@/components/common/PageHeader.vue'
+import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import DefectStatusTag from '@/components/defect/DefectStatusTag.vue'
 import TransitionDefectDialog from '@/components/defect/TransitionDefectDialog.vue'
 
 const { t } = useI18n()
+const defectSeverityMap = computed(() => getDefectSeverityMap(t))
+const defectPriorityMap = computed(() => getDefectPriorityMap(t))
+const defectCategoryMap = computed(() => getDefectCategoryMap(t))
+const defectStatusMap = computed(() => getDefectStatusMap(t))
 const route = useRoute()
 const router = useRouter()
 const { canEdit } = usePermission()
 const defectId = computed(() => Number(route.params.defectId))
+
+const breadcrumbs = computed(() => [
+  { label: t('menu.testDefects'), to: '/test/defects' },
+  { label: t('common.breadcrumb.defectDetail') },
+])
 
 // --- State ---
 const viewRef = ref(null)
@@ -312,27 +322,27 @@ async function searchProjects(query) {
 }
 
 // Field name labels
-const FIELD_LABELS = {
-  status: '状态',
-  title: '标题',
-  severity: '严重程度',
-  priority: '优先级',
-  defect_category: '缺陷类型',
-  root_cause: '缺陷原因',
-  steps: '缺陷步骤',
-  assignee_id: '处理人',
-  project_id: '所属项目',
-}
+const FIELD_LABELS = computed(() => ({
+  status: t('common.status'),
+  title: t('page.defects.defectTitle'),
+  severity: t('page.defects.severity'),
+  priority: t('page.defects.priority'),
+  defect_category: t('page.defects.category'),
+  root_cause: t('page.defects.rootCause'),
+  steps: t('page.defects.steps'),
+  assignee_id: t('page.defects.assignee'),
+  project_id: t('page.defects.projectSelector'),
+}))
 function fieldLabel(name) {
-  return FIELD_LABELS[name] || name || '-'
+  return FIELD_LABELS.value[name] || name || '-'
 }
 
 // Value translation: raw enum values → localized labels
 const VALUE_MAPS = {
-  severity: DEFECT_SEVERITY_MAP,
-  priority: DEFECT_PRIORITY_MAP,
-  defect_category: DEFECT_CATEGORY_MAP,
-  status: DEFECT_STATUS_MAP,
+  severity: defectSeverityMap,
+  priority: defectPriorityMap,
+  defect_category: defectCategoryMap,
+  status: defectStatusMap,
 }
 function translateValue(fieldName, rawValue) {
   if (!rawValue) return '-'
@@ -343,7 +353,7 @@ function translateValue(fieldName, rawValue) {
 
 // Source type labels
 function sourceTypeLabel(type) {
-  var map = { api_case: 'API用例', functional_case: '功能用例', manual: '手工' }
+  var map = { api_case: t('page.defects.sourceApiCase'), functional_case: t('page.defects.sourceFunctionalCase'), manual: t('page.defects.sourceManual') }
   return map[type] || type || '-'
 }
 

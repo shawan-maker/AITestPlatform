@@ -1,12 +1,12 @@
 <template>
-  <el-drawer :model-value="modelValue" title="执行记录" direction="rtl" size="50%" :destroy-on-close="false" @update:model-value="$emit('update:modelValue', $event)">
+  <el-drawer :model-value="modelValue" :title="t('page.apiCases.execRecords.title')" direction="rtl" size="50%" :destroy-on-close="false" @update:model-value="$emit('update:modelValue', $event)">
     <!-- 列表视图 -->
     <div v-if="!selectedRecord">
-      <el-table :data="records" v-loading="loading" size="small" stripe style="width: 100%" empty-text="暂无执行记录">
+      <el-table :data="records" v-loading="loading" size="small" stripe style="width: 100%" :empty-text="t('page.apiCases.execRecords.empty')">
         <el-table-column label="#" width="50" align="center">
           <template #default="{ $index }">{{ $index + 1 }}</template>
         </el-table-column>
-        <el-table-column label="接口/用例" min-width="180" show-overflow-tooltip>
+        <el-table-column :label="t('page.apiCases.execRecords.colInterfaceCase')" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">
             <template v-if="nameMode === 'interface'">{{ row.interface_name || '-' }}</template>
             <template v-else-if="nameMode === 'case'">{{ row.case_name || '-' }}</template>
@@ -18,13 +18,13 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="triggered_by_username" label="执行人" width="100">
+        <el-table-column prop="triggered_by_username" :label="t('page.apiCases.execRecords.colExecutor')" width="100">
           <template #default="{ row }">{{ row.triggered_by_username || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="created_at" label="执行时间" min-width="170">
+        <el-table-column prop="created_at" :label="t('page.apiCases.execRecords.colExecTime')" min-width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="结果" width="80">
+        <el-table-column prop="status" :label="t('page.apiCases.execRecords.colResult')" width="80">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
           </template>
@@ -32,10 +32,10 @@
         <el-table-column prop="duration_ms" :label="t('execution.duration')" width="150">
           <template #default="{ row }">{{ row.status === 'running' ? '-' : formatDuration(row.duration_ms, locale) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="80">
+        <el-table-column :label="t('page.apiCases.execRecords.colActions')" width="80">
           <template #default="{ row }">
-            <el-button v-if="row.status !== 'running'" link type="primary" @click="viewRecord(row)">查看</el-button>
-            <span v-else class="running-text">执行中</span>
+            <el-button v-if="row.status !== 'running'" link type="primary" @click="viewRecord(row)">{{ t('page.apiCases.execRecords.view') }}</el-button>
+            <span v-else class="running-text">{{ t('page.apiCases.execRecords.running') }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -44,11 +44,11 @@
     <!-- 详情视图 -->
     <div v-else class="drawer-detail-view">
       <div class="drawer-detail-header">
-        <el-button link type="primary" @click="selectedRecord = null">← 返回列表</el-button>
+        <el-button link type="primary" @click="selectedRecord = null">{{ t('page.apiCases.execRecords.backToList') }}</el-button>
         <span class="drawer-detail-meta">
           <el-tag :type="statusTagType(selectedRecord.status)" size="small">{{ selectedRecord.status }}</el-tag>
           {{ formatTime(selectedRecord.created_at) }} &nbsp; {{ t('execution.duration') }}: {{ formatDuration(selectedRecord.duration_ms, locale) }}
-          <template v-if="selectedRecord.triggered_by_username"> &nbsp; 操作人: {{ selectedRecord.triggered_by_username }}</template>
+          <template v-if="selectedRecord.triggered_by_username"> &nbsp; {{ t('page.apiCases.execRecords.operator') }}: {{ selectedRecord.triggered_by_username }}</template>
         </span>
       </div>
       <ApiResponsePanel
@@ -97,10 +97,10 @@ function statusTagType(status) {
 }
 
 function statusLabel(status) {
-  if (status === 'running') return '执行中'
-  if (status === 'success') return '成功'
-  if (status === 'fail') return '失败'
-  if (status === 'error') return '错误'
+  if (status === 'running') return t('page.apiCases.execRecords.statusRunning')
+  if (status === 'success') return t('page.apiCases.execRecords.statusSuccess')
+  if (status === 'fail') return t('page.apiCases.execRecords.statusFailed')
+  if (status === 'error') return t('page.apiCases.execRecords.statusError')
   return status
 }
 

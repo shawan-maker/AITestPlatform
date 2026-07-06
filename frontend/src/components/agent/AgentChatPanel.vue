@@ -125,7 +125,7 @@
         <!-- ===== 兼容历史消息（role=assistant/tool/system）===== -->
         <template v-else>
           <div class="chat-msg__avatar">
-            <el-icon v-if="msg.role === 'assistant'" :size="20" color="#6366f1"><ChatDotRound /></el-icon>
+            <el-icon v-if="msg.role === 'assistant'" :size="20" color="#7B93DB"><ChatDotRound /></el-icon>
             <el-icon v-else :size="16" color="#e6a23c"><Cpu /></el-icon>
           </div>
           <div class="chat-msg__body">
@@ -163,7 +163,7 @@
       <!-- Legacy streaming text indicator (backward compat) -->
       <div v-if="showLegacyStreaming" class="chat-msg chat-msg--assistant">
         <div class="chat-msg__avatar">
-          <el-icon :size="20" color="#6366f1"><ChatDotRound /></el-icon>
+          <el-icon :size="20" color="#7B93DB"><ChatDotRound /></el-icon>
         </div>
         <div class="chat-msg__body">
           <div class="chat-msg__meta">
@@ -178,7 +178,7 @@
       <!-- Thinking indicator -->
       <div v-if="showThinkingIndicator" class="chat-msg chat-msg--assistant">
         <div class="chat-msg__avatar">
-          <el-icon :size="20" color="#6366f1"><ChatDotRound /></el-icon>
+          <el-icon :size="20" color="#7B93DB"><ChatDotRound /></el-icon>
         </div>
         <div class="chat-msg__body">
           <div class="chat-msg__bubble chat-msg__bubble--thinking">
@@ -437,16 +437,16 @@ watch(
   }
 
   .chat-msg--assistant & {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, $color-ai-primary 0%, $color-ai-light 100%);
     :deep(.el-icon) { color: #fff !important; }
   }
 
   &--agent {
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    background: linear-gradient(135deg, $color-ai-primary 0%, $color-ai-light 100%);
     :deep(.el-icon) { color: #fff !important; }
   }
 
-  .chat-msg--tool & { background: #fef3c7; }
+  .chat-msg--tool & { background: $color-ai-bg; }
 }
 
 /* Message body */
@@ -477,7 +477,7 @@ watch(
 .chat-msg__bubble {
   padding: 10px 14px;
   border-radius: 12px;
-  font-size: 13.5px;
+  font-size: var(--font-size-base);
   line-height: 1.65;
   word-break: break-word;
   width: 100%; /* 固定气泡宽度，避免内容少时宽度过小 */
@@ -492,7 +492,7 @@ watch(
 
   &--user {
     width: auto; /* 用户消息宽度自适应 */
-    background: linear-gradient(135deg, var(--color-primary, #409eff), var(--color-primary-dark, #337ecc));
+    background: linear-gradient(135deg, #8CBDD9, #6AAED0);
     border-color: transparent;
     color: #fff;
     border-top-right-radius: 4px;
@@ -605,7 +605,7 @@ watch(
   }
 
   &.is-done {
-    box-shadow: inset 3px 0 0 #67c23a;
+    box-shadow: inset 3px 0 0 $color-success;
 
     .agent-stage-block__header {
       opacity: 0.85;
@@ -636,7 +636,7 @@ watch(
 
   /* Stage name */
   .agent-stage-block__name {
-    font-size: 13.5px;
+    font-size: var(--font-size-base);
     font-weight: 600;
     color: var(--el-text-color-primary);
     flex: 1;
@@ -684,7 +684,7 @@ watch(
   max-height: 140px; /* default height before user drags */
   overflow-y: auto;
   font-family: 'Cascadia Code', Consolas, 'SF Mono', Monaco, monospace;
-  font-size: 11.5px;
+  font-size: var(--font-small);
   line-height: 1.65;
   color: #606266;
   transition: max-height 0.15s ease;
@@ -756,7 +756,7 @@ watch(
   padding: 12px 16px;
   background: var(--el-fill-color-lighter);
   border-radius: 8px;
-  font-size: 13.5px;
+  font-size: var(--font-size-base);
   line-height: 1.7;
   white-space: pre-wrap;
   color: var(--el-text-color-primary);

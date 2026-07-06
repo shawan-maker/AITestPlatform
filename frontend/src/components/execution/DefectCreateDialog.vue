@@ -6,17 +6,17 @@
       </el-form-item>
       <el-form-item :label="t('page.defects.category')">
         <el-select v-model="form.defect_category" style="width: 100%">
-          <el-option v-for="(label, val) in DEFECT_CATEGORY_MAP" :key="val" :label="label" :value="val" />
+          <el-option v-for="(label, val) in defectCategoryMap" :key="val" :label="label" :value="val" />
         </el-select>
       </el-form-item>
       <el-form-item :label="t('page.defects.severity')">
         <el-select v-model="form.severity" style="width: 100%">
-          <el-option v-for="(label, val) in DEFECT_SEVERITY_MAP" :key="val" :label="label" :value="val" />
+          <el-option v-for="(label, val) in defectSeverityMap" :key="val" :label="label" :value="val" />
         </el-select>
       </el-form-item>
       <el-form-item :label="t('page.defects.priority')">
         <el-select v-model="form.priority" style="width: 100%">
-          <el-option v-for="(label, val) in DEFECT_PRIORITY_MAP" :key="val" :label="label" :value="val" />
+          <el-option v-for="(label, val) in defectPriorityMap" :key="val" :label="label" :value="val" />
         </el-select>
       </el-form-item>
       <el-form-item :label="t('page.defects.steps')">
@@ -42,7 +42,7 @@
 <script setup>
 import { computed, reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DEFECT_SEVERITY_MAP, DEFECT_PRIORITY_MAP, DEFECT_CATEGORY_MAP } from '@/utils/constants'
+import { getDefectSeverityMap, getDefectPriorityMap, getDefectCategoryMap } from '@/utils/constants'
 import UserSearchPicker from '@/components/picker/UserSearchPicker.vue'
 
 const props = defineProps({
@@ -55,6 +55,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'submit'])
 const { t } = useI18n()
+const defectSeverityMap = computed(() => getDefectSeverityMap(t))
+const defectPriorityMap = computed(() => getDefectPriorityMap(t))
+const defectCategoryMap = computed(() => getDefectCategoryMap(t))
 
 const visible = computed({
   get: () => props.modelValue,

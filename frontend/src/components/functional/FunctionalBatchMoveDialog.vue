@@ -1,6 +1,6 @@
 <template>
   <el-dialog :close-on-click-modal="false" v-model="visible" :title="t('page.functional.batchMove')" width="480px">
-    <el-form label-width="100px">
+    <el-form label-width="auto">
       <el-form-item :label="t('page.functional.targetCatalog')" required>
         <CatalogSelectInline :catalog-nodes="catalogs" v-model="targetCatalogId" />
       </el-form-item>

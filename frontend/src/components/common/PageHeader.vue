@@ -20,23 +20,17 @@ defineProps({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding: 12px 20px;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md) var(--space-page);
   border-radius: $radius-md;
-  background: linear-gradient(
-    135deg,
-    var(--bg-page-header-start) 0%,
-    var(--bg-page-header-end) 100%
-  );
-  border: 1px solid rgba($color-primary-dark, 0.45);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.65),
-    0 1px 3px rgba($color-primary-dark, 0.12);
+  background: $bg-page-header;
+  border: 1px solid $border-color;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .page-header__title {
-  font-size: 22px;
+  font-size: var(--font-page-title);
   font-weight: 600;
   min-width: 0;
   overflow: hidden;

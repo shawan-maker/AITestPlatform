@@ -79,7 +79,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: linear-gradient(180deg, var(--bg-page-start) 0%, var(--bg-page-end) 100%);
+  background: linear-gradient(180deg, var(--bg-page) 0%, var(--bg-page-end) 100%);
 }
 
 .default-layout__mobile-bar {
@@ -88,7 +88,7 @@ onUnmounted(() => {
   gap: 8px;
   padding: 8px 16px;
   border-bottom: 1px solid rgba($color-primary, 0.1);
-  background: var(--bg-page-header-start);
+  background: var(--bg-page-header);
   flex-shrink: 0;
 }
 

@@ -8,7 +8,7 @@
     destroy-on-close
     @opened="loadPreview"
   >
-    <el-form label-width="100px" style="margin-bottom: 12px">
+    <el-form label-width="auto" style="margin-bottom: 12px">
       <el-form-item :label="t('page.knowledge.titleCol')">
         <el-input :model-value="sourceTitle" readonly />
       </el-form-item>

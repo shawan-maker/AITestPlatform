@@ -85,7 +85,7 @@ async function onSubmit() {
   loading.value = true
   try {
     await register({ ...form })
-    ElMessage.success('注册成功，请登录')
+    ElMessage.success(t('page.register.registerSuccess'))
     router.push('/login')
   } finally {
     loading.value = false

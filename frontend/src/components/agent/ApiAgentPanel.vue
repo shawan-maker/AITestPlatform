@@ -381,7 +381,7 @@ async function selectSession(id) {
     id: 'loading-placeholder',
     role: 'agent',
     isStreaming: true,
-    stages: [{ name: 'processing', status: 'running', text: '正在加载会话...', logs: [] }],
+    stages: [{ name: 'processing', status: 'running', text: t('page.agent.loadingSession'), logs: [] }],
     finalText: '',
     payload: null,
     streamingText: '',
@@ -408,7 +408,7 @@ async function selectSession(id) {
   } catch (e) {
     console.error('[ApiAgentPanel] selectSession 加载失败:', e)
     if (gen !== _loadGen) return // 过期请求不弹错误提示
-    ElMessage.error('加载会话失败，请稍后重试')
+    ElMessage.error(t('page.agent.loadSessionFailed'))
     return
   }
 
@@ -439,12 +439,19 @@ async function selectSession(id) {
       '生成结构化用例': 'structure_cases',
       '接口用例预执行': 'pre_run',
     }
-    let stageText = '正在生成结构化用例和预执行...'
+    const PHASE_I18N = {
+      '生成测试接口': t('page.agent.phaseGenInterfaces'),
+      '生成基础用例': t('page.agent.phaseGenBaseCases'),
+      '用例编辑确认': t('page.agent.phaseCaseEditConfirm'),
+      '生成结构化用例': t('page.agent.phaseGenStructuredCases'),
+      '接口用例预执行': t('page.agent.phasePreExec'),
+    }
+    let stageText = t('page.agent.generatingStructured')
     let stageName = 'processing'
     if (currentPhase && phases.length) {
       const runningPhase = phases.find(p => p.status === 'running') || phases.find(p => p.id === currentPhase)
       if (runningPhase) {
-        stageText = `正在${runningPhase.name}...`
+        stageText = `${PHASE_I18N[runningPhase.name] || runningPhase.name}...`
         stageName = PHASE_TO_STAGE[runningPhase.name] || 'processing'
       }
     }
@@ -776,9 +783,9 @@ async function sendMessage(content) {
           // Add interface summary to edit_base_cases stage
           const ifaces = agentResponse.payload?.interfaces || []
           if (ifaces.length) {
-            _addLog('edit_base_cases', `已为 ${ifaces.length} 个接口生成基础用例：`)
+            _addLog('edit_base_cases', t('page.agent.baseCasesGenerated', { count: ifaces.length }))
             for (const iface of ifaces) {
-              const skipped = iface.skipped ? '（已存在，跳过创建）' : ''
+              const skipped = iface.skipped ? t('page.agent.skippedExists') : ''
               _addLog('edit_base_cases', `  ${iface.method} ${iface.summary || iface.path} — ${(iface.base_cases || []).length} 条基础用例${skipped}`)
             }
           }
@@ -792,7 +799,7 @@ async function sendMessage(content) {
           // Add summary to last existing stage instead of creating a new one
           const lastStage = agentResponse.stages.length ? agentResponse.stages[agentResponse.stages.length - 1] : null
           const stageName = lastStage ? lastStage.name : 'default'
-          _addLog(stageName, `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
+          _addLog(stageName, t('page.agent.genComplete', { interfaces: data?.total_interfaces || 0, cases: data?.total_cases || 0 }))
         },
         error: (data) => {
           const errorMsg = data?.message || t('common.requestFailed')
@@ -1009,7 +1016,7 @@ async function onSaveEditedBaseCases(editedInterfaces) {
         summary: (data) => {
           const lastStage = agentResponse.stages.length ? agentResponse.stages[agentResponse.stages.length - 1] : null
           const stageName = lastStage ? lastStage.name : 'default'
-          _addLog(stageName, `生成完成: ${data?.total_interfaces || 0} 个接口, ${data?.total_cases || 0} 条用例`)
+          _addLog(stageName, t('page.agent.genComplete', { interfaces: data?.total_interfaces || 0, cases: data?.total_cases || 0 }))
         },
         error: (data) => {
           ElMessage.error(data?.message || t('common.requestFailed'))
@@ -1197,8 +1204,15 @@ watch(
               '生成结构化用例': 'structure_cases',
               '接口用例预执行': 'pre_run',
             }
+            const PHASE_I18N_2 = {
+              '生成测试接口': t('page.agent.phaseGenInterfaces'),
+              '生成基础用例': t('page.agent.phaseGenBaseCases'),
+              '用例编辑确认': t('page.agent.phaseCaseEditConfirm'),
+              '生成结构化用例': t('page.agent.phaseGenStructuredCases'),
+              '接口用例预执行': t('page.agent.phasePreExec'),
+            }
             const runningPhase = (progress?.phases || []).find(p => p.status === 'running')
-            const stageText = runningPhase ? `正在${runningPhase.name}...` : '正在生成结构化用例和预执行...'
+            const stageText = runningPhase ? `${PHASE_I18N_2[runningPhase.name] || runningPhase.name}...` : t('page.agent.generatingStructured')
             const stageName = runningPhase ? (PHASE_TO_STAGE[runningPhase.name] || 'processing') : 'processing'
             let lastAgentMsg = [...messages.value].reverse().find(m => m.role === 'agent')
             // 如果没有 agent 消息（流断开时丢失），创建占位

@@ -6,7 +6,7 @@
     :top="dialogTop"
     :class="dialogClass"
   >
-    <el-form label-width="100px">
+    <el-form label-width="auto">
       <el-form-item :label="t('page.env.function.method')">
         <el-select v-model="selectedMethod" filterable style="width: 100%" @change="onMethodChange">
           <el-option v-for="m in methods" :key="m.name" :label="m.name" :value="m.name" />

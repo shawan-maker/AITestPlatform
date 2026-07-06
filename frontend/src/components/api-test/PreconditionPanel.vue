@@ -8,11 +8,11 @@
     </div>
     <div v-show="!collapsed" class="precondition-body">
       <el-table :key="'pre-' + refreshKey" v-if="preconditionList.length" :data="preconditionList" size="small" border>
-        <el-table-column type="index" :label="t('common.index') || '序号'" :width="60" align="center" />
-        <el-table-column prop="title" :label="t('page.functional.caseName') || '用例名称'" min-width="140" show-overflow-tooltip>
+        <el-table-column type="index" :label="t('common.index')" :width="60" align="center" />
+        <el-table-column prop="title" :label="t('page.functional.caseName')" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ stripTitleSuffix(row.title) }}</template>
         </el-table-column>
-        <el-table-column :label="t('page.defects.interfaceName') || '接口'" min-width="120" show-overflow-tooltip>
+        <el-table-column :label="t('page.defects.interfaceName')" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ getCaseInterfaceName(row) }}</template>
         </el-table-column>
         <el-table-column label="Path" min-width="180">
@@ -21,16 +21,18 @@
             <span>{{ getCasePath(row) || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('page.test.execStatus') || '执行状态'" :width="90" align="center">
+        <el-table-column :label="t('page.test.execStatus')" :width="90" align="center">
           <template #default="{ row }">
             <span class="exec-dot" :class="dotClass(row.exec_status)"></span>
             {{ statusLabel(row.exec_status) }}
           </template>
         </el-table-column>
-        <el-table-column :label="t('common.actions') || '操作'" :width="120" align="center">
+        <el-table-column :label="t('common.actions')" :width="140" align="center">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" @click="viewCase(row)">{{ t('common.view') || '查看' }}</el-button>
-            <el-button size="small" link type="danger" @click="unlinkCase(row)">{{ t('page.apiCases.unlink') || '移除' }}</el-button>
+            <div class="table-cell-actions">
+              <el-button size="small" link type="primary" @click="viewCase(row)">{{ t('common.view') }}</el-button>
+              <el-button size="small" link type="danger" @click="unlinkCase(row)">{{ t('page.apiCases.unlink') }}</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -40,7 +42,7 @@
     <!-- 配置前置操作对话框：仅当前接口的前置用例 -->
     <el-dialog
       v-model="showConfigDialog"
-      :title="t('page.apiCases.configurePreconditions') || '配置前置操作'"
+      :title="t('page.apiCases.configurePreconditions')"
       width="600px"
       :destroy-on-close="true"
       @open="onConfigDialogOpen"
@@ -48,7 +50,7 @@
       <div v-loading="configLoading">
         <el-input
           v-model="configSearchKey"
-          :placeholder="t('page.apiCases.searchCases') || '搜索用例名称'"
+          :placeholder="t('page.apiCases.searchCases')"
           clearable
           size="default"
           style="margin-bottom: 12px"
@@ -64,7 +66,7 @@
           @selection-change="onConfigSelectionChange"
         >
           <el-table-column type="selection" width="45" />
-          <el-table-column prop="title" :label="t('page.functional.caseName') || '用例名称'" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="title" :label="t('page.functional.caseName')" min-width="180" show-overflow-tooltip />
           <el-table-column label="Path" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
               <el-tag v-if="getCaseMethod(row)" size="small" :type="methodType(getCaseMethod(row))" style="margin-right: 4px">{{ getCaseMethod(row) }}</el-tag>
@@ -75,8 +77,8 @@
         <el-empty v-if="!configLoading && !localPreconditionCases.length" :description="t('page.apiCases.noPreconditionCasesForConfig')" :image-size="60" />
       </div>
       <template #footer>
-        <el-button @click="showConfigDialog = false">{{ t('common.cancel') || '取消' }}</el-button>
-        <el-button type="primary" @click="onConfigConfirm">{{ t('common.confirm') || '确定' }}</el-button>
+        <el-button @click="showConfigDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="onConfigConfirm">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -86,7 +88,7 @@
     <!-- 配置前置操作对话框（无关联时也会渲染） -->
     <el-dialog
       v-model="showConfigDialog"
-      :title="t('page.apiCases.configurePreconditions') || '配置前置操作'"
+      :title="t('page.apiCases.configurePreconditions')"
       width="600px"
       :destroy-on-close="true"
       @open="onConfigDialogOpen"
@@ -94,7 +96,7 @@
       <div v-loading="configLoading">
         <el-input
           v-model="configSearchKey"
-          :placeholder="t('page.apiCases.searchCases') || '搜索用例名称'"
+          :placeholder="t('page.apiCases.searchCases')"
           clearable
           size="default"
           style="margin-bottom: 12px"
@@ -110,7 +112,7 @@
           @selection-change="onConfigSelectionChange"
         >
           <el-table-column type="selection" width="45" />
-          <el-table-column prop="title" :label="t('page.functional.caseName') || '用例名称'" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="title" :label="t('page.functional.caseName')" min-width="180" show-overflow-tooltip />
           <el-table-column label="Path" min-width="200" show-overflow-tooltip>
             <template #default="{ row }">
               <el-tag v-if="getCaseMethod(row)" size="small" :type="methodType(getCaseMethod(row))" style="margin-right: 4px">{{ getCaseMethod(row) }}</el-tag>
@@ -121,8 +123,8 @@
         <el-empty v-if="!configLoading && !localPreconditionCases.length" :description="t('page.apiCases.noPreconditionCasesForConfig')" :image-size="60" />
       </div>
       <template #footer>
-        <el-button @click="showConfigDialog = false">{{ t('common.cancel') || '取消' }}</el-button>
-        <el-button type="primary" @click="onConfigConfirm">{{ t('common.confirm') || '确定' }}</el-button>
+        <el-button @click="showConfigDialog = false">{{ t('common.cancel') }}</el-button>
+        <el-button type="primary" @click="onConfigConfirm">{{ t('common.confirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -208,10 +210,10 @@ function dotClass(status) {
 }
 
 function statusLabel(status) {
-  if (status === 'running') return '运行中'
-  if (status === 'success') return t('common.success') || '成功'
-  if (status === 'fail' || status === 'failed') return t('page.test.resultFail') || '失败'
-  if (status === 'error') return t('common.error') || '错误'
+  if (status === 'running') return t('page.apiCases.precondition.running')
+  if (status === 'success') return t('common.success')
+  if (status === 'fail' || status === 'failed') return t('page.test.resultFail')
+  if (status === 'error') return t('common.error')
   return '-'
 }
 
@@ -251,8 +253,8 @@ function viewCase(row) {
 async function unlinkCase(row) {
   try {
     await ElMessageBox.confirm(
-      t('page.apiCases.unlinkConfirm') || '确认移除该前置操作关联？前置用例本身不会被删除。',
-      t('common.confirm') || '确认',
+      t('page.apiCases.unlinkConfirm'),
+      t('common.confirm'),
       { confirmButtonText: t('common.confirm'), cancelButtonText: t('common.cancel'), type: 'warning' }
     )
   } catch { return }
@@ -263,9 +265,9 @@ async function unlinkCase(row) {
     }
     var newIds = (props.preconditionIds || []).filter(function (id) { return id !== row.id })
     emit('update:preconditionIds', newIds)
-    ElMessage.success(t('page.apiCases.unlinkSuccess') || '已移除关联')
+    ElMessage.success(t('page.apiCases.unlinkSuccess'))
   } catch (e) {
-    ElMessage.error(e?.message || '移除关联失败')
+    ElMessage.error(e?.message || t('page.apiCases.precondition.unlinkFailed'))
   }
 }
 
@@ -406,7 +408,7 @@ async function loadMissingCases(ids) {
   }
 
   .precondition-count {
-    font-size: 11px;
+    font-size: var(--font-small);
     color: var(--el-text-color-placeholder);
     margin-right: auto;
   }

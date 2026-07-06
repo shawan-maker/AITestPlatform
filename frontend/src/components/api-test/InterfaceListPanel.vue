@@ -34,17 +34,17 @@
     >
       <AppTableColumn v-if="canEdit" type="selection" variant="fixed" :width="50" />
       <!-- v2: 列1 - 序号（隐式在PaginatedTable中） -->
-      <AppTableColumn prop="summary" :label="'接口名称'" variant="content" min-width="150">
+      <AppTableColumn prop="summary" :label="t('page.apiCases.list.interfaceName')" variant="content" min-width="150">
         <template #default="{ row }">
           {{ row.summary || row.name || '-' }}
         </template>
       </AppTableColumn>
-      <AppTableColumn prop="method" :label="'请求方法'" :width="90">
+      <AppTableColumn prop="method" :label="t('page.apiCases.list.requestMethod')" :width="90">
         <template #default="{ row }">
           <el-tag size="small" :type="methodTagType(row.method)">{{ row.method }}</el-tag>
         </template>
       </AppTableColumn>
-      <AppTableColumn prop="path" :label="'请求路径'" variant="content" min-width="180">
+      <AppTableColumn prop="path" :label="t('page.apiCases.list.requestPath')" variant="content" min-width="180">
         <template #default="{ row, $index }">
           <span
             v-if="canEdit"
@@ -58,24 +58,24 @@
         </template>
       </AppTableColumn>
       <!-- v2-Q5: 列5 - 接口目录完整路径 -->
-      <AppTableColumn prop="catalog_full_path" :label="'接口目录'" variant="content" min-width="160">
+      <AppTableColumn prop="catalog_full_path" :label="t('page.apiCases.list.catalog')" variant="content" min-width="160">
         <template #default="{ row }">
           {{ row.catalog_full_path || '-' }}
         </template>
       </AppTableColumn>
       <!-- 列6-9 创建/更新信息 -->
-      <AppTableColumn :label="'创建时间'" :width="160">
+      <AppTableColumn :label="t('page.apiCases.list.createdAt')" :width="160">
         <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
       </AppTableColumn>
-      <AppTableColumn :label="'更新时间'" :width="160">
+      <AppTableColumn :label="t('page.apiCases.list.updatedAt')" :width="160">
         <template #default="{ row }">{{ formatTime(row.updated_at) }}</template>
       </AppTableColumn>
       <!-- 列10-12 操作列 -->
-      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="200">
+      <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.edit'), t('page.apiCases.copy'), t('common.delete')]">
         <template #default="{ row }">
-          <el-button link type="primary" @click.stop="$emit('edit', row)">编辑</el-button>
-          <el-button link @click.stop="$emit('copy', row)">复制</el-button>
-          <el-button link type="danger" @click.stop="$emit('delete', row)">删除</el-button>
+          <el-button link type="primary" @click.stop="$emit('edit', row)">{{ t('common.edit') }}</el-button>
+          <el-button link @click.stop="$emit('copy', row)">{{ t('common.copy') }}</el-button>
+          <el-button link type="danger" @click.stop="$emit('delete', row)">{{ t('common.delete') }}</el-button>
         </template>
       </AppTableColumn>
     </PaginatedTable>

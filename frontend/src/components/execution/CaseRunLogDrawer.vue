@@ -4,7 +4,7 @@
       <el-descriptions :column="2" border style="margin-bottom: 16px">
         <el-descriptions-item :label="t('execution.caseName')">{{ logData.case_name }}</el-descriptions-item>
         <el-descriptions-item :label="t('execution.duration')">{{ logData.duration_ms ? logData.duration_ms + ' ms' : '-' }}</el-descriptions-item>
-        <el-descriptions-item :label="t('execution.execResult')"><StatusTag :status="logData.status" :map="CASE_RESULT_MAP" /></el-descriptions-item>
+        <el-descriptions-item :label="t('execution.execResult')"><StatusTag :status="logData.status" :map="caseResultMap" /></el-descriptions-item>
       </el-descriptions>
       <ApiResponsePanel
         :result="panelResult"
@@ -25,11 +25,12 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { getCaseRunLog } from '@/api/testExecution'
-import { CASE_RESULT_MAP } from '@/utils/constants'
+import { getCaseResultMap } from '@/utils/constants'
 import StatusTag from '@/components/common/StatusTag.vue'
 import ApiResponsePanel from '@/components/api-test/ApiResponsePanel.vue'
 
 const { t } = useI18n()
+const caseResultMap = computed(() => getCaseResultMap(t))
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },

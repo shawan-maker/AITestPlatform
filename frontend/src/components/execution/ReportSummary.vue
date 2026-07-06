@@ -19,7 +19,7 @@
             <div class="report-summary__result-tag">
               <span style="margin-right: 8px; font-weight: 500">{{ t('execution.execResult') }}：</span>
               <el-tag v-if="resultTagType" :type="resultTagType" size="small">{{ resultLabel }}</el-tag>
-              <StatusTag v-else :status="summary.status" :map="RUN_STATUS_MAP" />
+              <StatusTag v-else :status="summary.status" :map="runStatusMap" />
             </div>
             <div class="report-summary__count-badges">
               <el-tag type="info" effect="plain" size="small">{{ t('page.test.totalCases') }}: {{ totalCount }}</el-tag>
@@ -73,7 +73,7 @@ import * as echarts from 'echarts/core'
 import { PieChart } from 'echarts/charts'
 import { TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import { RUN_STATUS_MAP, DEFECT_SEVERITY_MAP } from '@/utils/constants'
+import { getRunStatusMap, getDefectSeverityMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import SectionPanel from '@/components/common/SectionPanel.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
@@ -89,6 +89,8 @@ const props = defineProps({
 defineEmits(['view-log', 'linked', 'create-defect'])
 
 const { t } = useI18n()
+const runStatusMap = computed(() => getRunStatusMap(t))
+const defectSeverityMap = computed(() => getDefectSeverityMap(t))
 const passRateRef = ref(null)
 const defectRef = ref(null)
 let passChart = null
@@ -132,10 +134,10 @@ const resultTagType = computed(() => {
 
 const resultLabel = computed(() => {
   var s = summary.value?.status
-  if (s === 'completed' && failedCount.value === 0 && errorCount.value === 0) return RUN_STATUS_MAP.completed?.label || '已完成'
-  if (s === 'completed' || s === 'failed') return RUN_STATUS_MAP.failed?.label || '已失败'
-  if (s === 'cancelled') return RUN_STATUS_MAP.cancelled?.label || '已停止'
-  return RUN_STATUS_MAP[s]?.label || s
+  if (s === 'completed' && failedCount.value === 0 && errorCount.value === 0) return runStatusMap.completed?.label || t('status.exec.completed')
+  if (s === 'completed' || s === 'failed') return runStatusMap.failed?.label || t('status.exec.failed')
+  if (s === 'cancelled') return runStatusMap.cancelled?.label || t('status.exec.cancelled')
+  return runStatusMap[s]?.label || s
 })
 
 // Pagination for cases
@@ -176,7 +178,7 @@ function renderCharts() {
     defectChart?.dispose()
     defectChart = echarts.init(defectRef.value)
     var data = defectChartData.value.length
-      ? defectChartData.value.map(function (d) { return { name: DEFECT_SEVERITY_MAP[d.severity] || d.severity, value: d.count } })
+      ? defectChartData.value.map(function (d) { return { name: defectSeverityMap[d.severity] || d.severity, value: d.count } })
       : [{ name: t('execution.noDefects'), value: 1, itemStyle: { color: '#dcdfe6' } }]
     defectChart.setOption({
       title: { text: t('page.defects.severity'), left: 'center', textStyle: { fontSize: 13 } },

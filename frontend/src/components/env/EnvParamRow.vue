@@ -4,7 +4,6 @@
       <el-input
         v-model="local.name"
         :disabled="!canEdit || nameDisabled"
-        size="small"
         @input="emitUpdate"
       />
     </td>
@@ -47,7 +46,6 @@
       <el-input
         v-model="local.remark"
         :disabled="!canEdit"
-        size="small"
         @input="emitUpdate"
       />
     </td>

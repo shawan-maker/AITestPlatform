@@ -1,10 +1,14 @@
 <template>
-  <StatusTag :status="status" :map="DEFECT_STATUS_MAP" />
+  <StatusTag :status="status" :map="defectStatusMap" />
 </template>
 
 <script setup>
-import { DEFECT_STATUS_MAP } from '@/utils/constants'
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { getDefectStatusMap } from '@/utils/constants'
 import StatusTag from '@/components/common/StatusTag.vue'
 
 defineProps({ status: { type: String, default: '' } })
+const { t } = useI18n()
+const defectStatusMap = computed(() => getDefectStatusMap(t))
 </script>

@@ -38,7 +38,7 @@
       <el-table-column prop="case_name" :label="t('page.functional.caseName')" min-width="150" show-overflow-tooltip />
       <el-table-column prop="type" :label="t('page.functional.type')" width="90">
         <template #default="{ row }">
-          <el-tag size="small" type="primary" effect="light">{{ row.type || row.case_type || '功能' }}</el-tag>
+          <el-tag size="small" type="primary" effect="light">{{ row.type || row.case_type || t('page.agent.catFunctional') }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="priority" :label="t('page.functional.priority')" width="70">
@@ -51,7 +51,9 @@
       <el-table-column prop="expected_result" :label="t('page.functional.expectedResult')" min-width="160" show-overflow-tooltip />
       <el-table-column :label="t('common.actions')" width="80" fixed="right">
         <template #default="{ row, $index }">
-          <el-link type="primary" @click="openEditor(row, getRealIndex($index))">编辑</el-link>
+          <div class="table-cell-actions">
+            <el-button link type="primary" @click="openEditor(row, getRealIndex($index))">{{ t('page.agent.editAction') }}</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -90,11 +92,11 @@
         </el-form-item>
         <el-form-item :label="t('page.functional.type')">
           <el-select v-model="editingCase.type" style="width: 100%">
-            <el-option :label="t('page.functional.typeFunctional')" value="功能" />
-            <el-option label="安全" value="安全" />
-            <el-option label="兼容" value="兼容" />
-            <el-option label="易用" value="易用" />
-            <el-option label="性能" value="性能" />
+            <el-option :label="t('page.agent.catFunctional')" value="功能" />
+            <el-option :label="t('page.agent.catSecurity')" value="安全" />
+            <el-option :label="t('page.agent.catCompatibility')" value="兼容" />
+            <el-option :label="t('page.agent.catUsability')" value="易用" />
+            <el-option :label="t('page.agent.catPerformance')" value="性能" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('page.functional.testPoint')">

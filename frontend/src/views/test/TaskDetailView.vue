@@ -1,28 +1,29 @@
 <template>
   <div v-loading="loading" class="task-detail-view app-card">
+    <BreadcrumbNav :items="breadcrumbs" />
     <PageHeader :title="task?.task_name || t('page.test.tasks.title')" />
 
-    <div class="task-actions">
-      <el-button @click="router.push('/test/tasks')">{{ t('common.back') }}</el-button>
-      <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
-      <el-button v-if="canEdit && isRunning && !isManual" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
-      <el-button v-else-if="canEdit && !isManual" type="primary" :loading="running" @click="run(taskId)">{{ t('page.test.run') }}</el-button>
-    </div>
+    <div class="detail-tabs-wrap">
+      <div class="detail-actions">
+        <el-button v-if="canEdit" @click="openEdit">{{ t('common.edit') }}</el-button>
+        <el-button v-if="canEdit && isRunning && !isManual" type="danger" @click="stopRun">{{ t('page.test.stopRun') }}</el-button>
+        <el-button v-else-if="canEdit && !isManual" type="primary" :loading="running" @click="run(taskId)">{{ t('page.test.run') }}</el-button>
+      </div>
 
     <el-tabs v-model="activeTab">
       <!-- 基本信息 -->
       <el-tab-pane :label="t('page.test.tabBasic')" name="basic">
         <el-descriptions v-if="task" :column="2" border>
           <el-descriptions-item :label="t('page.test.tasks.taskName')">{{ task.task_name }}</el-descriptions-item>
-          <el-descriptions-item :label="t('page.test.taskType')"><el-tag :type="TASK_TYPE_MAP[task.type]?.type" size="small">{{ TASK_TYPE_MAP[task.type]?.label || task.type }}</el-tag></el-descriptions-item>
+          <el-descriptions-item :label="t('page.test.taskType')"><el-tag :type="taskTypeMap[task.type]?.type" size="small">{{ taskTypeMap[task.type]?.label || task.type }}</el-tag></el-descriptions-item>
           <el-descriptions-item :label="t('common.description')">{{ task.description || '-' }}</el-descriptions-item>
-          <el-descriptions-item v-if="!isManual" :label="t('page.test.runMode')">{{ RUN_MODE_MAP[task.run_mode] || task.run_mode || '-' }}</el-descriptions-item>
+          <el-descriptions-item v-if="!isManual" :label="t('page.test.runMode')">{{ runModeMap[task.run_mode] || task.run_mode || '-' }}</el-descriptions-item>
           <el-descriptions-item v-if="!isManual" :label="t('page.apiCases.selectEnv')">{{ task.environment_name || '-' }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.test.caseCount')">{{ task.case_count }}</el-descriptions-item>
           <el-descriptions-item :label="t('common.createdAt')">{{ formatTime(task.created_at) }}</el-descriptions-item>
           <el-descriptions-item :label="t('page.test.lastRun')">
             <template v-if="task.last_run?.status">
-              <StatusTag :status="task.last_run.status" :map="RUN_STATUS_MAP" />
+              <StatusTag :status="task.last_run.status" :map="runStatusMap" />
               <span style="margin-left: 8px">{{ task.last_run.success_rate || '' }}</span>
             </template>
             <span v-else>-</span>
@@ -41,7 +42,7 @@
           <AppTableColumn prop="suite_id" variant="fixed" label="ID" :width="70" />
           <AppTableColumn prop="suite_name" variant="content" :label="t('page.test.suites.suiteName')" />
           <AppTableColumn prop="case_count" variant="fixed" :label="t('page.test.caseCount')" :width="80" />
-          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="160">
+          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.test.moveUp'), t('page.test.moveDown'), t('common.delete')]">
             <template #default="{ row, $index }">
               <el-button link :disabled="$index === 0" @click="moveSuite(row, -1)">{{ t('page.test.moveUp') }}</el-button>
               <el-button link :disabled="$index === taskSuites.length - 1" @click="moveSuite(row, 1)">{{ t('page.test.moveDown') }}</el-button>
@@ -75,7 +76,7 @@
           <AppTableColumn prop="module_name" variant="fixed" :label="t('page.knowledge.module')" :width="120">
             <template #default="{ row }">{{ row.module_name || '-' }}</template>
           </AppTableColumn>
-          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :width="100">
+          <AppTableColumn v-if="canEdit" actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.delete')]">
             <template #default="{ row }">
               <ConfirmDelete @confirm="removeCase(row)"><el-button link type="danger">{{ t('common.delete') }}</el-button></ConfirmDelete>
             </template>
@@ -91,45 +92,45 @@
             <el-tree :data="execTree" node-key="id" :props="{ label: 'name', children: 'children' }" highlight-current @node-click="onCatalogNodeClick" />
           </div>
           <div class="exec-right">
-            <el-table :data="filteredExecCases" size="small" border>
-              <el-table-column prop="case_no" variant="fixed" :label="t('page.functional.caseNo')" :width="130" show-overflow-tooltip />
-              <el-table-column prop="case_name" variant="content" :label="t('page.functional.caseName')" min-width="150" show-overflow-tooltip />
-              <el-table-column variant="fixed" :label="t('page.functional.priority')" :width="70">
+            <AppTable :data="filteredExecCases">
+              <AppTableColumn prop="case_no" variant="fixed" :label="t('page.functional.caseNo')" :width="120" show-overflow-tooltip />
+              <AppTableColumn prop="case_name" variant="content" :label="t('page.functional.caseName')" show-overflow-tooltip />
+              <AppTableColumn variant="fixed" :label="t('page.functional.priority')" :width="70">
                 <template #default="{ row }">
                   <PriorityTag v-if="row.priority" :value="row.priority" />
                   <span v-else>-</span>
                 </template>
-              </el-table-column>
-              <el-table-column variant="fixed" :label="t('page.functional.caseCategory')" :width="80">
+              </AppTableColumn>
+              <AppTableColumn variant="fixed" :label="t('page.functional.caseCategory')" :width="80">
                 <template #default="{ row }">
                   {{ row.case_category ? t('page.functional.cat' + row.case_category.charAt(0).toUpperCase() + row.case_category.slice(1)) : '-' }}
                 </template>
-              </el-table-column>
-              <el-table-column variant="fixed" :label="t('page.knowledge.module')" :width="100">
+              </AppTableColumn>
+              <AppTableColumn variant="fixed" :label="t('page.knowledge.module')" :width="100">
                 <template #default="{ row }">{{ execModuleMap[row.module_id] || '-' }}</template>
-              </el-table-column>
-              <el-table-column variant="fixed" :label="t('page.test.execResult')" :width="90">
+              </AppTableColumn>
+              <AppTableColumn variant="fixed" :label="t('page.test.execResult')" :width="90">
                 <template #default="{ row }">
                   <el-tag v-if="row.exec_result && row.exec_result !== 'pending'" :type="execResultType(row.exec_result)" size="small">{{ execResultLabel(row.exec_result) }}</el-tag>
                   <span v-else>-</span>
                 </template>
-              </el-table-column>
-              <el-table-column variant="fixed" :label="t('execution.linkDefect')" :width="110">
+              </AppTableColumn>
+              <AppTableColumn variant="fixed" :label="t('execution.linkDefect')" :width="110">
                 <template #default="{ row }">{{ row.defect_code || '-' }}</template>
-              </el-table-column>
-              <el-table-column variant="fixed" :label="t('page.test.executor')" :width="90">
+              </AppTableColumn>
+              <AppTableColumn variant="fixed" :label="t('page.test.executor')" :width="90">
                 <template #default="{ row }">{{ row.triggered_by_name || '-' }}</template>
-              </el-table-column>
-              <el-table-column variant="fixed" :label="t('page.test.execTime')" :width="150">
+              </AppTableColumn>
+              <AppTableColumn variant="fixed" :label="t('page.test.execTime')" :width="150">
                 <template #default="{ row }">{{ row.exec_time ? formatTime(row.exec_time) : '-' }}</template>
-              </el-table-column>
-              <el-table-column actions variant="fixed" :label="t('common.actions')" :width="150">
+              </AppTableColumn>
+              <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.test.markResult'), t('execution.linkDefect')]">
                 <template #default="{ row }">
                   <el-button link type="primary" @click="openMarkDrawer(row)">{{ t('page.test.markResult') }}</el-button>
                   <el-button v-if="row.exec_result === 'failed'" link type="danger" @click="openDefectDialog(row)">{{ t('execution.linkDefect') }}</el-button>
                 </template>
-              </el-table-column>
-            </el-table>
+              </AppTableColumn>
+            </AppTable>
           </div>
         </div>
         <el-empty v-else-if="manualRunId" :description="t('page.test.tabCases') + ' - ' + t('page.defects.noComments')" :image-size="60" />
@@ -139,7 +140,7 @@
       <!-- 执行历史 (API任务) -->
       <el-tab-pane v-else :label="t('page.test.tabHistory')" name="history">
         <div style="margin-bottom: 8px">
-          <el-button size="small" @click="loadHistory">{{ t('common.refresh') || '刷新' }}</el-button>
+          <el-button size="small" @click="loadHistory">{{ t('common.refresh') }}</el-button>
         </div>
         <AppTable :data="history">
           <AppTableColumn prop="id" variant="fixed" label="ID" :width="70" />
@@ -157,7 +158,7 @@
           <AppTableColumn variant="fixed" :label="t('page.test.execResult')" :width="80">
             <template #default="{ row }">
               <el-tag v-if="getRunResult(row)" :type="getRunResult(row) === 'success' ? 'success' : getRunResult(row) === 'error' ? 'warning' : 'danger'" size="small">{{ getRunResultLabel(row) }}</el-tag>
-              <StatusTag v-else :status="row.status" :map="RUN_STATUS_MAP" />
+              <StatusTag v-else :status="row.status" :map="runStatusMap" />
             </template>
           </AppTableColumn>
           <AppTableColumn variant="fixed" :label="t('page.test.successRate')" :width="120">
@@ -172,21 +173,22 @@
           <AppTableColumn variant="fixed" :label="t('page.test.startedAt')" :width="170">
             <template #default="{ row }">{{ formatTime(row.start_time) }}</template>
           </AppTableColumn>
-          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="140">
+          <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.test.rerun'), t('page.test.report')]">
             <template #default="{ row }">
-              <el-button link type="primary" @click="rerunHistory(row)">{{ t('page.test.rerun') || '重新执行' }}</el-button>
+              <el-button link type="primary" @click="rerunHistory(row)">{{ t('page.test.rerun') }}</el-button>
               <el-button link type="primary" @click="viewReport(row)">{{ t('page.test.report') }}</el-button>
             </template>
           </AppTableColumn>
         </AppTable>
       </el-tab-pane>
     </el-tabs>
+    </div>
 
     <!-- 报告跳转由此处 viewReport 处理 -->
 
     <!-- 编辑任务对话框 -->
     <el-dialog :close-on-click-modal="false" v-model="showEdit" :title="t('page.test.tasks.editTask')" width="560px">
-      <el-form label-width="100px">
+      <el-form label-width="auto">
         <el-form-item :label="t('page.test.tasks.taskName')"><el-input v-model="editForm.task_name" /></el-form-item>
         <el-form-item :label="t('common.description')"><el-input v-model="editForm.description" type="textarea" :rows="2" /></el-form-item>
         <template v-if="!isManual">
@@ -294,7 +296,7 @@
         <!-- 执行结果与备注 (editable, at bottom) -->
         <section class="mark-section">
           <h4 class="mark-section-title">{{ t('page.test.execResult') }}</h4>
-          <el-form label-width="100px">
+          <el-form label-width="auto">
             <el-form-item :label="t('page.test.execResult')">
               <el-radio-group v-model="markForm.exec_result">
                 <el-radio value="passed">{{ t('page.test.execResultPassed') }}</el-radio>
@@ -338,12 +340,13 @@ import { getCase as getFunctionalCase } from '@/api/functional'
 import { usePermission } from '@/composables/usePermission'
 import { usePagination } from '@/composables/usePagination'
 import { useRunExecution } from '@/composables/useRunExecution'
-import { RUN_STATUS_MAP, TASK_TYPE_MAP, RUN_MODE_MAP, DEFECT_SEVERITY_MAP, DEFECT_PRIORITY_MAP, DEFECT_CATEGORY_MAP, CASE_RESULT_MAP } from '@/utils/constants'
+import { getRunStatusMap, getTaskTypeMap, getRunModeMap } from '@/utils/constants'
 import { formatTime } from '@/utils/format'
 import AppTable from '@/components/common/AppTable.vue'
 import AppTableColumn from '@/components/common/AppTableColumn.vue'
 import PaginatedTable from '@/components/common/PaginatedTable.vue'
 import PageHeader from '@/components/common/PageHeader.vue'
+import BreadcrumbNav from '@/components/common/BreadcrumbNav.vue'
 import StatusTag from '@/components/common/StatusTag.vue'
 import ConfirmDelete from '@/components/common/ConfirmDelete.vue'
 import EnvironmentSelect from '@/components/picker/EnvironmentSelect.vue'
@@ -353,10 +356,18 @@ import DefectCreateDialog from '@/components/execution/DefectCreateDialog.vue'
 import FunctionalCasePickerDialog from '@/components/functional/FunctionalCasePickerDialog.vue'
 
 const { t } = useI18n()
+const runStatusMap = computed(() => getRunStatusMap(t))
+const taskTypeMap = computed(() => getTaskTypeMap(t))
+const runModeMap = computed(() => getRunModeMap(t))
 const route = useRoute()
 const router = useRouter()
 const { canEdit } = usePermission()
 const taskId = computed(() => Number(route.params.taskId))
+
+const breadcrumbs = computed(() => [
+  { label: t('menu.testTasks'), to: '/test/tasks' },
+  { label: t('common.breadcrumb.taskDetail') },
+])
 
 const loading = ref(false)
 const task = ref(null)
@@ -546,9 +557,9 @@ async function openDefectDialog(row) {
   // Build steps from case detail if available
   if (markCaseDetail.value && markCase.value?.case_id === row.case_id) {
     var parts = []
-    if (markCaseDetail.value.preconditions) parts.push('前置条件:\n' + markCaseDetail.value.preconditions)
-    if (markCaseDetail.value.test_steps) parts.push('测试步骤:\n' + markCaseDetail.value.test_steps)
-    if (markCaseDetail.value.expected_result) parts.push('预期结果:\n' + markCaseDetail.value.expected_result)
+    if (markCaseDetail.value.preconditions) parts.push(t('page.test.preconditionsLabel') + '\n' + markCaseDetail.value.preconditions)
+    if (markCaseDetail.value.test_steps) parts.push(t('page.test.testStepsLabel') + '\n' + markCaseDetail.value.test_steps)
+    if (markCaseDetail.value.expected_result) parts.push(t('page.test.expectedResultLabel') + '\n' + markCaseDetail.value.expected_result)
     defectDefaultSteps.value = parts.join('\n\n')
     defectRecordId.value = markCaseDetail.value.record_id || null
   } else {
@@ -559,9 +570,9 @@ async function openDefectDialog(row) {
       if (detail) {
         defectRecordId.value = detail.record_id || null
         var parts2 = []
-        if (detail.preconditions) parts2.push('前置条件:\n' + detail.preconditions)
-        if (detail.test_steps) parts2.push('测试步骤:\n' + detail.test_steps)
-        if (detail.expected_result) parts2.push('预期结果:\n' + detail.expected_result)
+        if (detail.preconditions) parts2.push(t('page.test.preconditionsLabel') + '\n' + detail.preconditions)
+        if (detail.test_steps) parts2.push(t('page.test.testStepsLabel') + '\n' + detail.test_steps)
+        if (detail.expected_result) parts2.push(t('page.test.expectedResultLabel') + '\n' + detail.expected_result)
         defectDefaultSteps.value = parts2.join('\n\n')
       }
     } catch (e) { /* non-critical */ }
@@ -798,6 +809,7 @@ onMounted(async () => {
 .exec-layout {
   display: flex;
   gap: 16px;
+  height: calc(100vh - 280px);
   min-height: 400px;
 }
 .exec-left {
@@ -807,7 +819,6 @@ onMounted(async () => {
   border-radius: 4px;
   padding: 8px;
   overflow-y: auto;
-  max-height: 600px;
 }
 .exec-right {
   flex: 1;
@@ -853,8 +864,17 @@ onMounted(async () => {
 }
 .task-actions {
   position: absolute;
-  top: 87px;
-  right: 16px;
+  top: 3px;
+  right: 0;
+  z-index: 2;
+}
+.detail-tabs-wrap {
+  position: relative;
+}
+.detail-actions {
+  position: absolute;
+  top: 3px;
+  right: 0;
   z-index: 2;
 }
 </style>

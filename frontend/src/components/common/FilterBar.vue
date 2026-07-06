@@ -24,16 +24,12 @@ const { t } = useI18n()
 
 <style scoped lang="scss">
 .filter-bar {
-  margin-bottom: 16px;
+  margin-bottom: var(--space-lg);
   padding: 14px 18px;
-  background: linear-gradient(
-    135deg,
-    var(--bg-filter-bar-start) 0%,
-    var(--bg-filter-bar-end) 100%
-  );
-  border: 1px solid rgba($color-primary-dark, 0.35);
+  background: $bg-filter-bar;
+  border: 1px solid $border-color;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   border-radius: $radius-md;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   font-size: var(--font-size-base);
 }
 

@@ -35,7 +35,7 @@
             {{ row.is_bound ? t('page.env.db.bound') : t('page.env.db.unbound') }}
           </template>
         </AppTableColumn>
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :width="380">
+        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('page.env.db.detail'), t('common.edit'), t('page.env.db.test'), t('page.env.db.testLogs'), t('common.delete')]">
           <template #default="{ row }">
             <el-button link @click="openDetail(row)">{{ t('common.detail') }}</el-button>
             <el-button v-if="canEdit" link @click="openEdit(row)">{{ t('common.edit') }}</el-button>

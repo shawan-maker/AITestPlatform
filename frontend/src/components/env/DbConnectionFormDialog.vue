@@ -5,7 +5,7 @@
     width="560px"
     @closed="reset"
   >
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="auto">
       <el-form-item :label="t('page.env.db.connectionName')" prop="connection_name">
         <el-input v-model="form.connection_name" maxlength="50" />
       </el-form-item>

@@ -7,7 +7,7 @@
     :class="dialogClass"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <el-form label-width="100px">
+    <el-form label-width="auto">
       <el-form-item :label="t('page.agent.sessionTitle')">
         <el-input v-model="form.title" maxlength="200" show-word-limit />
       </el-form-item>

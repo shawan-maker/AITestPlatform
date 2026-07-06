@@ -5,15 +5,15 @@
         <el-tab-pane name="result">
           <template #label>
             <span>{{ t('page.apiCases.resultInfo') }}</span>
-            <el-tag v-if="result && result.status_code" :type="result.success ? 'success' : 'danger'" size="small" style="margin-left:4px;font-size:11px">{{ result.status_code }}</el-tag>
+            <el-tag v-if="result && result.status_code" :type="result.success ? 'success' : 'danger'" size="small" style="margin-left:4px;font-size:12px">{{ result.status_code }}</el-tag>
           </template>
         </el-tab-pane>
         <el-tab-pane :label="t('page.apiCases.responseInfo')" name="responseInfo" />
         <el-tab-pane :label="t('page.apiCases.requestInfo')" name="requestInfo" />
-        <el-tab-pane label="请求头信息" name="requestHeaders" />
+        <el-tab-pane :label="t('page.apiCases.response.tabHeaders')" name="requestHeaders" />
         <el-tab-pane :label="t('page.apiCases.extractInfo')" name="extractInfo" />
         <el-tab-pane :label="t('page.apiCases.assertInfo')" name="assertInfo" />
-        <el-tab-pane label="日志信息" name="logInfo" />
+        <el-tab-pane :label="t('page.apiCases.response.tabLog')" name="logInfo" />
       </el-tabs>
       <el-button v-if="showRecords" link type="primary" :icon="Clock" @click="$emit('toggleRecords')">{{ t('page.apiCases.testRecord') }}</el-button>
     </div>
@@ -27,11 +27,11 @@
           </el-icon>
           <span class="result-label">{{ result.success ? t('common.success') : t('common.failed') }}</span>
           <el-tag v-if="result.status_code" :type="result.success ? 'success' : 'danger'" size="small" style="margin-left:8px">{{ result.status_code }}</el-tag>
-          <span class="result-meta">耗时: {{ result.duration_ms || 0 }}ms</span>
+          <span class="result-meta">{{ t('page.apiCases.response.duration') }}: {{ result.duration_ms || 0 }}ms</span>
         </div>
-        <div v-if="result && result.error_message" class="error-message"><strong>错误信息:</strong> {{ result.error_message }}</div>
+        <div v-if="result && result.error_message" class="error-message"><strong>{{ t('page.apiCases.response.errorMsg') }}:</strong> {{ result.error_message }}</div>
         <pre v-if="result && result.response_body" class="response-pre">{{ formatJson(result.response_body) }}</pre>
-        <el-empty v-if="!result" description="暂无执行结果" :image-size="48" />
+        <el-empty v-if="!result" :description="t('page.apiCases.response.noExecResult')" :image-size="48" />
       </template>
 
       <!-- 响应头 -->
@@ -40,26 +40,26 @@
           <thead><tr><th>Header</th><th>Value</th></tr></thead>
           <tbody><tr v-for="(v, k) in responseHeaders" :key="k"><td class="info-key">{{ k }}</td><td>{{ v }}</td></tr></tbody>
         </table>
-        <el-empty v-else description="暂无响应头信息" :image-size="48" />
+        <el-empty v-else :description="t('page.apiCases.response.noHeaders')" :image-size="48" />
       </template>
 
       <!-- 请求数据 -->
       <template v-else-if="activeTab === 'requestInfo'">
         <div v-if="result" class="structured-response">
-          <div class="info-row"><strong>请求方法:</strong> <el-tag size="small">{{ (result.method || 'GET').toUpperCase() }}</el-tag></div>
-          <div class="info-row"><strong>请求URL:</strong> <code>{{ result.url || '-' }}</code></div>
+          <div class="info-row"><strong>{{ t('page.apiCases.response.requestMethod') }}:</strong> <el-tag size="small">{{ (result.method || 'GET').toUpperCase() }}</el-tag></div>
+          <div class="info-row"><strong>{{ t('page.apiCases.response.requestUrl') }}:</strong> <code>{{ result.url || '-' }}</code></div>
           <template v-if="result.request_body">
             <div v-if="isFormData(result)" class="form-params-display">
-              <strong>请求参数 (form-data):</strong>
+              <strong>{{ t('page.apiCases.response.formDataParams') }}:</strong>
               <table class="info-table">
-                <thead><tr><th>参数名</th><th>参数值</th></tr></thead>
+                <thead><tr><th>{{ t('page.apiCases.response.paramName') }}</th><th>{{ t('page.apiCases.response.paramValue') }}</th></tr></thead>
                 <tbody><tr v-for="(v, k) in parseFormData(result.request_body)" :key="k"><td class="info-key">{{ k }}</td><td>{{ v }}</td></tr></tbody>
               </table>
             </div>
             <pre v-else class="response-pre">{{ formatJson(result.request_body) }}</pre>
           </template>
         </div>
-        <el-empty v-else description="暂无请求数据" :image-size="48" />
+        <el-empty v-else :description="t('page.apiCases.response.noRequestData')" :image-size="48" />
       </template>
 
       <!-- 请求头 -->
@@ -68,13 +68,13 @@
           <thead><tr><th>Header</th><th>Value</th></tr></thead>
           <tbody><tr v-for="(v, k) in requestHeaders" :key="k"><td class="info-key">{{ k }}</td><td>{{ v }}</td></tr></tbody>
         </table>
-        <el-empty v-else description="暂无请求头信息" :image-size="48" />
+        <el-empty v-else :description="t('page.apiCases.response.noRequestHeaders')" :image-size="48" />
       </template>
 
       <!-- 提取信息 -->
       <template v-else-if="activeTab === 'extractInfo'">
         <table v-if="extractInfo && extractInfo.length" class="info-table">
-          <thead><tr><th>变量名</th><th>表达式</th><th>值</th></tr></thead>
+          <thead><tr><th>{{ t('page.apiCases.response.varName') }}</th><th>{{ t('page.apiCases.response.expression') }}</th><th>{{ t('page.apiCases.response.value') }}</th></tr></thead>
           <tbody>
             <tr v-for="(item, idx) in extractInfo" :key="idx">
               <td>{{ item.var_name || item.name }}</td>
@@ -83,13 +83,13 @@
             </tr>
           </tbody>
         </table>
-        <el-empty v-else description="暂无提取数据" :image-size="48" />
+        <el-empty v-else :description="t('page.apiCases.response.noExtractData')" :image-size="48" />
       </template>
 
       <!-- 断言信息 -->
       <template v-else-if="activeTab === 'assertInfo'">
         <table v-if="assertInfo && assertInfo.length" class="info-table assert-table">
-          <thead><tr><th style="width:40px">结果</th><th>断言目标</th><th>比较方式</th><th>预期值</th><th>实际值</th></tr></thead>
+          <thead><tr><th style="width:40px">{{ t('page.apiCases.response.result') }}</th><th>{{ t('page.apiCases.response.assertTarget') }}</th><th>{{ t('page.apiCases.response.compareMethod') }}</th><th>{{ t('page.apiCases.response.expectedValue') }}</th><th>{{ t('page.apiCases.response.actualValue') }}</th></tr></thead>
           <tbody>
             <tr v-for="(item, idx) in assertInfo" :key="idx" :class="item.passed === true ? 'assert-passed' : item.passed === false ? 'assert-failed' : ''">
               <td>
@@ -98,13 +98,13 @@
                 <span v-else>-</span>
               </td>
               <td>{{ item.field || item.target || item.name }}</td>
-              <td>{{ item.type || item.method || 'eq' }}</td>
+              <td>{{ assertMethodLabel(item.type || item.method || 'eq') }}</td>
               <td>{{ item.expected }}</td>
               <td>{{ item.actual !== undefined ? item.actual : '-' }}</td>
             </tr>
           </tbody>
         </table>
-        <el-empty v-else description="暂无断言数据" :image-size="48" />
+        <el-empty v-else :description="t('page.apiCases.response.noAssertData')" :image-size="48" />
       </template>
 
       <!-- 日志信息 -->
@@ -117,7 +117,7 @@
             <span class="log-message">{{ Array.isArray(item) ? item.slice(1).join(' ') : (item.message || '') }}</span>
           </div>
         </div>
-        <el-empty v-else description="暂无日志信息" :image-size="48" />
+        <el-empty v-else :description="t('page.apiCases.response.noLogData')" :image-size="48" />
       </template>
 
       <!-- 测试记录 slot -->
@@ -146,6 +146,24 @@ const props = defineProps({
 defineEmits(['toggleRecords'])
 
 const activeTab = ref('result')
+
+var ASSERT_METHOD_MAP = {
+  eq: () => t('page.apiCases.assertEqual'),
+  eq_ignore_case: () => t('page.apiCases.assertEqualIgnoreCase'),
+  ne: () => t('page.apiCases.assertNotEqual'),
+  contains: () => t('page.apiCases.assertContains'),
+  not_contains: () => t('page.apiCases.assertNotContains'),
+  gt: () => t('page.apiCases.assertGreaterThan'),
+  lt: () => t('page.apiCases.assertLessThan'),
+  ge: () => t('page.apiCases.assertGreaterEqual'),
+  le: () => t('page.apiCases.assertLessEqual'),
+  regex: () => t('page.apiCases.assertRegex'),
+}
+function assertMethodLabel(method) {
+  if (!method) return '-'
+  var fn = ASSERT_METHOD_MAP[method]
+  return fn ? fn() : method
+}
 
 function formatJson(data) {
   if (data === null || data === undefined) return ''
@@ -302,7 +320,7 @@ function parseFormData(body) {
       display: inline-block;
       padding: 1px 6px;
       border-radius: 3px;
-      font-size: 11px;
+      font-size: var(--font-small);
       font-weight: 600;
       margin-right: 8px;
       min-width: 50px;

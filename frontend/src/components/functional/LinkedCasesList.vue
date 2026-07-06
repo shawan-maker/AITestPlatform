@@ -11,10 +11,12 @@
       <template #header>{{ t('page.functional.execResult') }}</template>
       <template #default="{ row }"><ExecResultTag :value="row.exec_result" /></template>
     </el-table-column>
-    <el-table-column :label="t('common.actions')" width="90">
+    <el-table-column :label="t('common.actions')" width="110">
       <template #header>{{ t('common.actions') }}</template>
       <template #default="{ row }">
-        <el-button link type="primary" size="small" @click="$emit('open-case', row)">{{ t('page.functional.viewDetail') }}</el-button>
+        <div class="table-cell-actions">
+          <el-button link type="primary" size="small" @click="$emit('open-case', row)">{{ t('page.functional.viewDetail') }}</el-button>
+        </div>
       </template>
     </el-table-column>
   </el-table>
