@@ -1,3 +1,7 @@
+"""功能测试模块 - case/case_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
 

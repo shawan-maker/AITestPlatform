@@ -1,3 +1,7 @@
+"""接口测试模块 - interface/version_service
+
+业务逻辑服务
+"""
 from service.api_test.interface.models import ApiInterface
 from service.core.exceptions import AppException
 

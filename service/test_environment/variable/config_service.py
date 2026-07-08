@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/config_service
+
+业务逻辑服务
+"""
 from service.core.enums import ConfigType
 from service.core.exceptions import AppException
 from service.core.secret_crypto import encrypt_secret
@@ -13,6 +17,7 @@ from service.user.models import User
 
 
 class EnvironmentConfigService:
+    """环境配置服务"""
     ALLOWED_GROUPS = {"base", "headers", "envs"}
 
     @classmethod

@@ -1,3 +1,7 @@
+"""测试执行模块 - guards/relation_guard
+
+守卫校验
+"""
 from service.core.enums import SuiteCaseType
 from service.test_management.models import TaskCaseRelation
 

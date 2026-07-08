@@ -1,3 +1,7 @@
+"""测试管理模块 - picker/picker_service
+
+业务逻辑服务
+"""
 from tortoise.expressions import Q
 
 from service.api_test.models import ApiTestCase

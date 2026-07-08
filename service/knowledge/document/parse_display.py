@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/parse_display
+
+parse display
+"""
 from __future__ import annotations
 
 from typing import Any

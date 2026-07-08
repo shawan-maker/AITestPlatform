@@ -1,3 +1,7 @@
+"""接口测试模块 - dependency/dependency_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends
 
 from service.api_test.dependency.dependency_schemas import DependencyReplaceRequest

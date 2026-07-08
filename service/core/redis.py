@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from service.core.config import REDIS_URL, REFRESH_TOKEN_EXPIRE_DAYS
+from service.core.settings import REDIS_URL, REFRESH_TOKEN_EXPIRE_DAYS
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis

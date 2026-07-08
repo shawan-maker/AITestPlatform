@@ -1,3 +1,7 @@
+"""测试执行模块 - defect/defect_service
+
+业务逻辑服务
+"""
 from service.core.enums import DefectCategory, DefectSourceType
 from service.core.exceptions import AppException
 from service.test_execution.defect.schemas import (

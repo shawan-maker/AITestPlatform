@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/global_config_service
+
+业务逻辑服务
+"""
 import logging
 from typing import Any
 

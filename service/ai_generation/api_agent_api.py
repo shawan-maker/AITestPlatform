@@ -1,3 +1,7 @@
+"""AI用例生成模块 - api_agent_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 

@@ -1,3 +1,7 @@
+"""测试环境管理模块 - file/api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from service.core.deps import get_current_active_user, require_project_editor, require_project_viewer

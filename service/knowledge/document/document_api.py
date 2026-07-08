@@ -1,7 +1,11 @@
+"""知识库管理模块 - document/document_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse
 
-from service.core.config import MAX_UPLOAD_BYTES
+from service.core.settings import MAX_UPLOAD_BYTES
 from service.core.deps import get_current_active_user, require_project_editor
 from service.core.enums import IndexStatus, KnowledgeDocType, ParseMode
 from service.core.exceptions import AppException

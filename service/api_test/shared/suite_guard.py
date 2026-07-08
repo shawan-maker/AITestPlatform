@@ -1,3 +1,7 @@
+"""接口测试模块 - shared/suite_guard
+
+守卫校验
+"""
 from service.core.enums import SuiteCaseType
 from service.test_management.models import SuiteCaseRelation, TaskCaseRelation
 

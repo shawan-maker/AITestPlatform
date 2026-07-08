@@ -1,3 +1,7 @@
+"""知识库管理模块 - downstream/import_service
+
+业务逻辑服务
+"""
 from typing import Literal
 
 from service.api_test.interface.import_service import ImportService as ApiTestImportService

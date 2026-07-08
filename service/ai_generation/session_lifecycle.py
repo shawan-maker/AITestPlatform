@@ -12,7 +12,7 @@ from service.ai_generation.common import compute_prompt_hash, load_knowledge_doc
 from service.ai_generation.message_service import MessageService
 from service.ai_generation.models import AIGenerationMessage, AIGenerationSession
 from service.ai_generation.session_schemas import AIGenerationSessionListItem, AIGenerationSessionOut
-from service.core import config as core_config
+from service.core import settings as core_config
 from service.core.enums import GenType, InputRefType, MessageRole, MessageType, SessionStatus, SourceChannel
 from service.core.exceptions import AppException
 from service.project.models import Project, ProjectModule
@@ -60,7 +60,7 @@ class SessionLifecycleService:
     ) -> None:
         import os
 
-        from service.core import config as core_config
+        from service.core import settings as core_config
 
         limit = int(os.getenv("AI_AGENT_SESSION_HISTORY_LIMIT", str(core_config.AI_AGENT_SESSION_HISTORY_LIMIT)))
         if limit <= 0:
@@ -400,7 +400,7 @@ class SessionLifecycleService:
         import json
 
         from service.ai_generation.common import SESSION_TITLE_PROMPT, is_llm_configured
-        from service.core import config as core_config
+        from service.core import settings as core_config
 
         if not is_llm_configured():
             return None

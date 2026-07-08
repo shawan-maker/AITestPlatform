@@ -7,6 +7,7 @@ T = TypeVar("T")
 
 
 class ApiResponse(BaseModel, Generic[T]):
+    """API响应"""
     code: int = 200
     message: str = "success"
     data: T | None = None

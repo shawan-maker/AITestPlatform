@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/save_state
+
+save state
+"""
 from dataclasses import dataclass
 import logging
 
@@ -11,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class VersionSaveState:
+    """版本保存state"""
     interfaces_saved: bool = False
     can_save_interfaces: bool = False
 

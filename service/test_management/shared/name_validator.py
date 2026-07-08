@@ -1,3 +1,7 @@
+"""测试管理模块 - shared/name_validator
+
+name validator
+"""
 from service.core.exceptions import AppException
 from service.test_management.models import TestSuite, TestTask
 

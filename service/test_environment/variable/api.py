@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends
 
 from service.test_environment.variable.catalog_api import router as catalog_router

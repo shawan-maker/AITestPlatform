@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -14,6 +18,7 @@ from service.core.pagination import Paginated
 
 
 class DefectListQuery(BaseModel):
+    """缺陷列表查询query"""
     project_id: int = Field(ge=1)
     q: str | None = None
     id: int | None = Field(default=None, ge=1)
@@ -30,6 +35,7 @@ class DefectListQuery(BaseModel):
 
 
 class DefectManualCreateRequest(BaseModel):
+    """缺陷manual创建请求"""
     project_id: int = Field(ge=1)
     module_id: int | None = Field(default=None, ge=1)
     title: str = Field(min_length=1, max_length=255)
@@ -43,6 +49,7 @@ class DefectManualCreateRequest(BaseModel):
 
 
 class DefectUpdateRequest(BaseModel):
+    """缺陷更新请求"""
     project_id: int | None = Field(default=None, ge=1)
     module_id: int | None = Field(default=None, ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=255)
@@ -54,16 +61,19 @@ class DefectUpdateRequest(BaseModel):
 
 
 class DefectTransitionRequest(BaseModel):
+    """缺陷transition请求"""
     status: DefectStatus
     assignee_id: int | None = Field(default=None, ge=1)
     comment: str | None = Field(default=None, min_length=1)
 
 
 class DefectCommentCreateRequest(BaseModel):
+    """缺陷comment创建请求"""
     content: str = Field(min_length=1)
 
 
 class DefectListItemOut(BaseModel):
+    """缺陷列表查询itemout"""
     id: int
     defect_code: str | None = None
     title: str
@@ -79,6 +89,7 @@ class DefectListItemOut(BaseModel):
 
 
 class DefectSourceOut(BaseModel):
+    """缺陷来源out"""
     source_type: DefectSourceType
     source_run_id: int | None = None
     source_case_id: int | None = None
@@ -88,6 +99,7 @@ class DefectSourceOut(BaseModel):
 
 
 class DefectCommentOut(BaseModel):
+    """缺陷commentout"""
     id: int
     content: str
     created_by_id: int | None = None
@@ -96,6 +108,7 @@ class DefectCommentOut(BaseModel):
 
 
 class DefectHistoryOut(BaseModel):
+    """缺陷历史out"""
     id: int
     action: DefectHistoryAction
     field_name: str | None = None
@@ -107,6 +120,7 @@ class DefectHistoryOut(BaseModel):
 
 
 class DefectStatusTimelineItem(BaseModel):
+    """缺陷状态timelineitem"""
     status: DefectStatus
     at: datetime
     operator_id: int | None = None
@@ -114,6 +128,7 @@ class DefectStatusTimelineItem(BaseModel):
 
 
 class DefectDetailOut(BaseModel):
+    """缺陷detailout"""
     id: int
     defect_code: str | None = None
     project_id: int
@@ -144,14 +159,17 @@ PaginatedDefects = Paginated[DefectListItemOut]
 
 
 class DefectBatchDeleteRequest(BaseModel):
+    """缺陷批量操作删除请求"""
     defect_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class DefectBatchDeleteFailure(BaseModel):
+    """缺陷批量操作删除failure"""
     defect_id: int
     message: str
 
 
 class DefectBatchDeleteResult(BaseModel):
+    """缺陷批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[DefectBatchDeleteFailure]

@@ -1,3 +1,7 @@
+"""功能测试模块 - case/case_service
+
+业务逻辑服务
+"""
 import re
 
 from service.core.enums import CaseCategory, SourceType

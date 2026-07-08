@@ -22,7 +22,7 @@ def format_user_prompt_section(user_prompt: str | None) -> str:
 
 def build_default_additional_info() -> dict[str, str]:
     """Default additional_info for API runcase generation (configurable notice)."""
-    from service.core import config as core_config
+    from service.core import settings as core_config
 
     return {"notice": core_config.AI_GENERATION_DEFAULT_NOTICE}
 

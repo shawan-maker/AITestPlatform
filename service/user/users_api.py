@@ -1,3 +1,7 @@
+"""用户管理模块 - users_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 
 from service.core.deps import get_current_active_user, get_current_super_admin

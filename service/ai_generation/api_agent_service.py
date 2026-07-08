@@ -1,3 +1,7 @@
+"""AI用例生成模块 - api_agent_service
+
+业务逻辑服务
+"""
 import logging
 from collections.abc import AsyncIterator
 

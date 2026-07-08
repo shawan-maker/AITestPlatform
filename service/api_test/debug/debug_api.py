@@ -1,3 +1,7 @@
+"""接口测试模块 - debug/debug_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 
 from service.api_test.debug.schemas import DebugRunRequest, DebugTemplateSaveRequest

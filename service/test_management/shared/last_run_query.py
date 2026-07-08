@@ -1,3 +1,7 @@
+"""测试管理模块 - shared/last_run_query
+
+last run query
+"""
 from service.core.enums import RunStatus
 from service.test_execution.models import TestSuiteRun, TestTaskRun
 

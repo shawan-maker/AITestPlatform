@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/source_resolver
+
+解析器
+"""
 from service.core.enums import DefectSourceType
 from service.test_execution.models import (
     ApiCaseRunRecord,
@@ -9,6 +13,7 @@ from service.test_execution.models import (
 
 
 class DefectSourceBrief:
+    """缺陷来源brief"""
     def __init__(
         self,
         *,

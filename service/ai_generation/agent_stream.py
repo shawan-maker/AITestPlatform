@@ -278,8 +278,8 @@ class AgentStreamService:
         """
         _log.info("[SSE] 🚀 _stream_agent 开始 session=%s, gen_type=%s", session.id, gen_type)
         
-        from agents.case_generate_agent import AgentManage
-        from agents.memory.manager import RuntimeContext
+        from service.ai_engine.agents.case_generate_agent import AgentManage
+        from service.ai_engine.agents.memory.manager import RuntimeContext
         from service.core.async_utils import register_main_loop
 
         # 注册主事件循环引用，供后台线程中的协程调度使用

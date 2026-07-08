@@ -1,3 +1,7 @@
+"""测试环境管理模块 - file/service
+
+service
+"""
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -5,7 +9,7 @@ from tortoise.expressions import Q
 
 from fastapi.responses import FileResponse
 
-from service.core.config import BASE_DIR, MAX_UPLOAD_BYTES
+from service.core.settings import BASE_DIR, MAX_UPLOAD_BYTES
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
 from service.test_environment.models import EnvUploadedFile
@@ -19,7 +23,7 @@ from service.test_environment.file.schemas import (
 from service.test_environment.file.storage_backend import get_storage_backend
 from service.user.models import User
 
-UPLOAD_ROOT = BASE_DIR / "test_data" / "files"
+UPLOAD_ROOT = BASE_DIR / "data" / "test_files"
 
 _EXT_MIME_HINTS: dict[str, str] = {
     "txt": "text/plain",

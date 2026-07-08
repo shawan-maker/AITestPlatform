@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import (
@@ -12,6 +16,7 @@ from service.core.enums import (
 
 
 class KnowledgeWorkspace(models.Model):
+    """knowledgeworkspace"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="knowledge_workspaces", on_delete=fields.CASCADE
@@ -24,6 +29,7 @@ class KnowledgeWorkspace(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "knowledge_workspace"
         unique_together = (("project_id", "rag_type"),)
 
@@ -54,12 +60,14 @@ class KnowledgeDocument(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "knowledge_document"
         unique_together = (("project_id", "title"),)
         indexes = (("project_id", "doc_type", "updated_at"),)
 
 
 class KnowledgeDocumentVersion(models.Model):
+    """knowledge文档版本"""
     id = fields.IntField(pk=True)
     document = fields.ForeignKeyField(
         "models.KnowledgeDocument",
@@ -92,6 +100,7 @@ class KnowledgeDocumentVersion(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "knowledge_document_version"
         unique_together = (
             ("document_id", "version_seq"),

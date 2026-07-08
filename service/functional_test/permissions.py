@@ -1,3 +1,7 @@
+"""功能测试模块 - permissions
+
+权限校验
+"""
 from service.project.permissions import ensure_project_editor, ensure_project_viewer
 from service.user.models import User
 

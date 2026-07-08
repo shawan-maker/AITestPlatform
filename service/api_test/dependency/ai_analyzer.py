@@ -1,3 +1,7 @@
+"""接口测试模块 - dependency/ai_analyzer
+
+ai analyzer
+"""
 from typing import Any
 
 from service.api_test.dependency.schemas import DependencyEdgeDraft

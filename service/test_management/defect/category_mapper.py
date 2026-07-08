@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/category_mapper
+
+category mapper
+"""
 from service.core.enums import CaseCategory, DefectCategory
 
 

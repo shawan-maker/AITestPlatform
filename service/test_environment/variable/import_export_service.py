@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/import_export_service
+
+业务逻辑服务
+"""
 from service.core.exceptions import AppException
 from service.test_environment.database.service import DbConnectionService
 from service.test_environment.variable.config_service import EnvironmentConfigService

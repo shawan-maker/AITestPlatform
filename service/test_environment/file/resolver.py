@@ -1,3 +1,7 @@
+"""测试环境管理模块 - file/resolver
+
+resolver
+"""
 from copy import deepcopy
 from typing import Any
 

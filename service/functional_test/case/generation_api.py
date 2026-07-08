@@ -1,3 +1,7 @@
+"""功能测试模块 - case/generation_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends
 
 from service.core.deps import get_current_active_user

@@ -1,3 +1,7 @@
+"""项目管理模块 - api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 
 from service.core.deps import (

@@ -11,6 +11,7 @@ MAX_PAGE_SIZE = 200
 
 
 class Paginated(BaseModel, Generic[T]):
+    """paginated"""
     total: int
     page: int
     page_size: int
@@ -18,6 +19,7 @@ class Paginated(BaseModel, Generic[T]):
 
 
 class PaginationParams(BaseModel):
+    """paginationparams"""
     page: int = Field(DEFAULT_PAGE, ge=1)
     page_size: int = Field(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 

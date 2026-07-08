@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/catalog_service
+
+业务逻辑服务
+"""
 from service.core.exceptions import AppException
 from service.test_environment.models import EnvCatalog, TestEnvironment
 from service.test_environment.permissions import ensure_project_editor, ensure_project_viewer
@@ -11,6 +15,7 @@ from service.user.models import User
 
 
 class CatalogService:
+    """目录服务"""
     MAX_LEVEL = 5
 
     @classmethod

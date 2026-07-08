@@ -1,18 +1,22 @@
+"""知识库管理模块 - document/parse_enrich
+
+parse enrich
+"""
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any
 
-from service.core.config import BASE_DIR, KNOWLEDGE_PARSE_ROOT
+from service.core.settings import BASE_DIR, KNOWLEDGE_PARSE_ROOT
 from service.core.enums import ActualParseRoute, KnowledgeDocType
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
 from service.knowledge.document.parse_display import to_parsed_interface_item
 from service.knowledge.document.parse_paths import resolve_parse_result_path, resolve_storage_file_path
 from service.knowledge.document.schemas import ParsedInterfaceItem
 from service.knowledge.rules.parse_router import resolve_parse_route
-from utils.parser.openapi_document_parser import parse_openapi_file
-from utils.parser.swagger_document_parser import parse_swagger_file
+from service.ai_engine.parsers.openapi_document_parser import parse_openapi_file
+from service.ai_engine.parsers.swagger_document_parser import parse_swagger_file
 
 logger = logging.getLogger(__name__)
 

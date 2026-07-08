@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/transition
+
+transition
+"""
 from service.core.enums import DefectStatus
 from service.core.exceptions import AppException
 

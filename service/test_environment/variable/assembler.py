@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/assembler
+
+assembler
+"""
 import copy
 import json
 

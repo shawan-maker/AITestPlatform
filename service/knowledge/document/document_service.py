@@ -1,8 +1,12 @@
+"""知识库管理模块 - document/document_service
+
+业务逻辑服务
+"""
 import logging
 
 from tortoise.expressions import Q
 
-from service.core.config import MAX_UPLOAD_BYTES
+from service.core.settings import MAX_UPLOAD_BYTES
 from service.core.deps import get_project_or_404
 from service.core.enums import IndexStatus, KnowledgeDocType
 from service.core.exceptions import AppException

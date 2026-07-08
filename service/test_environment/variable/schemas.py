@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/schemas
+
+请求/响应 Schema 定义
+"""
 import re
 from datetime import datetime
 from typing import Literal
@@ -16,6 +20,7 @@ CONFIG_GROUPS = Literal["base", "headers", "envs"]
 
 
 class CatalogCreateRequest(BaseModel):
+    """目录创建请求"""
     name: str = Field(..., min_length=1, max_length=100)
     parent_id: int | None = None
 
@@ -29,6 +34,7 @@ class CatalogCreateRequest(BaseModel):
 
 
 class CatalogUpdateRequest(BaseModel):
+    """目录更新请求"""
     name: str | None = Field(default=None, min_length=1, max_length=100)
     parent_id: int | None = None
 
@@ -40,6 +46,7 @@ class CatalogUpdateRequest(BaseModel):
 
 
 class CatalogTreeNode(BaseModel):
+    """目录treenode"""
     id: int
     name: str
     level: int
@@ -49,6 +56,7 @@ class CatalogTreeNode(BaseModel):
 
 
 class CatalogOut(BaseModel):
+    """目录out"""
     id: int
     project_id: int
     parent_id: int | None
@@ -59,6 +67,7 @@ class CatalogOut(BaseModel):
 
 
 class EnvironmentCreateRequest(BaseModel):
+    """环境创建请求"""
     env_name: str = Field(..., min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=255)
     catalog_id: int | None = None
@@ -73,6 +82,7 @@ class EnvironmentCreateRequest(BaseModel):
 
 
 class EnvironmentUpdateRequest(BaseModel):
+    """环境更新请求"""
     env_name: str | None = Field(default=None, min_length=1, max_length=50)
     description: str | None = Field(default=None, max_length=255)
     catalog_id: int | None = None
@@ -85,6 +95,7 @@ class EnvironmentUpdateRequest(BaseModel):
 
 
 class EnvironmentBrief(BaseModel):
+    """环境brief"""
     id: int
     project_id: int
     catalog_id: int | None
@@ -95,6 +106,7 @@ class EnvironmentBrief(BaseModel):
 
 
 class EnvironmentDetail(EnvironmentBrief):
+    """环境detail"""
     db_connection_ids: list[int] = Field(default_factory=list)
     function_file_ids: list[int] = Field(default_factory=list)
     function_bindings: list[FunctionBindItem] = Field(default_factory=list)
@@ -104,6 +116,7 @@ PaginatedEnvironments = Paginated[EnvironmentBrief]
 
 
 class ConfigItemCreateRequest(BaseModel):
+    """配置item创建请求"""
     config_group: CONFIG_GROUPS
     name: str = Field(..., min_length=1, max_length=100)
     config_type: ConfigType = ConfigType.scalar
@@ -112,6 +125,7 @@ class ConfigItemCreateRequest(BaseModel):
 
 
 class ConfigItemUpdateRequest(BaseModel):
+    """配置item更新请求"""
     name: str | None = Field(default=None, min_length=1, max_length=100)
     config_type: ConfigType | None = None
     value: str | None = None
@@ -125,6 +139,7 @@ class ConfigItemUpdateRequest(BaseModel):
 
 
 class ConfigGroupItem(BaseModel):
+    """配置groupitem"""
     name: str
     config_type: ConfigType = ConfigType.scalar
     value: str | None = None
@@ -132,10 +147,12 @@ class ConfigGroupItem(BaseModel):
 
 
 class ConfigGroupReplaceRequest(BaseModel):
+    """配置groupreplace请求"""
     items: list[ConfigGroupItem]
 
 
 class ConfigItemOut(BaseModel):
+    """配置itemout"""
     id: int
     environment_id: int
     config_group: str
@@ -148,10 +165,12 @@ class ConfigItemOut(BaseModel):
 
 
 class SnapshotCreateRequest(BaseModel):
+    """快照创建请求"""
     set_active: bool = True
 
 
 class SnapshotBrief(BaseModel):
+    """快照brief"""
     id: int
     environment_id: int
     version: int
@@ -162,6 +181,7 @@ class SnapshotBrief(BaseModel):
 
 
 class SnapshotDetail(SnapshotBrief):
+    """快照detail"""
     payload: dict
 
 
@@ -169,6 +189,7 @@ ImportMode = Literal["reference", "embed"]
 
 
 class EnvironmentExportBundle(BaseModel):
+    """环境导出bundle"""
     env_name: str
     description: str | None
     catalog_id: int | None
@@ -181,6 +202,7 @@ class EnvironmentExportBundle(BaseModel):
 
 
 class EnvironmentImportRequest(BaseModel):
+    """环境import请求"""
     bundle: EnvironmentExportBundle
     overwrite: bool = False
     import_mode: ImportMode | None = None

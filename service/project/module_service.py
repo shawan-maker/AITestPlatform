@@ -1,3 +1,7 @@
+"""项目管理模块 - module_service
+
+业务逻辑服务
+"""
 from service.api_test.models import ApiInterface
 from service.core.exceptions import AppException
 from service.core.pagination import paginate

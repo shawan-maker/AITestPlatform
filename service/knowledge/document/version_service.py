@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/version_service
+
+业务逻辑服务
+"""
 from service.core.enums import IndexStatus
 from service.core.exceptions import AppException
 from service.core.pagination import paginate

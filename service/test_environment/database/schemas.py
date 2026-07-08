@@ -1,3 +1,7 @@
+"""测试环境管理模块 - database/schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 from typing import Any
 
@@ -8,6 +12,7 @@ from service.core.pagination import Paginated
 
 
 class DbConnectionConfigInput(BaseModel):
+    """dbconnection配置input"""
     host: str
     port: int = 3306
     username: str
@@ -16,6 +21,7 @@ class DbConnectionConfigInput(BaseModel):
 
 
 class DbConnectionCreateRequest(BaseModel):
+    """dbconnection创建请求"""
     connection_name: str = Field(..., min_length=1, max_length=50)
     server_name: str = Field(..., min_length=1, max_length=50)
     db_type: DbType
@@ -25,6 +31,7 @@ class DbConnectionCreateRequest(BaseModel):
 
 
 class DbConnectionUpdateRequest(BaseModel):
+    """dbconnection更新请求"""
     connection_name: str | None = Field(default=None, min_length=1, max_length=50)
     server_name: str | None = Field(default=None, min_length=1, max_length=50)
     db_type: DbType | None = None
@@ -50,6 +57,7 @@ class DbConnectionUpdateRequest(BaseModel):
 
 
 class DbConnectionBrief(BaseModel):
+    """dbconnectionbrief"""
     id: int
     connection_name: str
     server_name: str
@@ -65,17 +73,20 @@ class DbConnectionBrief(BaseModel):
 
 
 class DbConnectionDetail(DbConnectionBrief):
+    """dbconnectiondetail"""
     config: dict[str, Any]
     environment_ids: list[int] = Field(default_factory=list)
 
 
 class DbConnectionTestResult(BaseModel):
+    """dbconnection测试结果"""
     success: bool
     message: str | None
     tested_at: datetime
 
 
 class DbConnectionTestLogOut(BaseModel):
+    """dbconnection测试logout"""
     id: int
     success: bool
     message: str | None
@@ -88,10 +99,12 @@ PaginatedDbTestLogs = Paginated[DbConnectionTestLogOut]
 
 
 class EnvironmentDbBindRequest(BaseModel):
+    """环境dbbind请求"""
     db_connection_ids: list[int]
 
 
 class ExportDbConnectionEmbed(BaseModel):
+    """导出dbconnectionembed"""
     connection_name: str
     server_name: str
     db_type: DbType
@@ -100,14 +113,17 @@ class ExportDbConnectionEmbed(BaseModel):
 
 
 class DbConnectionBatchDeleteRequest(BaseModel):
+    """dbconnection批量操作删除请求"""
     connection_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class DbConnectionBatchDeleteFailure(BaseModel):
+    """dbconnection批量操作删除failure"""
     connection_id: int
     message: str
 
 
 class DbConnectionBatchDeleteResult(BaseModel):
+    """dbconnection批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[DbConnectionBatchDeleteFailure]

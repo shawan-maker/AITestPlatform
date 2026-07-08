@@ -1,3 +1,7 @@
+"""接口测试模块 - shared/payload_builder
+
+构建器
+"""
 from typing import Any
 
 

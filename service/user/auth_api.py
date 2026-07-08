@@ -1,3 +1,7 @@
+"""用户管理模块 - auth_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 

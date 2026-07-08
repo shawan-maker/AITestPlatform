@@ -1,3 +1,7 @@
+"""接口测试模块 - interface/schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 from typing import Any, Literal
 
@@ -8,6 +12,7 @@ from service.core.pagination import Paginated
 
 
 class InterfaceCreateRequest(BaseModel):
+    """接口创建请求"""
     project_id: int = Field(..., ge=1)
     catalog_id: int = Field(..., ge=1)
     module_id: int | None = Field(default=None, ge=1)
@@ -27,6 +32,7 @@ class InterfaceUpdateRequest(BaseModel):
 
 
 class InterfaceOut(BaseModel):
+    """接口out"""
     id: int
     project_id: int
     catalog_id: int | None
@@ -51,6 +57,7 @@ class InterfaceOut(BaseModel):
 
 
 class InterfaceListQuery(BaseModel):
+    """接口列表查询query"""
     project_id: int = Field(..., ge=1)
     catalog_id: int | None = Field(default=None, ge=1)
     q: str | None = None
@@ -59,12 +66,14 @@ class InterfaceListQuery(BaseModel):
 
 
 class InterfaceReorderRequest(BaseModel):
+    """接口reorder请求"""
     catalog_id: int = Field(..., ge=1)
     ordered_ids: list[int] = Field(..., min_length=1)
     target_catalog_id: int | None = Field(default=None, ge=1)
 
 
 class ImportPreviewItem(BaseModel):
+    """importpreviewitem"""
     method: str
     path: str
     summary: str | None
@@ -73,12 +82,14 @@ class ImportPreviewItem(BaseModel):
 
 
 class ImportPreviewResult(BaseModel):
+    """importpreview结果"""
     document_id: int
     version_id: int
     items: list[ImportPreviewItem]
 
 
 class ImportConfirmItem(BaseModel):
+    """importconfirmitem"""
     method: str
     path: str
     summary: str | None = None
@@ -110,14 +121,17 @@ PaginatedInterfaces = Paginated[InterfaceOut]
 
 
 class InterfaceBatchDeleteRequest(BaseModel):
+    """接口批量操作删除请求"""
     interface_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class InterfaceBatchDeleteFailure(BaseModel):
+    """接口批量操作删除failure"""
     interface_id: int
     message: str
 
 
 class InterfaceBatchDeleteResult(BaseModel):
+    """接口批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[InterfaceBatchDeleteFailure]

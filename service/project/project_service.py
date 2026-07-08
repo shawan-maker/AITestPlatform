@@ -1,3 +1,7 @@
+"""项目管理模块 - project_service
+
+业务逻辑服务
+"""
 import asyncio
 
 from tortoise.transactions import in_transaction

@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/history_writer
+
+数据写入器
+"""
 from service.core.enums import DefectHistoryAction
 from service.test_execution.models import TestDefectHistory
 from service.user.models import User

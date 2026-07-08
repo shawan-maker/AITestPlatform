@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/import_marker
+
+import marker
+"""
 from pathlib import Path
 
 from service.knowledge.document.parse_paths import resolve_parse_result_dir

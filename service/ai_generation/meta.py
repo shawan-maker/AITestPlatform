@@ -1,5 +1,9 @@
+"""AI用例生成模块 - meta
+
+meta
+"""
 from service.ai_generation.schemas import AgentMetaOut, PromptTemplateItem
-from service.core import config as core_config
+from service.core import settings as core_config
 
 FUNCTIONAL_PROMPT_TEMPLATES: list[PromptTemplateItem] = [
     PromptTemplateItem(

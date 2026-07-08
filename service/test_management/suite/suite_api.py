@@ -1,3 +1,7 @@
+"""测试管理模块 - suite/suite_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 
 from service.core.deps import get_current_active_user

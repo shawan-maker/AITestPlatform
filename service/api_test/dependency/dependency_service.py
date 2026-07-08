@@ -1,3 +1,7 @@
+"""接口测试模块 - dependency/dependency_service
+
+业务逻辑服务
+"""
 from service.api_test.dependency.dependency_schemas import (
     DependencyEdgeOut,
     DependencyListOut,

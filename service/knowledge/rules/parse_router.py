@@ -1,3 +1,7 @@
+"""知识库管理模块 - rules/parse_router
+
+parse router
+"""
 from pathlib import Path
 
 from service.core.enums import ActualParseRoute, KnowledgeDocType, ParseMode

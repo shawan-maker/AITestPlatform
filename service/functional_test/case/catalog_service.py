@@ -1,3 +1,7 @@
+"""功能测试模块 - case/catalog_service
+
+业务逻辑服务
+"""
 from service.core.exceptions import AppException
 from service.functional_test.permissions import ensure_case_editor, ensure_case_viewer
 from service.functional_test.case.schemas import (
@@ -11,6 +15,7 @@ from service.user.models import User
 
 
 class CatalogService:
+    """目录服务"""
     MAX_LEVEL = 5
 
     @classmethod

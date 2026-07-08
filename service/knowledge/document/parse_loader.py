@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/parse_loader
+
+加载器
+"""
 from service.knowledge.document.parse_enrich import load_raw_parse_items
 from service.knowledge.document.parsed_interface_service import (
     build_parsed_item_from_raw,

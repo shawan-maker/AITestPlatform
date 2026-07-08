@@ -6,6 +6,7 @@ venv/
 .env
 .env.*
 !.env.example
+!.env.docker
 
 # Python
 __pycache__/
@@ -29,12 +30,9 @@ demo/
 # 设计文档
 service/design/
 
-# 本地数据/缓存（RAG 相关存储均在 rag/ 下）
+# 本地数据/缓存（运行时生成，不提交）
+data/
 temp/
-rag_storage/
-rag/*
-!rag/ragManager.py
-!rag/rag_api.py
 *.log
 debug_*.log
 

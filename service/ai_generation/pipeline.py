@@ -635,7 +635,7 @@ class ApiAgentPipeline:
         cls, session: AIGenerationSession, api_doc_text: str
     ) -> list[dict]:
         """Parse API doc and create interfaces in DB. Returns interface data list."""
-        from utils.parser.api_document_ai_parser import APIDocumentParser
+        from service.ai_engine.parsers.api_document_ai_parser import APIDocumentParser
 
         # FIX: 使用 asyncio.to_thread 将同步 LLM 调用放到后台线程，避免阻塞 event loop
         parsed = await asyncio.to_thread(APIDocumentParser().api_parser, api_doc_text)
@@ -767,7 +767,7 @@ class ApiAgentPipeline:
         2. Fall back to all project interface summaries for LLM auto-detection
         """
         import time as _time
-        from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
+        from service.ai_engine.workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
         from service.api_test.dependency.resolver_service import DependencyResolverService
         from service.api_test.case.generation_service import ApiCaseGenerationService
 

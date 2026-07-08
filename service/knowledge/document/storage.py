@@ -1,6 +1,10 @@
+"""知识库管理模块 - document/storage
+
+storage
+"""
 from pathlib import Path
 
-from service.core.config import BASE_DIR, KNOWLEDGE_UPLOAD_ROOT
+from service.core.settings import BASE_DIR, KNOWLEDGE_UPLOAD_ROOT
 from service.knowledge.document.models import KnowledgeDocumentVersion
 from service.knowledge.document.parse_paths import resolve_storage_file_path
 

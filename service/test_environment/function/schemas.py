@@ -1,3 +1,7 @@
+"""测试环境管理模块 - function/schemas
+
+请求/响应 Schema 定义
+"""
 import re
 from datetime import datetime
 from typing import Any
@@ -14,6 +18,7 @@ FUNCTION_FILE_PATTERN = re.compile(r"^[A-Za-z]([A-Za-z0-9_]*[A-Za-z0-9])?\.py$")
 
 
 class FunctionFileCreateRequest(BaseModel):
+    """函数文件创建请求"""
     file_name: str = Field(..., min_length=1, max_length=100)
     source_code: str
     environment_ids: list[int] = Field(default_factory=list)
@@ -27,6 +32,7 @@ class FunctionFileCreateRequest(BaseModel):
 
 
 class FunctionFileUpdateRequest(BaseModel):
+    """函数文件更新请求"""
     file_name: str | None = Field(default=None, min_length=1, max_length=100)
     source_code: str | None = None
     environment_ids: list[int] | None = None
@@ -50,6 +56,7 @@ class FunctionFileUpdateRequest(BaseModel):
 
 
 class FunctionFileBrief(BaseModel):
+    """函数文件brief"""
     id: int
     file_name: str
     project_id: int | None
@@ -63,21 +70,25 @@ class FunctionFileBrief(BaseModel):
 
 
 class BoundEnvironmentOption(BaseModel):
+    """bound环境option"""
     id: int
     env_name: str
 
 
 class FunctionFileDetail(FunctionFileBrief):
+    """函数文件detail"""
     source_code: str
 
 
 class FunctionDebugRequest(BaseModel):
+    """函数调试请求"""
     method_name: str = Field(..., min_length=1)
     params: dict[str, Any] = Field(default_factory=dict)
     environment_id: int | None = Field(default=None, ge=1)
 
 
 class FunctionDebugResult(BaseModel):
+    """函数调试结果"""
     success: bool
     result: Any | None = None
     print_out: str = ""
@@ -89,21 +100,25 @@ PaginatedFunctionFiles = Paginated[FunctionFileBrief]
 
 
 class FunctionBindItem(BaseModel):
+    """函数binditem"""
     function_file_id: int
     sort_order: int = 0
     file_name: str | None = None
 
 
 class EnvironmentFunctionBindRequest(BaseModel):
+    """环境函数bind请求"""
     items: list[FunctionBindItem]
 
 
 class ExportFunctionEmbed(BaseModel):
+    """导出函数embed"""
     file_name: str
     source_code: str
 
 
 class FunctionValidateRequest(BaseModel):
+    """函数校验请求"""
     file_name: str = Field(..., min_length=1, max_length=100)
     source_code: str
 
@@ -116,14 +131,17 @@ class FunctionValidateRequest(BaseModel):
 
 
 class FunctionFileBatchDeleteRequest(BaseModel):
+    """函数文件批量操作删除请求"""
     file_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class FunctionFileBatchDeleteFailure(BaseModel):
+    """函数文件批量操作删除failure"""
     file_id: int
     message: str
 
 
 class FunctionFileBatchDeleteResult(BaseModel):
+    """函数文件批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[FunctionFileBatchDeleteFailure]

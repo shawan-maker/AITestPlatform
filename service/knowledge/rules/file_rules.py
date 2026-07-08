@@ -1,3 +1,7 @@
+"""知识库管理模块 - rules/file_rules
+
+file rules
+"""
 import hashlib
 import json
 from pathlib import Path

@@ -1,3 +1,7 @@
+"""测试执行模块 - report/report_service
+
+业务逻辑服务
+"""
 from service.core.enums import CaseRunStatus, DefectSeverity, RunStatus
 from service.core.exceptions import AppException
 from service.test_execution.models import ApiCaseRunRecord, TestDefect, TestSuiteRun, TestTaskRun

@@ -1,3 +1,7 @@
+"""测试执行模块 - run/run_api
+
+API 路由端点
+"""
 from fastapi import APIRouter, BackgroundTasks, Depends
 
 from service.core.deps import get_current_active_user

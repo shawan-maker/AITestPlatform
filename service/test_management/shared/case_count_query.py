@@ -1,3 +1,7 @@
+"""测试管理模块 - shared/case_count_query
+
+case count query
+"""
 from service.core.enums import SuiteCaseType
 from service.test_management.models import (
     SuiteCaseRelation,

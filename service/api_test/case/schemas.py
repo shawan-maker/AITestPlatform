@@ -1,3 +1,7 @@
+"""接口测试模块 - case/schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 from typing import Any
 
@@ -32,6 +36,7 @@ class GeneratePreviewRequest(BaseModel):
 
 
 class BaseCasePreviewItem(BaseModel):
+    """基础用例previewitem"""
     index: int
     name: str
     steps: list[str]
@@ -40,11 +45,13 @@ class BaseCasePreviewItem(BaseModel):
 
 
 class GeneratePreviewResult(BaseModel):
+    """生成preview结果"""
     session_id: int
     base_cases: list[BaseCasePreviewItem]
 
 
 class GenerateConfirmRequest(BaseModel):
+    """生成confirm请求"""
     session_id: int = Field(..., ge=1)
     selected_indexes: list[int] = Field(..., min_length=1)
     environment_id: int | None = Field(default=None, ge=1)
@@ -52,12 +59,14 @@ class GenerateConfirmRequest(BaseModel):
 
 
 class GenerateConfirmResult(BaseModel):
+    """生成confirm结果"""
     created_base_case_ids: list[int]
     created_case_ids: list[int]
     run_errors: list[str] = Field(default_factory=list)
 
 
 class PreviewFromDocRequest(BaseModel):
+    """previewfrom文档请求"""
     project_id: int = Field(..., ge=1)
     api_doc_text: str = Field(..., min_length=1)
     user_prompt: str | None = None
@@ -65,10 +74,12 @@ class PreviewFromDocRequest(BaseModel):
 
 
 class ApiSessionPreviewUpdateRequest(BaseModel):
+    """API会话preview更新请求"""
     output_payload: dict[str, Any]
 
 
 class ApiConfirmRequest(BaseModel):
+    """APIconfirm请求"""
     session_id: int = Field(..., ge=1)
     selected_indexes: list[int] = Field(..., min_length=1)
     environment_id: int | None = Field(default=None, ge=1)
@@ -78,6 +89,7 @@ class ApiConfirmRequest(BaseModel):
 
 
 class ApiConfirmResult(BaseModel):
+    """APIconfirm结果"""
     created_base_case_ids: list[int]
     created_case_ids: list[int]
     run_errors: list[str] = Field(default_factory=list)
@@ -85,11 +97,13 @@ class ApiConfirmResult(BaseModel):
 
 
 class CaseUpdateRequest(BaseModel):
+    """用例更新请求"""
     title: str | None = Field(default=None, min_length=1, max_length=255)
     case_payload: dict[str, Any] | None = None
 
 
 class CaseOut(BaseModel):
+    """用例out"""
     id: int
     project_id: int
     interface_id: int | None
@@ -108,26 +122,31 @@ class CaseOut(BaseModel):
 
 
 class CaseBatchDeleteRequest(BaseModel):
+    """用例批量操作删除请求"""
     case_ids: list[int] = Field(..., min_length=1)
 
 
 class CaseReuseRequest(BaseModel):
+    """用例reuse请求"""
     source_case_ids: list[int] = Field(..., min_length=1)
     target_interface_id: int = Field(..., ge=1)
     target_case_kind: ApiCaseKind
 
 
 class CaseReuseResult(BaseModel):
+    """用例reuse结果"""
     created_count: int
     created_ids: list[int]
     failures: list[dict] = []
 
 
 class CaseDebugRunRequest(BaseModel):
+    """用例调试执行请求"""
     environment_id: int = Field(..., ge=1)
 
 
 class RunRecordOut(BaseModel):
+    """执行recordout"""
     id: int
     case_name: str
     interface_name: str | None = None

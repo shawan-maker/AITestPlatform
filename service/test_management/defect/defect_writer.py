@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/defect_writer
+
+数据写入器
+"""
 from tortoise.transactions import in_transaction
 
 from service.core.enums import DefectSourceType, DefectStatus

@@ -1,3 +1,7 @@
+"""测试执行模块 - shared/summary_calculator
+
+summary calculator
+"""
 from service.core.enums import CaseRunStatus, RunStatus
 
 

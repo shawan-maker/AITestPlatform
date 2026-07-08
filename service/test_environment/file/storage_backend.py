@@ -1,7 +1,11 @@
+"""测试环境管理模块 - file/storage_backend
+
+storage backend
+"""
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from service.core.config import BASE_DIR
+from service.core.settings import BASE_DIR
 
 
 class StorageBackend(ABC):

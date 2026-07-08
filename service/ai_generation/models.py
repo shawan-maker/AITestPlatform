@@ -1,9 +1,14 @@
+"""AI用例生成模块 - models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import GenType, InputRefType, MessageRole, MessageType, SessionStatus, SourceChannel
 
 
 class AIGenerationSession(models.Model):
+    """generation会话"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="ai_generation_sessions", on_delete=fields.CASCADE
@@ -40,10 +45,12 @@ class AIGenerationSession(models.Model):
     finished_at = fields.DatetimeField(null=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "ai_generation_session"
 
 
 class AIGenerationMessage(models.Model):
+    """generation消息"""
     id = fields.BigIntField(pk=True)
     session = fields.ForeignKeyField(
         "models.AIGenerationSession",
@@ -58,5 +65,6 @@ class AIGenerationMessage(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "ai_generation_message"
         indexes = (("session_id", "sequence"),)

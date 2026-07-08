@@ -1,7 +1,12 @@
+"""项目管理模块 - models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 
 class Project(models.Model):
+    """项目"""
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=100, unique=True)
     description = fields.TextField(null=True)
@@ -12,10 +17,12 @@ class Project(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "project"
 
 
 class ProjectMember(models.Model):
+    """项目成员"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="members", on_delete=fields.CASCADE
@@ -35,11 +42,13 @@ class ProjectMember(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "project_member"
         unique_together = (("project_id", "user_id"),)
 
 
 class ProjectModule(models.Model):
+    """项目模块"""
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=100)
     description = fields.TextField(null=True)
@@ -50,5 +59,6 @@ class ProjectModule(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "project_module"
         unique_together = (("project_id", "name"),)

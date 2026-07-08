@@ -15,10 +15,10 @@ AITestPlatform (巧乐AI智能体测试平台 / ChocoTest) — a full-stack AI-p
 python main.py
 
 # Database migrations (Aerich wrapper)
-python scripts/db_manage.py init-db            # First-time setup
-python scripts/db_manage.py migrate -m "desc"  # Generate migration after model changes
-python scripts/db_manage.py upgrade            # Apply pending migrations
-python scripts/db_manage.py downgrade          # Rollback last migration
+python deploy/scripts/db_manage.py init-db            # First-time setup
+python deploy/scripts/db_manage.py migrate -m "desc"  # Generate migration after model changes
+python deploy/scripts/db_manage.py upgrade            # Apply pending migrations
+python deploy/scripts/db_manage.py downgrade          # Rollback last migration
 
 # Run tests (pytest with asyncio_mode=auto, testpaths=tests)
 pytest
@@ -60,7 +60,7 @@ Translation files live in `frontend/src/i18n/` (zh-CN.json, en-US.json). Use `py
 
 All business logic is under `service/`, organized by domain. Each module follows a consistent pattern:
 
-- `models.py` — Tortoise ORM models (registered in `service/core/config.py` → `TORTOISE_ORM`)
+- `models.py` — Tortoise ORM models (registered in `service/core/settings.py` → `TORTOISE_ORM`)
 - `api.py` — FastAPI `APIRouter` with endpoint definitions
 - `schemas.py` — Pydantic request/response schemas
 - `*_service.py` — Business logic layer (services called by API routes)
@@ -81,10 +81,11 @@ All routers are aggregated in `service/router.py` and mounted at `/api/v1`.
 | `service/test_management` | Test suites, tasks, defect management, picker |
 | `service/test_execution` | Test runs (serial/parallel), suite/task runners, progress tracking, reports, manual runs, defect creation |
 | `service/ai_generation` | AI agent sessions with SSE streaming, functional/API case generation via LangGraph |
+| `service/ai_engine` | AI 大模型引擎层：Agent 定义、LangGraph 工作流、RAG 管理、MCP 工具、文档解析器、提示词模板 |
 
 ### Core Infrastructure (`service/core/`)
 
-- **config.py** — All settings from `.env`, `TORTOISE_ORM` config (model registration required here)
+- **settings.py** — All settings from `.env`, `TORTOISE_ORM` config, LLM instance, RAG/AI config (unified config entry point)
 - **deps.py** — FastAPI dependency injection: `get_current_active_user`, `require_project_editor`, `require_project_viewer`, etc.
 - **security.py** — JWT token creation/decoding (python-jose), bcrypt password hashing
 - **redis.py** — Async Redis client for token revocation blacklists (gracefully degrades if unavailable)
@@ -125,10 +126,18 @@ Documents go through: upload → parse (Swagger/OpenAPI structured parse or AI p
 
 Copy `.env.example` to `.env`. Key vars: `DATABASE_URL` (MySQL), `REDIS_URL`, `JWT_SECRET_KEY`, LLM config (`LLM_BINDING_HOST`, `LLM_BINDING_API_KEY`, `LLM_MODEL`).
 
+### AI Engine Layer (`service/ai_engine/`)
+
+AI 大模型调用的底层引擎层，统一管理所有 LLM/RAG/Agent 相关代码：
+
+- **agents/** — LangGraph Agent 定义（case_generate_agent, memory manager）
+- **workflow/** — LangGraph 工作流编排（API 用例生成/基础用例/可执行用例）
+- **rag/** — RAG 知识库管理（LightRAG/RAGAnything）
+- **mcp/** — MCP 工具定义（search_requirement, generate_testcases 等）
+- **parsers/** — 文档解析器（Swagger/OpenAPI/AI parser）
+- **prompts/** — 所有提示词模板（agents/api_workflow/workflow/parser）
+- **shared/** — 通用工具（脚本加载器, 线程安全 logger）
+
 ### Other Directories
 
-- `agents/` — Standalone agent scripts (case generation)
-- `workflow/` — Workflow orchestration scripts for API case generation pipelines
-- `mcp_tools/` — MCP tool definitions
-- `config/settings.py` — RAG/LLM runtime config (separate from `.env`-based core config)
-- `scripts/` — Management utilities, DB migrations (`scripts/migrations/`), migration repair scripts
+- `deploy/` — Deployment configs (nginx, Dockerfiles, docker-compose, scripts/db_manage.py, DB export/import tools)

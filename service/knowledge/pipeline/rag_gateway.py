@@ -1,3 +1,7 @@
+"""知识库管理模块 - pipeline/rag_gateway
+
+网关
+"""
 import asyncio
 import logging
 from pathlib import Path
@@ -8,25 +12,26 @@ from service.core.enums import RagBackend
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from rag.ragManager import RAGManager
-    from rag.rag_api import RAGClient
+    from service.ai_engine.rag.ragManager import RAGManager
+    from service.ai_engine.rag.rag_api import RAGClient
 
 
 class RagGateway:
+    """rag网关"""
     _managers: dict[str, "RAGManager"] = {}
     _client: "RAGClient | None" = None
 
     @classmethod
     def _get_client(cls) -> "RAGClient":
         if cls._client is None:
-            from rag.rag_api import RAGClient
+            from service.ai_engine.rag.rag_api import RAGClient
 
             cls._client = RAGClient()
         return cls._client
 
     @classmethod
     def _get_manager_cls(cls):
-        from rag.ragManager import RAGManager
+        from service.ai_engine.rag.ragManager import RAGManager
 
         return RAGManager
 

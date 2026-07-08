@@ -1,3 +1,7 @@
+"""接口测试模块 - dependency/merge_service
+
+业务逻辑服务
+"""
 from service.api_test.dependency.ai_analyzer import AiDependencyAnalyzer
 from service.api_test.dependency.rule_inferencer import RuleInferencer
 from service.api_test.dependency.schemas import DependencyEdgeDraft

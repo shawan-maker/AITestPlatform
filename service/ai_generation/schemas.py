@@ -17,12 +17,14 @@ from service.functional_test.case.schemas import GenerationSaveResult
 
 
 class PromptTemplateItem(BaseModel):
+    """prompttemplateitem"""
     id: str
     label: str
     placeholder: str
 
 
 class AgentMetaOut(BaseModel):
+    """智能体metaout"""
     functional_prompt_templates: list[PromptTemplateItem]
     api_prompt_templates: list[PromptTemplateItem]
     single_interface_only: bool = True
@@ -30,6 +32,7 @@ class AgentMetaOut(BaseModel):
 
 
 class FunctionalCreateSessionRequest(BaseModel):
+    """functional创建会话请求"""
     project_id: int = Field(..., ge=1)
     knowledge_document_id: int | None = Field(default=None, ge=1)
     user_prompt: str | None = None
@@ -38,6 +41,7 @@ class FunctionalCreateSessionRequest(BaseModel):
 
 
 class ApiCreateSessionRequest(BaseModel):
+    """API创建会话请求"""
     project_id: int = Field(..., ge=1)
     interface_id: int | None = Field(default=None, ge=1)
     interface_ids: list[int] | None = None
@@ -50,6 +54,7 @@ class ApiCreateSessionRequest(BaseModel):
 
 
 class FunctionalGenerateRequest(BaseModel):
+    """functional生成请求"""
     project_id: int = Field(..., ge=1)
     knowledge_document_id: int | None = Field(default=None, ge=1)
     user_prompt: str | None = None
@@ -57,21 +62,25 @@ class FunctionalGenerateRequest(BaseModel):
 
 
 class FunctionalPreviewUpdateRequest(BaseModel):
+    """functionalpreview更新请求"""
     output_payload: dict[str, Any]
 
 
 class FunctionalSaveRequest(BaseModel):
+    """functional保存请求"""
     catalog_id: int = Field(..., ge=1)
     case_indexes: list[int] = Field(..., min_length=1)
 
 
 class ApiGenerateFromInterfaceRequest(BaseModel):
+    """API生成from接口请求"""
     interface_id: int = Field(..., ge=1)
     user_prompt: str | None = None
     environment_id: int | None = Field(default=None, ge=1)
 
 
 class ApiGenerateFromDocRequest(BaseModel):
+    """API生成from文档请求"""
     project_id: int = Field(..., ge=1)
     api_doc_text: str = Field(..., min_length=1)
     user_prompt: str | None = None
@@ -81,23 +90,27 @@ class ApiGenerateFromDocRequest(BaseModel):
 # ---------- Multi-interface pipeline schemas ----------
 
 class InterfaceBaseCasesEdit(BaseModel):
+    """接口基础casesedit"""
     index: int
     selected_indexes: list[int] = Field(..., min_length=0)
     edited_cases: list[dict] | None = None
 
 
 class SaveBaseCasesRequest(BaseModel):
+    """保存基础cases请求"""
     environment_id: int | None = Field(default=None, ge=1)
     interfaces: list[InterfaceBaseCasesEdit]
 
 
 class PhaseInfo(BaseModel):
+    """phaseinfo"""
     id: int
     name: str
     status: str
 
 
 class PipelineProgressOut(BaseModel):
+    """管道进度out"""
     current_phase: int
     phases: list[PhaseInfo]
     summary: dict | None = None

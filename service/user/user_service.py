@@ -1,3 +1,7 @@
+"""用户管理模块 - user_service
+
+业务逻辑服务
+"""
 from datetime import datetime, timezone
 
 from tortoise.expressions import Q

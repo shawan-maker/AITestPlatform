@@ -1,3 +1,7 @@
+"""用户管理模块 - bootstrap
+
+bootstrap
+"""
 import logging
 
 from service.core.security import hash_password

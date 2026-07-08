@@ -1,3 +1,7 @@
+"""接口测试模块 - api
+
+API 路由端点
+"""
 from fastapi import APIRouter
 
 from service.api_test.catalog.catalog_api import router as catalog_router

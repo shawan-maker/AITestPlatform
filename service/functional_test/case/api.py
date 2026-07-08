@@ -1,3 +1,7 @@
+"""功能测试模块 - case/api
+
+API 路由端点
+"""
 from fastapi import APIRouter
 
 from service.functional_test.case.case_api import router as case_router

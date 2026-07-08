@@ -1,3 +1,7 @@
+"""测试执行模块 - models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import (
@@ -15,6 +19,7 @@ from service.core.enums import (
 
 
 class ApiCaseRunRecord(models.Model):
+    """API用例执行record"""
     id = fields.IntField(pk=True)
     suite_run = fields.ForeignKeyField(
         "models.TestSuiteRun",
@@ -78,10 +83,12 @@ class ApiCaseRunRecord(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_case_run_record"
 
 
 class TestSuiteRun(models.Model):
+    """测试套件执行"""
     id = fields.IntField(pk=True)
     suite = fields.ForeignKeyField(
         "models.TestSuite", related_name="run_records", on_delete=fields.CASCADE
@@ -123,10 +130,12 @@ class TestSuiteRun(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_suite_run"
 
 
 class TestTaskRun(models.Model):
+    """测试任务执行"""
     id = fields.IntField(pk=True)
     task = fields.ForeignKeyField(
         "models.TestTask", related_name="run_records", on_delete=fields.CASCADE
@@ -163,10 +172,12 @@ class TestTaskRun(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_task_run"
 
 
 class FunctionalCaseRunRecord(models.Model):
+    """functional用例执行record"""
     id = fields.IntField(pk=True)
     task_run = fields.ForeignKeyField(
         "models.TestTaskRun",
@@ -201,11 +212,13 @@ class FunctionalCaseRunRecord(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "functional_case_run_record"
         unique_together = (("task_run_id", "functional_case_id"),)
 
 
 class TestDefect(models.Model):
+    """测试缺陷"""
     id = fields.IntField(pk=True)
     defect_code = fields.CharField(max_length=32, null=True, unique=True)
     project = fields.ForeignKeyField(
@@ -252,6 +265,7 @@ class TestDefect(models.Model):
     )
 
     class Meta:
+        """meta"""
         table = "test_defect"
         indexes = (
             ("project_id", "status"),
@@ -261,6 +275,7 @@ class TestDefect(models.Model):
 
 
 class TestDefectComment(models.Model):
+    """测试缺陷comment"""
     id = fields.IntField(pk=True)
     defect = fields.ForeignKeyField(
         "models.TestDefect",
@@ -277,11 +292,13 @@ class TestDefectComment(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_defect_comment"
         indexes = (("defect_id", "created_at"),)
 
 
 class TestDefectHistory(models.Model):
+    """测试缺陷历史"""
     id = fields.IntField(pk=True)
     defect = fields.ForeignKeyField(
         "models.TestDefect",
@@ -301,5 +318,6 @@ class TestDefectHistory(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_defect_history"
         indexes = (("defect_id", "created_at"),)

@@ -1,7 +1,7 @@
 import base64
 import hashlib
 
-from service.core.config import JWT_SECRET_KEY
+from service.core.settings import JWT_SECRET_KEY
 
 
 def _key() -> bytes:

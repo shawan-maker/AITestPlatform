@@ -1,3 +1,7 @@
+"""测试执行模块 - run/trigger_service
+
+业务逻辑服务
+"""
 from datetime import datetime, timezone
 
 from service.core.enums import RunStatus, SuiteCaseType, TaskSuiteType

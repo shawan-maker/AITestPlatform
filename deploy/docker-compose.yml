@@ -1,0 +1,126 @@
+# ============================================================================
+# AITestPlatform Docker Compose 全家桶编排
+#
+# 包含: MySQL + Redis + Backend(FastAPI) + Frontend(Nginx)
+#
+# 使用方法:
+#   1. cp .env.docker .env && vim .env   # 修改 API Key 等配置
+#   2. docker compose -f deploy/docker-compose.yml up -d --build
+#   3. docker compose -f deploy/docker-compose.yml logs -f
+#
+# 首次部署后初始化数据库:
+#   docker exec -it aitestplatform-backend python deploy/scripts/init_deploy.py
+#
+# 从旧实例迁移数据:
+#   docker exec -it aitestplatform-backend python deploy/scripts/import_data.py --input /app/data/backup.sql
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # MySQL 8.0
+  # --------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: aitestplatform-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-aitest2026}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-aiTestPlatform}
+      MYSQL_CHARSET: utf8mb4
+      MYSQL_COLLATION: utf8mb4_unicode_ci
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"    # 开发时暴露，生产可注释掉
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-aitest2026}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Redis 7
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: aitestplatform-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"    # 开发时暴露，生产可注释掉
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # --------------------------------------------------------------------------
+  # 后端: FastAPI + uvicorn
+  # --------------------------------------------------------------------------
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    container_name: aitestplatform-backend
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      - BACKEND_HOST=0.0.0.0
+      - BACKEND_PORT=8000
+      - CORS_ORIGINS=
+      - DATABASE_URL=mysql://root:${MYSQL_ROOT_PASSWORD:-aitest2026}@mysql:3306/${MYSQL_DATABASE:-aiTestPlatform}
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_FILE=
+    volumes:
+      - app-data:/app/data
+    networks:
+      - app-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # --------------------------------------------------------------------------
+  # 前端: Nginx 静态服务 + API 反向代理
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: aitestplatform-frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      # 如需 HTTPS:
+      # - "443:443"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql-data:       # MySQL 数据持久化
+  redis-data:       # Redis 持久化
+  app-data:         # 运行时数据 (RAG/知识库/测试文件等)

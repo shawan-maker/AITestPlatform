@@ -1,3 +1,7 @@
+"""测试执行模块 - defect/schemas
+
+请求/响应 Schema 定义
+"""
 from pydantic import BaseModel, Field
 
 from service.core.enums import (
@@ -10,6 +14,7 @@ from service.core.enums import (
 
 
 class DefectCreateRequest(BaseModel):
+    """缺陷创建请求"""
     project_id: int | None = Field(default=None, ge=1)
     module_id: int | None = None
     title: str = Field(min_length=1, max_length=255)
@@ -28,12 +33,14 @@ class DefectCreateRequest(BaseModel):
 
 
 class DefectBatchLinkRequest(BaseModel):
+    """缺陷批量操作link请求"""
     case_run_ids: list[int] = Field(min_length=1)
     external_key: str | None = None
     defect_id: int | None = None
 
 
 class DefectOut(BaseModel):
+    """缺陷out"""
     id: int
     defect_code: str | None = None
     title: str

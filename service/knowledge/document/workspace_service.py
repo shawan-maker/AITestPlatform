@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/workspace_service
+
+业务逻辑服务
+"""
 from service.core.enums import KnowledgeDocType, RagType
 from service.core.exceptions import AppException
 from service.knowledge.document.models import KnowledgeWorkspace

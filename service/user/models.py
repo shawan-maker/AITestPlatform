@@ -1,7 +1,12 @@
+"""用户管理模块 - models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 
 class User(models.Model):
+    """用户"""
     id = fields.IntField(pk=True)
     username = fields.CharField(max_length=50, unique=True)
     email = fields.CharField(max_length=100, unique=True)
@@ -20,4 +25,5 @@ class User(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "user"

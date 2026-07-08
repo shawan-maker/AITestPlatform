@@ -19,6 +19,7 @@ from service.core.enums import (
 
 
 class ApiDependencyGroup(models.Model):
+    """API依赖group"""
     id = fields.IntField(pk=True)
     name = fields.CharField(max_length=100)
     project = fields.ForeignKeyField(
@@ -47,10 +48,12 @@ class ApiDependencyGroup(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_dependency_group"
 
 
 class ApiDependency(models.Model):
+    """API依赖"""
     id = fields.IntField(pk=True)
     dependency_group = fields.ForeignKeyField(
         "models.ApiDependencyGroup",
@@ -77,11 +80,13 @@ class ApiDependency(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_dependency"
         unique_together = (("dependency_group_id", "seq"),)
 
 
 class ApiBaseCase(models.Model):
+    """API基础用例"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="api_base_cases", on_delete=fields.CASCADE
@@ -108,10 +113,12 @@ class ApiBaseCase(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_base_case"
 
 
 class ApiTestCase(models.Model):
+    """API测试用例"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="api_test_cases", on_delete=fields.CASCADE
@@ -180,6 +187,7 @@ class ApiTestCase(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_test_case"
         unique_together = (("interface_id", "case_kind", "title"),)
         indexes = (

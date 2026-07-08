@@ -1,9 +1,14 @@
+"""测试环境管理模块 - models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import ConfigType, DbType
 
 
 class EnvCatalog(models.Model):
+    """环境目录"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="env_catalogs", on_delete=fields.CASCADE
@@ -20,11 +25,13 @@ class EnvCatalog(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "env_catalog"
         unique_together = (("project_id", "parent_id", "name"),)
 
 
 class TestEnvironment(models.Model):
+    """测试环境"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="environments", on_delete=fields.CASCADE
@@ -41,12 +48,14 @@ class TestEnvironment(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_environment"
         unique_together = (("project_id", "env_name"),)
         indexes = (("project_id",), ("catalog_id",))
 
 
 class TestEnvironmentConfig(models.Model):
+    """测试环境配置"""
     id = fields.IntField(pk=True)
     environment = fields.ForeignKeyField(
         "models.TestEnvironment", related_name="configs", on_delete=fields.CASCADE
@@ -60,11 +69,13 @@ class TestEnvironmentConfig(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_environment_config"
         unique_together = (("environment_id", "config_group", "name"),)
 
 
 class DbConnection(models.Model):
+    """dbconnection"""
     id = fields.IntField(pk=True)
     connection_name = fields.CharField(max_length=50, unique=True)
     server_name = fields.CharField(max_length=50)
@@ -87,10 +98,12 @@ class DbConnection(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "db_connection"
 
 
 class EnvironmentDbRelation(models.Model):
+    """环境db关联"""
     id = fields.IntField(pk=True)
     environment = fields.ForeignKeyField(
         "models.TestEnvironment",
@@ -105,11 +118,13 @@ class EnvironmentDbRelation(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "environment_db_relation"
         unique_together = (("environment_id", "db_connection_id"),)
 
 
 class DbConnectionTestLog(models.Model):
+    """dbconnection测试log"""
     id = fields.IntField(pk=True)
     db_connection = fields.ForeignKeyField(
         "models.DbConnection",
@@ -127,11 +142,13 @@ class DbConnectionTestLog(models.Model):
     tested_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "db_connection_test_log"
         indexes = (("db_connection_id", "tested_at"),)
 
 
 class EnvFunctionFile(models.Model):
+    """环境函数文件"""
     id = fields.IntField(pk=True)
     file_name = fields.CharField(max_length=100, unique=True)
     source_code = fields.TextField()
@@ -151,10 +168,12 @@ class EnvFunctionFile(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "env_function_file"
 
 
 class EnvironmentFunctionRelation(models.Model):
+    """环境函数关联"""
     id = fields.IntField(pk=True)
     environment = fields.ForeignKeyField(
         "models.TestEnvironment",
@@ -170,11 +189,13 @@ class EnvironmentFunctionRelation(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "environment_function_relation"
         unique_together = (("environment_id", "function_file_id"),)
 
 
 class TestEnvironmentSnapshot(models.Model):
+    """测试环境快照"""
     id = fields.IntField(pk=True)
     environment = fields.ForeignKeyField(
         "models.TestEnvironment", related_name="snapshots", on_delete=fields.CASCADE
@@ -192,11 +213,13 @@ class TestEnvironmentSnapshot(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_environment_snapshot"
         indexes = (("environment_id", "is_active"),)
 
 
 class ProjectGlobalConfig(models.Model):
+    """项目global配置"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="global_configs", on_delete=fields.CASCADE
@@ -209,11 +232,13 @@ class ProjectGlobalConfig(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "project_global_config"
         unique_together = (("project_id", "name"),)
 
 
 class EnvUploadedFile(models.Model):
+    """环境uploaded文件"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="env_uploaded_files", on_delete=fields.CASCADE
@@ -234,4 +259,5 @@ class EnvUploadedFile(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "env_uploaded_file"

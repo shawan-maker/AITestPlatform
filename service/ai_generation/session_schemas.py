@@ -9,6 +9,7 @@ from service.core.enums import GenType, MessageRole, MessageType, SessionStatus,
 
 
 class AIGenerationSessionOut(BaseModel):
+    """generation会话out"""
     id: int
     project_id: int
     module_id: int | None
@@ -24,6 +25,7 @@ class AIGenerationSessionOut(BaseModel):
 
 
 class AIGenerationSessionListItem(BaseModel):
+    """generation会话列表查询item"""
     id: int
     project_id: int
     gen_type: GenType
@@ -34,6 +36,7 @@ class AIGenerationSessionListItem(BaseModel):
 
 
 class AIGenerationMessageOut(BaseModel):
+    """generation消息out"""
     id: int
     session_id: int
     role: MessageRole
@@ -45,12 +48,15 @@ class AIGenerationMessageOut(BaseModel):
 
 
 class AIGenerationPreviewUpdateRequest(BaseModel):
+    """generationpreview更新请求"""
     output_payload: dict[str, Any]
 
 
 class AgentMessageRequest(BaseModel):
+    """智能体消息请求"""
     content: str
 
 
 class SessionRenameRequest(BaseModel):
+    """会话rename请求"""
     title: str

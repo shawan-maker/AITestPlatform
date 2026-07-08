@@ -22,21 +22,25 @@ GenerationSessionOut = AIGenerationSessionOut
 
 
 class CatalogCreateRequest(BaseModel):
+    """目录创建请求"""
     name: str = Field(..., min_length=1, max_length=100)
     parent_id: int | None = Field(default=None, ge=1)
 
 
 class CatalogUpdateRequest(BaseModel):
+    """目录更新请求"""
     name: str | None = Field(default=None, min_length=1, max_length=100)
     parent_id: int | None = None
 
 
 class CatalogMoveRequest(BaseModel):
+    """目录移动请求"""
     parent_id: int | None = Field(default=None, ge=0, description="0 表示移到根级")
     sort_order: int | None = Field(default=None, ge=0)
 
 
 class CatalogOut(BaseModel):
+    """目录out"""
     id: int
     project_id: int
     parent_id: int | None
@@ -48,11 +52,13 @@ class CatalogOut(BaseModel):
 
 
 class CatalogTreeNode(CatalogOut):
+    """目录treenode"""
     case_count: int = 0
     children: list["CatalogTreeNode"] = Field(default_factory=list)
 
 
 class CaseListQuery(BaseModel):
+    """用例列表查询query"""
     project_id: int = Field(..., ge=1)
     catalog_id: int | None = Field(default=None)
     case_name: str | None = None
@@ -65,6 +71,7 @@ class CaseListQuery(BaseModel):
 
 
 class CaseCreateRequest(BaseModel):
+    """用例创建请求"""
     project_id: int = Field(..., ge=1)
     catalog_id: int = Field(..., ge=1)
     case_name: str = Field(..., min_length=1, max_length=255)
@@ -79,6 +86,7 @@ class CaseCreateRequest(BaseModel):
 
 
 class CaseUpdateRequest(BaseModel):
+    """用例更新请求"""
     catalog_id: int | None = Field(default=None, ge=1)
     case_name: str | None = Field(default=None, min_length=1, max_length=255)
     module_id: int | None = Field(default=None, ge=1)
@@ -94,6 +102,7 @@ class CaseUpdateRequest(BaseModel):
 
 
 class TestPointBrief(BaseModel):
+    """测试pointbrief"""
     id: int
     type: str
     dimension: str
@@ -102,6 +111,7 @@ class TestPointBrief(BaseModel):
 
 
 class CaseBrief(BaseModel):
+    """用例brief"""
     id: int
     project_id: int
     catalog_id: int | None
@@ -122,6 +132,7 @@ class CaseBrief(BaseModel):
 
 
 class CaseDetail(CaseBrief):
+    """用例detail"""
     module_id: int | None
     preconditions: str | None
     test_steps: str | None
@@ -131,11 +142,13 @@ class CaseDetail(CaseBrief):
 
 
 class CaseReorderRequest(BaseModel):
+    """用例reorder请求"""
     catalog_id: int | None = Field(default=None, ge=1)
     ordered_ids: list[int] = Field(..., min_length=1)
 
 
 class CaseBatchUpdateRequest(BaseModel):
+    """用例批量操作更新请求"""
     case_ids: list[int] = Field(..., min_length=1)
     case_category: CaseCategory | None = None
     priority: int | None = Field(default=None, ge=1, le=4)
@@ -149,25 +162,30 @@ class CaseBatchUpdateRequest(BaseModel):
 
 
 class CaseBatchDeleteRequest(BaseModel):
+    """用例批量操作删除请求"""
     case_ids: list[int] = Field(..., min_length=1)
 
 
 class CaseBatchMoveRequest(BaseModel):
+    """用例批量操作移动请求"""
     case_ids: list[int] = Field(..., min_length=1)
     target_catalog_id: int = Field(..., ge=1)
 
 
 class CaseBatchCopyRequest(BaseModel):
+    """用例批量操作复制请求"""
     case_ids: list[int] = Field(..., min_length=1)
     target_catalog_id: int = Field(..., ge=1)
 
 
 class BatchOperationFailure(BaseModel):
+    """批量操作operationfailure"""
     case_id: int
     reason: str
 
 
 class CaseBatchResult(BaseModel):
+    """用例批量操作结果"""
     success_count: int
     failures: list[BatchOperationFailure] = Field(default_factory=list)
 
@@ -176,6 +194,7 @@ PaginatedCases = Paginated[CaseBrief]
 
 
 class GenerationSessionCreateRequest(BaseModel):
+    """generation会话创建请求"""
     project_id: int = Field(..., ge=1)
     knowledge_document_id: int | None = Field(default=None, ge=1)
     user_prompt: str | None = None
@@ -184,10 +203,12 @@ class GenerationSessionCreateRequest(BaseModel):
 
 
 class GenerationSaveRequest(BaseModel):
+    """generation保存请求"""
     catalog_id: int = Field(..., ge=1)
     case_indexes: list[int] = Field(..., min_length=1)
 
 
 class GenerationSaveResult(BaseModel):
+    """generation保存结果"""
     created_case_ids: list[int] = Field(default_factory=list)
     created_test_point_ids: list[int] = Field(default_factory=list)

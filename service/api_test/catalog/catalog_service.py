@@ -1,3 +1,7 @@
+"""接口测试模块 - catalog/catalog_service
+
+业务逻辑服务
+"""
 from service.api_test.catalog.schemas import (
     CatalogCreateRequest,
     CatalogMoveRequest,
@@ -12,6 +16,7 @@ from service.user.models import User
 
 
 class CatalogService:
+    """目录服务"""
     MAX_LEVEL = 5
 
     @classmethod

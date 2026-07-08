@@ -1,0 +1,38 @@
+# ============================================================================
+# AITestPlatform 后端 Dockerfile
+# 构建: docker build -f deploy/Dockerfile.backend -t aitestplatform-backend .
+# ============================================================================
+FROM python:3.11-slim AS base
+
+WORKDIR /app
+
+# 系统依赖（mysql-client 用于 export/import 脚本）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    default-libmysqlclient-dev \
+    pkg-config \
+    default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# 先复制依赖文件，利用 Docker 缓存
+COPY requirements-service.txt .
+RUN pip install --no-cache-dir -r requirements-service.txt
+
+# 复制项目代码
+COPY . .
+
+# 创建运行时数据目录（知识库、测试文件等）
+RUN mkdir -p data/rag/document data/rag/parsed data/rag/temp/tiktoken \
+    data/rag/rag_storage data/rag/output data/test_files data/test_data
+
+# 环境变量默认值
+ENV BACKEND_HOST=0.0.0.0
+ENV BACKEND_PORT=8000
+ENV LOG_FILE=""
+ENV CORS_ORIGINS=""
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+# 启动命令
+CMD ["python", "main.py"]

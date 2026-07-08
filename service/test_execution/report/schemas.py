@@ -1,3 +1,7 @@
+"""测试执行模块 - report/schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -6,6 +10,7 @@ from service.core.enums import CaseRunStatus, DefectSeverity, RunStatus
 
 
 class ReportSummaryOut(BaseModel):
+    """报告summaryout"""
     total: int
     passed: int
     failed: int
@@ -20,11 +25,13 @@ class ReportSummaryOut(BaseModel):
 
 
 class DefectSeverityChart(BaseModel):
+    """缺陷严重程度chart"""
     severity: DefectSeverity
     count: int
 
 
 class CaseRunDetailOut(BaseModel):
+    """用例执行detailout"""
     id: int
     case_id: int | None
     case_name: str
@@ -42,6 +49,7 @@ class CaseRunDetailOut(BaseModel):
 
 
 class SuiteReportSection(BaseModel):
+    """套件报告section"""
     suite_run_id: int
     suite_id: int
     suite_name: str
@@ -50,6 +58,7 @@ class SuiteReportSection(BaseModel):
 
 
 class SuiteReportOut(BaseModel):
+    """套件报告out"""
     suite_run_id: int
     suite_name: str
     task_name: str | None = None
@@ -60,6 +69,7 @@ class SuiteReportOut(BaseModel):
 
 
 class TaskReportOut(BaseModel):
+    """任务报告out"""
     task_run_id: int
     task_name: str
     summary: ReportSummaryOut
@@ -68,6 +78,7 @@ class TaskReportOut(BaseModel):
 
 
 class CaseRunLogOut(BaseModel):
+    """用例执行logout"""
     id: int
     case_name: str
     status: CaseRunStatus

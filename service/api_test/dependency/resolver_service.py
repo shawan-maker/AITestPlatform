@@ -1,3 +1,7 @@
+"""接口测试模块 - dependency/resolver_service
+
+业务逻辑服务
+"""
 from service.api_test.dependency.schemas import DependencyResolveResult
 from service.api_test.interface.models import ApiInterface
 from service.api_test.models import ApiDependency, ApiDependencyGroup

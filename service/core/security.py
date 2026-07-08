@@ -5,7 +5,7 @@ from typing import Any, Literal
 import bcrypt
 from jose import JWTError, jwt
 
-from service.core.config import (
+from service.core.settings import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     JWT_ALGORITHM,
     JWT_SECRET_KEY,

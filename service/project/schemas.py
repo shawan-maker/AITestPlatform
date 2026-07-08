@@ -1,3 +1,7 @@
+"""项目管理模块 - schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 from typing import Literal
 
@@ -7,6 +11,7 @@ from service.core.pagination import Paginated
 
 
 class ProjectCreateRequest(BaseModel):
+    """项目创建请求"""
     name: str = Field(..., min_length=1, max_length=100, description="项目名称")
     description: str | None = Field(default=None, max_length=1024, description="项目描述，可为空")
 
@@ -20,6 +25,7 @@ class ProjectCreateRequest(BaseModel):
 
 
 class ProjectUpdateRequest(BaseModel):
+    """项目更新请求"""
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=1024)
 
@@ -41,6 +47,7 @@ class ProjectUpdateRequest(BaseModel):
 
 
 class ProjectListQuery(BaseModel):
+    """项目列表查询query"""
     name: str | None = None
     user_id: int | None = None
     username: str | None = None
@@ -49,38 +56,46 @@ class ProjectListQuery(BaseModel):
 
 
 class ProjectMemberAddRequest(BaseModel):
+    """项目成员添加请求"""
     user_id: int = Field(..., ge=1)
     role: Literal[0, 1] = Field(..., description="0=viewer, 1=editor")
 
 
 class ProjectMemberUpdateRequest(BaseModel):
+    """项目成员更新请求"""
     role: Literal[0, 1, 2] = Field(..., description="0=viewer, 1=editor, 2=admin(SA only)")
 
 
 class ProjectOwnerTransferRequest(BaseModel):
+    """项目ownertransfer请求"""
     new_owner_user_id: int = Field(..., ge=1)
 
 
 class ProjectAdminSetRequest(BaseModel):
+    """项目admin设置请求"""
     user_id: int = Field(..., ge=1)
 
 
 class ProjectBatchDeleteRequest(BaseModel):
+    """项目批量操作删除请求"""
     project_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class ProjectBatchDeleteFailure(BaseModel):
+    """项目批量操作删除failure"""
     project_id: int
     message: str
     blockers: dict[str, int] | None = None
 
 
 class ProjectBatchDeleteResult(BaseModel):
+    """项目批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[ProjectBatchDeleteFailure]
 
 
 class ProjectBrief(BaseModel):
+    """项目brief"""
     id: int
     name: str
     description: str | None
@@ -95,6 +110,7 @@ class ProjectBrief(BaseModel):
 
 
 class PaginatedProjects(BaseModel):
+    """paginatedprojects"""
     total: int
     page: int
     page_size: int
@@ -102,6 +118,7 @@ class PaginatedProjects(BaseModel):
 
 
 class ProjectMemberOut(BaseModel):
+    """项目成员out"""
     user_id: int
     username: str
     email: str
@@ -112,14 +129,17 @@ class ProjectMemberOut(BaseModel):
 
 
 class ProjectDetail(ProjectBrief):
+    """项目detail"""
     members: list[ProjectMemberOut] | None = None
 
 
 class ProjectDeleteBlockers(BaseModel):
+    """项目删除blockers"""
     blockers: dict[str, int]
 
 
 class ProjectModuleCreateRequest(BaseModel):
+    """项目模块创建请求"""
     name: str = Field(..., min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=1024)
 
@@ -133,6 +153,7 @@ class ProjectModuleCreateRequest(BaseModel):
 
 
 class ProjectModuleUpdateRequest(BaseModel):
+    """项目模块更新请求"""
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=1024)
 
@@ -154,6 +175,7 @@ class ProjectModuleUpdateRequest(BaseModel):
 
 
 class ProjectModuleBrief(BaseModel):
+    """项目模块brief"""
     id: int
     project_id: int
     name: str

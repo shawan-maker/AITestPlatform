@@ -1,3 +1,7 @@
+"""AI用例生成模块 - api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends
 
 from service.ai_generation.api_agent_api import router as api_agent_router

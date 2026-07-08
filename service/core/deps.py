@@ -1,7 +1,7 @@
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 
-from service.core.config import API_V1_PREFIX
+from service.core.settings import API_V1_PREFIX
 from service.core.enums import ProjectMemberRole
 from service.core.exceptions import AppException
 from service.core.redis import is_token_revoked, is_user_token_invalidated

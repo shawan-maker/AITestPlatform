@@ -1,3 +1,7 @@
+"""用户管理模块 - service
+
+service
+"""
 from tortoise.expressions import Q
 
 from service.core.exceptions import AppException

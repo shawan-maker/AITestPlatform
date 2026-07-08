@@ -1,3 +1,7 @@
+"""测试执行模块 - run/suite_case_runner
+
+执行器
+"""
 from service.api_test.models import ApiTestCase
 from service.api_test.shared.runner_gateway import RunnerGateway
 from service.core.enums import CaseRunStatus, CaseRunType

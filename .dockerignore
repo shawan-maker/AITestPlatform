@@ -1,0 +1,31 @@
+# 版本控制
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# 前端开发文件（Docker 构建时只需要 dist 产物）
+frontend/node_modules/
+frontend/.env.development
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 测试和文档
+tests/
+service/design/
+*.md
+
+# 本地日志
+logs/
+tests/other/backend_log.txt
+
+# RAG 临时数据
+rag/temp/

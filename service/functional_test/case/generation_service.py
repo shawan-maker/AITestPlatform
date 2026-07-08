@@ -1,3 +1,7 @@
+"""功能测试模块 - case/generation_service
+
+业务逻辑服务
+"""
 import asyncio
 import os
 from datetime import datetime, timezone
@@ -190,7 +194,7 @@ class FunctionalCaseGenerationService:
 
     @staticmethod
     def _invoke_workflow(document_text: str, user_prompt: str | None) -> dict:
-        from workflow.case_generator_workflow import GenerateTestCases
+        from service.ai_engine.workflow.case_generator_workflow import GenerateTestCases
 
         graph = GenerateTestCases().create_workflow()
         config = {"configurable": {"thread_id": "functional-gen"}}

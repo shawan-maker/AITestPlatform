@@ -1,3 +1,7 @@
+"""接口测试模块 - case/case_service
+
+业务逻辑服务
+"""
 from service.api_test.case.schemas import (
     CaseBatchDeleteRequest,
     CaseOut,

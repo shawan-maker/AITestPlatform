@@ -1,3 +1,7 @@
+"""接口测试模块 - case/generation_service
+
+业务逻辑服务
+"""
 import asyncio
 import json
 import logging
@@ -59,6 +63,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class _PreRunResult:
+    """预执行结果"""
     index: int
     api_case: dict
     review_status: ReviewStatus
@@ -67,6 +72,7 @@ class _PreRunResult:
 
 class ApiCaseGenerationService:
     # 防止后台任务被 GC 回收
+    """API用例generation服务"""
     _background_tasks: set = set()
 
     @classmethod
@@ -725,7 +731,7 @@ class ApiCaseGenerationService:
                 "responses": [],
             }
 
-        from utils.parser.api_document_ai_parser import APIDocumentParser
+        from service.ai_engine.parsers.api_document_ai_parser import APIDocumentParser
 
         parsed = APIDocumentParser().api_parser(api_doc_text)
         if not parsed:
@@ -1219,7 +1225,7 @@ class ApiCaseGenerationService:
         precoditions: list[str],
         user_prompt: str | None = None,
     ) -> list[dict]:
-        from workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
+        from service.ai_engine.workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
 
         graph = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         config = {"configurable": {"thread_id": "api-test-gen"}}
@@ -1597,7 +1603,7 @@ class ApiCaseGenerationService:
                 for idx, base in selected_items
             ]
 
-        from workflow.api_case_main_workflow import concurrent_pre_run_base_cases
+        from service.ai_engine.workflow.api_case_main_workflow import concurrent_pre_run_base_cases
 
         indices = [idx for idx, _ in selected_items]
         base_cases = [base for _, base in selected_items]
@@ -1632,7 +1638,7 @@ class ApiCaseGenerationService:
         """
         from service.api_test.models import ApiTestCase
         from service.api_test.shared.runner_gateway import RunnerGateway
-        from config.settings import MAX_BATCH_SIZE
+        from service.core.settings import MAX_BATCH_SIZE
         from service.core.enums import ExecStatus
 
         logger.info("[Phase2] 开始异步并发执行 %d 个用例, max_workers=%d", len(case_ids), MAX_BATCH_SIZE)

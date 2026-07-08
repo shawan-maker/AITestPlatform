@@ -1,6 +1,6 @@
 from tortoise import Tortoise
 
-from service.core.config import TORTOISE_ORM
+from service.core.settings import TORTOISE_ORM
 
 
 async def init_db() -> None:
@@ -12,7 +12,7 @@ async def close_db() -> None:
 
 
 async def generate_schemas() -> None:
-    """仅用于本地快速建表；生产环境请使用 Aerich：python scripts/db_manage.py upgrade"""
+    """仅用于本地快速建表；生产环境请使用 Aerich：python deploy/scripts/db_manage.py upgrade"""
     await Tortoise.generate_schemas()
 
 

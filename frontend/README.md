@@ -11,7 +11,7 @@ Vue 3 + Vite + Element Plus 单页应用（F1a：鉴权 + 全高侧栏 Shell）�
 
 ```bash
 # 后端（仓库根目录）
-python scripts/db_manage.py upgrade
+python deploy/scripts/db_manage.py upgrade
 python main.py
 
 # 前端

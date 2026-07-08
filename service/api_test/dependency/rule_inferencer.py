@@ -1,3 +1,7 @@
+"""接口测试模块 - dependency/rule_inferencer
+
+rule inferencer
+"""
 import re
 from collections import defaultdict
 from typing import Any

@@ -1,3 +1,7 @@
+"""功能测试模块 - case/models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import (
@@ -9,6 +13,7 @@ from service.core.enums import (
 
 
 class FunctionalCaseCatalog(models.Model):
+    """functional用例目录"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="functional_case_catalogs", on_delete=fields.CASCADE
@@ -26,11 +31,13 @@ class FunctionalCaseCatalog(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "functional_case_catalog"
         unique_together = (("project_id", "parent_id", "name"),)
 
 
 class FunctionalTestPoint(models.Model):
+    """functional测试point"""
     id = fields.IntField(pk=True)
     type = fields.CharField(max_length=50)
     dimension = fields.CharField(max_length=100)
@@ -46,10 +53,12 @@ class FunctionalTestPoint(models.Model):
     created_at = fields.DatetimeField(auto_now_add=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "functional_test_point"
 
 
 class FunctionalCase(models.Model):
+    """functional用例"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="functional_cases", on_delete=fields.CASCADE
@@ -106,4 +115,5 @@ class FunctionalCase(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "functional_case"

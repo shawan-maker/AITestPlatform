@@ -1,9 +1,14 @@
+"""接口测试模块 - interface/models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import ApiInterfaceSource
 
 
 class ApiInterfaceCatalog(models.Model):
+    """API接口目录"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="api_interface_catalogs", on_delete=fields.CASCADE
@@ -21,11 +26,13 @@ class ApiInterfaceCatalog(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_interface_catalog"
         unique_together = (("project_id", "parent_id", "name"),)
 
 
 class ApiInterface(models.Model):
+    """API接口"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="api_interfaces", on_delete=fields.CASCADE
@@ -92,6 +99,7 @@ class ApiInterface(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_interface"
         unique_together = (("project_id", "method", "path", "version"),)
         indexes = (
@@ -102,6 +110,7 @@ class ApiInterface(models.Model):
 
 
 class ApiInterfaceDebugTemplate(models.Model):
+    """API接口调试template"""
     id = fields.IntField(pk=True)
     interface = fields.OneToOneField(
         "models.ApiInterface",
@@ -119,4 +128,5 @@ class ApiInterfaceDebugTemplate(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "api_interface_debug_template"

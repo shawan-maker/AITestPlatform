@@ -1,3 +1,7 @@
+"""测试执行模块 - run/progress_service
+
+业务逻辑服务
+"""
 from service.core.enums import RunStatus
 from service.core.exceptions import AppException
 from service.test_execution.models import TestSuiteRun, TestTaskRun

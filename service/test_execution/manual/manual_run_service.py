@@ -1,3 +1,7 @@
+"""测试执行模块 - manual/manual_run_service
+
+业务逻辑服务
+"""
 from datetime import datetime, timezone
 
 from service.core.enums import FunctionalExecResult, RunStatus, TaskSuiteType

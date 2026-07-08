@@ -1,3 +1,7 @@
+"""测试环境管理模块 - variable/snapshot_service
+
+业务逻辑服务
+"""
 from service.core.exceptions import AppException
 from service.test_environment.models import TestEnvironment, TestEnvironmentSnapshot
 from service.test_environment.permissions import ensure_project_editor, ensure_project_viewer

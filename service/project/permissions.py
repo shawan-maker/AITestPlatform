@@ -1,3 +1,7 @@
+"""项目管理模块 - permissions
+
+权限校验
+"""
 from service.core.deps import require_project_editor, require_project_viewer
 from service.core.enums import ProjectMemberRole
 from service.core.exceptions import AppException

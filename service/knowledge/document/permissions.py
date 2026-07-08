@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/permissions
+
+权限校验
+"""
 from service.core.deps import get_project_or_404
 from service.core.exceptions import AppException
 from service.knowledge.document.models import KnowledgeDocument

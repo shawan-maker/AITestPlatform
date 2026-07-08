@@ -1,3 +1,7 @@
+"""测试环境管理模块 - permissions
+
+权限校验
+"""
 from service.core.enums import ProjectMemberRole
 from service.core.exceptions import AppException
 from service.project.models import ProjectMember

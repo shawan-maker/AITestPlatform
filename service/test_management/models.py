@@ -1,9 +1,14 @@
+"""测试管理模块 - models
+
+数据模型定义
+"""
 from tortoise import fields, models
 
 from service.core.enums import RunMode, RunStatus, SuiteCaseType, TaskSuiteType
 
 
 class TestTask(models.Model):
+    """测试任务"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="test_tasks", on_delete=fields.CASCADE
@@ -35,11 +40,13 @@ class TestTask(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_task"
         unique_together = (("project_id", "task_name"),)
 
 
 class TestSuite(models.Model):
+    """测试套件"""
     id = fields.IntField(pk=True)
     project = fields.ForeignKeyField(
         "models.Project", related_name="test_suites", on_delete=fields.CASCADE
@@ -70,11 +77,13 @@ class TestSuite(models.Model):
     updated_at = fields.DatetimeField(auto_now=True, precision=6)
 
     class Meta:
+        """meta"""
         table = "test_suite"
         unique_together = (("project_id", "suite_name"),)
 
 
 class SuiteCaseRelation(models.Model):
+    """套件用例关联"""
     id = fields.IntField(pk=True)
     suite = fields.ForeignKeyField(
         "models.TestSuite", related_name="case_relations", on_delete=fields.CASCADE
@@ -85,11 +94,13 @@ class SuiteCaseRelation(models.Model):
     use_dependency = fields.BooleanField(default=True)
 
     class Meta:
+        """meta"""
         table = "suite_case_relation"
         unique_together = (("suite_id", "case_type", "case_id"),)
 
 
 class TaskSuiteRelation(models.Model):
+    """任务套件关联"""
     id = fields.IntField(pk=True)
     task = fields.ForeignKeyField(
         "models.TestTask", related_name="suite_relations", on_delete=fields.CASCADE
@@ -100,11 +111,13 @@ class TaskSuiteRelation(models.Model):
     suite_order = fields.IntField()
 
     class Meta:
+        """meta"""
         table = "task_suite_relation"
         unique_together = (("task_id", "suite_id"),)
 
 
 class TaskCaseRelation(models.Model):
+    """任务用例关联"""
     id = fields.IntField(pk=True)
     task = fields.ForeignKeyField(
         "models.TestTask", related_name="case_relations", on_delete=fields.CASCADE
@@ -114,5 +127,6 @@ class TaskCaseRelation(models.Model):
     case_order = fields.IntField()
 
     class Meta:
+        """meta"""
         table = "task_case_relation"
         unique_together = (("task_id", "case_type", "case_id"),)

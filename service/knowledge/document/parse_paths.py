@@ -1,6 +1,10 @@
+"""知识库管理模块 - document/parse_paths
+
+parse paths
+"""
 from pathlib import Path
 
-from service.core.config import BASE_DIR
+from service.core.settings import BASE_DIR
 
 
 def resolve_storage_file_path(relative_path: str | None) -> Path | None:

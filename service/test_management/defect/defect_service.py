@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/defect_service
+
+业务逻辑服务
+"""
 from __future__ import annotations
 
 from service.core.enums import DefectHistoryAction, DefectStatus

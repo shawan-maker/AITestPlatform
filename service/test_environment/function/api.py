@@ -1,3 +1,7 @@
+"""测试环境管理模块 - function/api
+
+API 路由端点
+"""
 from fastapi import APIRouter, Depends, Query
 
 from service.core.deps import get_current_active_user, require_environment_editor

@@ -1,3 +1,7 @@
+"""测试执行模块 - run/history_service
+
+业务逻辑服务
+"""
 from service.core.pagination import paginate
 from service.test_execution.models import TestSuiteRun, TestTaskRun
 from service.test_execution.run.schemas import PaginatedRunHistory, RunHistoryItem

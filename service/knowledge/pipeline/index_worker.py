@@ -1,10 +1,14 @@
+"""知识库管理模块 - pipeline/index_worker
+
+工作器
+"""
 import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from service.core.config import BASE_DIR, KNOWLEDGE_PARSE_ROOT
+from service.core.settings import BASE_DIR, KNOWLEDGE_PARSE_ROOT
 from service.core.enums import (
     ActualParseRoute,
     IndexStatus,
@@ -18,9 +22,9 @@ from service.knowledge.document.parse_enrich import merge_raw_with_display
 from service.knowledge.pipeline.rag_gateway import RagGateway
 from service.knowledge.rules.file_rules import detect_api_spec_kind
 from service.knowledge.rules.parse_router import resolve_parse_route
-from utils.parser.openapi_document_parser import parse_openapi_file
-from utils.parser.swagger_document_parser import parse_swagger_file
-from utils.parser.api_document_ai_parser import APIDocumentParser
+from service.ai_engine.parsers.openapi_document_parser import parse_openapi_file
+from service.ai_engine.parsers.swagger_document_parser import parse_swagger_file
+from service.ai_engine.parsers.api_document_ai_parser import APIDocumentParser
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ _TIMEOUT_MINUTES = 10
 
 
 class IndexWorker:
+    """index工作器"""
     _tasks: set[asyncio.Task] = set()
 
     @classmethod

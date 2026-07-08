@@ -1,3 +1,7 @@
+"""测试管理模块 - defect/assignee_validator
+
+assignee validator
+"""
 from service.core.exceptions import AppException
 from service.project.models import ProjectMember
 from service.user.models import User

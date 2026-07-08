@@ -1,3 +1,7 @@
+"""测试执行模块 - shared/env_snapshot_helper
+
+env snapshot helper
+"""
 from service.test_environment.variable.snapshot_service import SnapshotService
 from service.test_environment.models import TestEnvironmentSnapshot
 

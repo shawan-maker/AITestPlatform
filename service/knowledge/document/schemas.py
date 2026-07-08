@@ -1,3 +1,7 @@
+"""知识库管理模块 - document/schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 
 from pydantic import BaseModel, Field
@@ -7,6 +11,7 @@ from service.core.pagination import Paginated
 
 
 class KnowledgeDocumentListQuery(BaseModel):
+    """knowledge文档列表查询query"""
     project_id: int | None = Field(default=None, ge=1)
     title: str | None = None
     project_name: str | None = None
@@ -18,6 +23,7 @@ class KnowledgeDocumentListQuery(BaseModel):
 
 
 class KnowledgeVersionBrief(BaseModel):
+    """knowledge版本brief"""
     id: int
     document_id: int
     version_label: str
@@ -35,6 +41,7 @@ class KnowledgeVersionBrief(BaseModel):
 
 
 class KnowledgeDocumentBrief(BaseModel):
+    """knowledge文档brief"""
     id: int
     project_id: int
     project_name: str
@@ -54,6 +61,7 @@ class KnowledgeDocumentBrief(BaseModel):
 
 
 class ParsedInterfaceItem(BaseModel):
+    """parsed接口item"""
     method: str
     path: str
     summary: str | None = None
@@ -62,6 +70,7 @@ class ParsedInterfaceItem(BaseModel):
 
 
 class KnowledgeDocumentDetail(KnowledgeDocumentBrief):
+    """knowledge文档detail"""
     workspace_id: int
     current_version: KnowledgeVersionBrief | None
     created_at: datetime
@@ -73,20 +82,24 @@ PaginatedKnowledgeVersions = Paginated[KnowledgeVersionBrief]
 
 
 class ParsedInterfaceListResult(BaseModel):
+    """parsed接口列表查询结果"""
     document_id: int
     version_id: int
     items: list[ParsedInterfaceItem]
 
 
 class DocumentBatchDeleteRequest(BaseModel):
+    """文档批量操作删除请求"""
     document_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class DocumentBatchDeleteFailure(BaseModel):
+    """文档批量操作删除failure"""
     document_id: int
     message: str
 
 
 class DocumentBatchDeleteResult(BaseModel):
+    """文档批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[DocumentBatchDeleteFailure]

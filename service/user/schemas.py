@@ -1,9 +1,14 @@
+"""用户管理模块 - schemas
+
+请求/响应 Schema 定义
+"""
 from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class UserRegisterRequest(BaseModel):
+    """用户注册请求"""
     username: str = Field(..., min_length=1, max_length=50, description="用户名")
     email: EmailStr = Field(..., description="邮箱")
     password: str = Field(..., min_length=6, max_length=18, description="密码，6-18 位")
@@ -17,14 +22,17 @@ class UserRegisterRequest(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
+    """刷新令牌请求"""
     refresh_token: str = Field(..., min_length=1, description="Refresh Token")
 
 
 class LogoutRequest(BaseModel):
+    """登出请求"""
     refresh_token: str | None = Field(default=None, description="可选，一并撤销 Refresh Token")
 
 
 class TokenData(BaseModel):
+    """令牌data"""
     access_token: str
     refresh_token: str | None = None
     token_type: str = "bearer"
@@ -32,6 +40,7 @@ class TokenData(BaseModel):
 
 
 class UserBrief(BaseModel):
+    """用户brief"""
     id: int
     username: str
     email: str
@@ -43,11 +52,13 @@ class UserBrief(BaseModel):
 
 
 class VerifyTokenData(BaseModel):
+    """验证令牌data"""
     valid: bool = True
     user: UserBrief
 
 
 class UserCreateByAdminRequest(BaseModel):
+    """用户创建byadmin请求"""
     username: str = Field(..., min_length=1, max_length=50)
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=18)
@@ -63,10 +74,12 @@ class UserCreateByAdminRequest(BaseModel):
 
 
 class UserStatusUpdateRequest(BaseModel):
+    """用户状态更新请求"""
     is_active: bool
 
 
 class UserListQuery(BaseModel):
+    """用户列表查询query"""
     username: str | None = None
     email: str | None = None
     project_name: str | None = None
@@ -79,6 +92,7 @@ class UserListQuery(BaseModel):
 
 
 class UserProjectMembership(BaseModel):
+    """用户项目membership"""
     project_id: int
     project_name: str
     role: int
@@ -86,6 +100,7 @@ class UserProjectMembership(BaseModel):
 
 
 class UserDetail(BaseModel):
+    """用户detail"""
     id: int
     username: str
     email: str
@@ -99,6 +114,7 @@ class UserDetail(BaseModel):
 
 
 class PaginatedUsers(BaseModel):
+    """paginatedusers"""
     total: int
     page: int
     page_size: int
@@ -106,12 +122,14 @@ class PaginatedUsers(BaseModel):
 
 
 class UserLookupBrief(BaseModel):
+    """用户lookupbrief"""
     id: int
     username: str
     email: str
 
 
 class PaginatedUserLookup(BaseModel):
+    """paginated用户lookup"""
     total: int
     page: int
     page_size: int
@@ -119,6 +137,7 @@ class PaginatedUserLookup(BaseModel):
 
 
 class ChangeOwnPasswordRequest(BaseModel):
+    """changeown密码请求"""
     old_password: str = Field(..., min_length=6, max_length=18)
     new_password: str = Field(..., min_length=6, max_length=18)
     verify_password: str = Field(..., min_length=6, max_length=18)
@@ -131,6 +150,7 @@ class ChangeOwnPasswordRequest(BaseModel):
 
 
 class AdminResetPasswordRequest(BaseModel):
+    """admin重置密码请求"""
     new_password: str = Field(..., min_length=6, max_length=18)
     verify_password: str = Field(..., min_length=6, max_length=18)
 
@@ -142,14 +162,17 @@ class AdminResetPasswordRequest(BaseModel):
 
 
 class UserBatchDeleteRequest(BaseModel):
+    """用户批量操作删除请求"""
     user_ids: list[int] = Field(..., min_length=1, max_length=50)
 
 
 class UserBatchDeleteFailure(BaseModel):
+    """用户批量操作删除failure"""
     user_id: int
     message: str
 
 
 class UserBatchDeleteResult(BaseModel):
+    """用户批量操作删除结果"""
     deleted_ids: list[int]
     failures: list[UserBatchDeleteFailure]

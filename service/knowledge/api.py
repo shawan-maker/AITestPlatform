@@ -1,3 +1,7 @@
+"""知识库管理模块 - api
+
+API 路由端点
+"""
 from fastapi import APIRouter
 
 from service.knowledge.document.document_api import router as document_router
