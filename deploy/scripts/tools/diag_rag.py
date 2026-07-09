@@ -28,14 +28,16 @@ async def main() -> None:
     test_file.write_text("# hello\nworld", encoding="utf-8")
 
     try:
-        backend, doc_id = await RagGateway.index_text(
+        backend, doc_id = await RagGateway.submit_text(
             workspace_key="_diag_test",
             absolute_path=str(test_file),
             doc_id="diag/1",
         )
-        print("index_text OK:", backend, doc_id)
+        print("submit_text OK:", backend, doc_id)
+        await RagGateway.wait_indexing(doc_id, "_diag_test")
+        print("wait_indexing OK")
     except Exception as exc:
-        print("index_text FAIL:", type(exc).__name__, exc)
+        print("RAG FAIL:", type(exc).__name__, exc)
         traceback.print_exc()
 
 

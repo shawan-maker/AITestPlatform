@@ -160,21 +160,28 @@ class IndexWorker:
 
         doc_id = f"knowledge/{document.id}/{version.id}"
         try:
+            # Step 1: 提交文档到 RAG（不等待索引完成）
             if route == ActualParseRoute.ai_multimodal:
-                rag_backend, rag_doc_id = await RagGateway.index_multimodal(
+                rag_backend, rag_doc_id = await RagGateway.submit_multimodal(
                     workspace_key=workspace.workspace_key,
                     absolute_path=abs_path,
                     doc_id=doc_id,
                 )
             else:
-                rag_backend, rag_doc_id = await RagGateway.index_text(
+                rag_backend, rag_doc_id = await RagGateway.submit_text(
                     workspace_key=workspace.workspace_key,
                     absolute_path=abs_path,
                     doc_id=doc_id,
                 )
 
+            # Step 2: 立即保存 rag_doc_id（即使后续等待失败，删除时也能清理）
             version.rag_backend = rag_backend
             version.rag_doc_id = rag_doc_id
+            await version.save(update_fields=["rag_backend", "rag_doc_id"])
+
+            # Step 3: 等待索引完成
+            await RagGateway.wait_indexing(rag_doc_id, workspace.workspace_key)
+
             version.index_status = IndexStatus.indexed
             version.indexed_at = datetime.now(timezone.utc)
             version.index_error = None

@@ -118,10 +118,20 @@ class RAGClient:
         )
         resp.raise_for_status()
         data = resp.json()
+
+        # LightRAG 按 file_source 或内容 hash 去重时返回 duplicated，HTTP 仍为 200
+        if data.get("status") == "duplicated":
+            raise RuntimeError(
+                f"LightRAG 文档重复: {data.get('message', '')}"
+            )
+
         return str(data.get("doc_id") or file_source)
 
     def get_doc_status(self, doc_id: str, workspace_key: str | None = None) -> str:
         """Query LightRAG for the indexing status of a document.
+
+        LightRAG 的 GET /documents 返回的 id 是内部 content hash，
+        与我们的 file_source 不同，因此按 file_path 字段匹配。
 
         Returns one of: "processed", "processing", "error", "not_found".
         """
@@ -137,7 +147,7 @@ class RAGClient:
             for status, docs in statuses.items():
                 if isinstance(docs, list):
                     for d in docs:
-                        if d.get("id") == doc_id:
+                        if d.get("file_path") == doc_id:
                             return status
             return "not_found"
         except Exception:
@@ -184,3 +194,37 @@ class RAGClient:
             timeout=self.timeout,
         )
         resp.raise_for_status()
+
+    def delete_by_file_sources(
+        self,
+        file_sources: list[str],
+        workspace_key: str | None = None,
+    ) -> None:
+        """按 file_path 查找 LightRAG 内部 ID 后删除。
+
+        LightRAG 的 DELETE /documents 只接受内部 hash ID，
+        而我们的 rag_doc_id 存储的是 file_source，
+        所以需要先查 GET /documents 找到映射关系再调用删除。
+        """
+        if not file_sources:
+            return
+
+        # 1. 查询所有文档，按 file_path 收集内部 ID
+        resp = requests.get(
+            f"{self.url}/documents",
+            headers=self._workspace_headers(workspace_key),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        ids_to_delete = []
+        for status, docs in data.get("statuses", {}).items():
+            if isinstance(docs, list):
+                for d in docs:
+                    if d.get("file_path") in file_sources:
+                        ids_to_delete.append(d["id"])
+
+        # 2. 用内部 ID 调用删除
+        if ids_to_delete:
+            self.delete_documents(ids_to_delete, workspace_key)

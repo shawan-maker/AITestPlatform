@@ -54,13 +54,14 @@ class RagGateway:
         return manager
 
     @classmethod
-    async def index_text(
+    async def submit_text(
         cls,
         *,
         workspace_key: str,
         absolute_path: str,
         doc_id: str,
     ) -> tuple[RagBackend, str]:
+        """提交文本到 RAG，返回 (backend, rag_doc_id)。不等待索引完成。"""
         if cls.is_remote_available():
             text = await asyncio.to_thread(
                 Path(absolute_path).read_text, encoding="utf-8"
@@ -71,8 +72,6 @@ class RagGateway:
                 doc_id,
                 workspace_key,
             )
-            # 远程 LightRAG 异步索引，轮询等待完成
-            await cls._wait_remote_indexing(rag_doc_id, workspace_key)
             return RagBackend.rag_client, rag_doc_id
         logger.info("RAGManager.index_text 开始 path=%s", absolute_path)
         manager = await cls._get_manager(workspace_key)
@@ -81,7 +80,7 @@ class RagGateway:
         return RagBackend.rag_manager, absolute_path
 
     @classmethod
-    async def _wait_remote_indexing(
+    async def wait_indexing(
         cls,
         rag_doc_id: str,
         workspace_key: str,
@@ -93,7 +92,10 @@ class RagGateway:
 
         Raises TimeoutError if indexing takes too long,
         or RuntimeError if the server reports an error.
+        本地 RAGManager 模式为同步处理，无需轮询，直接返回。
         """
+        if not cls.is_remote_available():
+            return
         import time
         start = time.monotonic()
         while True:
@@ -104,7 +106,7 @@ class RagGateway:
 
             if status == "processed":
                 return
-            if status == "error":
+            if status in ("error", "failed"):
                 raise RuntimeError(f"LightRAG 索引失败: doc_id={rag_doc_id}")
 
             elapsed = time.monotonic() - start
@@ -116,21 +118,20 @@ class RagGateway:
             await asyncio.sleep(poll_interval)
 
     @classmethod
-    async def index_multimodal(
+    async def submit_multimodal(
         cls,
         *,
         workspace_key: str,
         absolute_path: str,
         doc_id: str,
     ) -> tuple[RagBackend, str]:
+        """提交多模态文档到 RAG，返回 (backend, rag_doc_id)。不等待索引完成。"""
         if cls.is_remote_available():
             rag_doc_id = await asyncio.to_thread(
                 cls._get_client().upload_document,
                 absolute_path,
                 workspace_key,
             )
-            # 远程 LightRAG 异步索引，轮询等待完成
-            await cls._wait_remote_indexing(rag_doc_id, workspace_key)
             return RagBackend.rag_client, rag_doc_id
         logger.info("RAGManager.index_multimodal 开始 path=%s", absolute_path)
         manager = await cls._get_manager(workspace_key)
@@ -150,8 +151,9 @@ class RagGateway:
             return
         try:
             if rag_backend == RagBackend.rag_client and cls.is_remote_available():
+                # 按 file_source 查找 LightRAG 内部 hash ID 后删除
                 await asyncio.to_thread(
-                    cls._get_client().delete_documents,
+                    cls._get_client().delete_by_file_sources,
                     [rag_doc_id],
                     workspace_key,
                 )
@@ -160,7 +162,7 @@ class RagGateway:
                 manager = await cls._get_manager(workspace_key)
                 await manager.delete_document(rag_doc_id)
         except Exception:
-            return
+            logger.warning("RAG 删除失败 doc_id=%s", rag_doc_id, exc_info=True)
 
     @classmethod
     async def query(cls, workspace_key: str, question: str) -> str:

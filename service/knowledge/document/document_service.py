@@ -8,7 +8,7 @@ from tortoise.expressions import Q
 
 from service.core.settings import MAX_UPLOAD_BYTES
 from service.core.deps import get_project_or_404
-from service.core.enums import IndexStatus, KnowledgeDocType
+from service.core.enums import IndexStatus, KnowledgeDocType, RagBackend
 from service.core.exceptions import AppException
 from service.core.pagination import paginate
 from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocumentVersion
@@ -212,11 +212,24 @@ class DocumentService:
         versions = await KnowledgeDocumentVersion.filter(document_id=document.id)
         for version in versions:
             if version.rag_doc_id and version.rag_backend:
+                # 正常路径：有 doc_id，直接删
                 await RagGateway.delete(
                     workspace_key=workspace.workspace_key,
                     rag_doc_id=version.rag_doc_id,
                     rag_backend=version.rag_backend,
                 )
+            else:
+                # 兜底：历史数据 rag_doc_id 可能为空（旧版索引失败未保存），
+                # 用约定的 doc_id 格式尝试清理 LightRAG 残留
+                fallback_doc_id = f"knowledge/{document.id}/{version.id}"
+                try:
+                    await RagGateway.delete(
+                        workspace_key=workspace.workspace_key,
+                        rag_doc_id=fallback_doc_id,
+                        rag_backend=RagBackend.rag_client,
+                    )
+                except Exception:
+                    pass
             KnowledgeStorage.delete_file(version.file_path)
         await document.delete()
 
