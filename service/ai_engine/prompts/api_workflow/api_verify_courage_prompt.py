@@ -76,6 +76,7 @@ api_coverage_check_prompt = PromptTemplate.from_template(
    - ...
 ---
 {user_prompt_section}
+{language_overlay}
 """
 )
 

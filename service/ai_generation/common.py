@@ -10,12 +10,14 @@ from service.knowledge.document.models import KnowledgeDocument, KnowledgeDocume
 from service.knowledge.document.storage import KnowledgeStorage
 
 
-def format_user_prompt_section(user_prompt: str | None) -> str:
+def format_user_prompt_section(user_prompt: str | None, language: str = "zh") -> str:
     """Return formatted user prompt text for injection into LLM prompt.
     When empty, returns a clear "no additional requirements" indicator.
     When present, returns the user's raw text (template already has the section header).
     """
     if not user_prompt or not user_prompt.strip():
+        if language == "en":
+            return "(No additional requirements, generate with default rules)"
         return "（无附加要求，按默认规则生成）"
     return user_prompt.strip()
 
@@ -42,12 +44,28 @@ def api_test_gen_use_mock() -> bool:
 LLM_NOT_CONFIGURED_MSG = "未配置 LLM_BINDING_API_KEY，无法执行 AI 生成"
 
 
-SESSION_TITLE_PROMPT = """请根据以下对话的第一条用户消息，用不超过15个中文汉字概括该对话的主题。
+SESSION_TITLE_PROMPT_ZH = """请根据以下对话的第一条用户消息，用不超过15个中文汉字概括该对话的主题。
 仅输出概括文字，不要任何解释或标点。
 
 用户消息：{user_first_message}
 
 概括："""
+
+SESSION_TITLE_PROMPT_EN = """Based on the first user message of the following conversation, summarize the topic in no more than 10 English words.
+Output only the summary text, no explanations or punctuation.
+
+User message: {user_first_message}
+
+Summary:"""
+
+SESSION_TITLE_PROMPT = SESSION_TITLE_PROMPT_ZH  # backward-compatible alias
+
+
+def get_session_title_prompt(language: str = "zh") -> str:
+    """根据语言返回会话标题生成 prompt。"""
+    if language == "en":
+        return SESSION_TITLE_PROMPT_EN
+    return SESSION_TITLE_PROMPT_ZH
 
 
 def compute_prompt_hash(source_text: str, user_prompt: str | None) -> str:

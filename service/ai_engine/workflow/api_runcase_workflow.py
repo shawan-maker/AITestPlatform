@@ -33,6 +33,7 @@ from service.ai_generation.common import build_default_additional_info
 from service.ai_engine.shared.get_script_function_list import get_module_functions
 from service.ai_engine.shared.get_test_file_list import inspect_env_data
 from service.ai_engine.parsers.api_document_ai_parser import safe_structure_parser, _convert_to_serializable
+from service.ai_engine.shared.messages import msg, lang_from_overlay
 
 from ApiEngine.core import TestRunner
 
@@ -56,6 +57,7 @@ class APIState(TypedDict):
     review_status: str # 生成的用例是否可执行
     generator_count: int # 生成用例的次数
     skip_execution: bool  # 为 True 时跳过执行阶段，仅做结构化
+    language_overlay: str  # 语言覆盖指令
 
 
 def _resolve_test_env_data(state: APIState) -> dict:
@@ -131,29 +133,18 @@ class APIRuncaseGeneratorWorkflow:
     def get_test_env_data(self,state:APIState):
         """获取测试环境数据(测试数据、工具函数、测试文件、前置依赖接口)"""
         writer = get_stream_writer()
-        writer("【开始执行节点】 1、获取测试环境数据(测试数据、工具函数、测试文件、前置依赖接口)")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("run_wf.node1_start", _lang))
         test_env_data = _resolve_test_env_data(state)
         # 1、获取测试数据
         test_data = test_env_data.get("envs")
-        writer(f"获取的测试数据包括：{test_data}")
         # 2、获取自定义的工具函数
         function_list = get_module_functions(test_env_data.get("global_func"))
-        writer(f"获取的工具函数包括：{function_list}")
         # 3、获取测试文件
         test_files = inspect_env_data(test_env_data)
-        writer(f"获取的测试文件包括：{test_files}")
         # 4、获取前置依赖接口
-        # sql = 'SELECT * from api_interface WHERE project=%s AND summary IN %s'
-        # base_case = state.get("base_case")
-        # dependencies = base_case.get('dependencies', [])
-        # with SQLDB() as db:
-        #     db.cursor.execute(sql, (state.get('project'), dependencies))
-        #     precoditions_api_doc = db.cursor.fetchall()
-        #     precoditions_api_doc = [] if precoditions_api_doc is None else precoditions_api_doc
-        #     print("前置依赖接口数据如下：", other_api)
         precoditions_api_doc = state.get("precoditions_api_doc") or []
-        writer(f"获取的前置依赖接口包括：{precoditions_api_doc}")
-        writer("【执行节点结束】 1、获取测试环境数据(测试数据、工具函数、测试文件、前置依赖接口)")
+        writer(msg("run_wf.node1_end", _lang))
         # 5、返回测试环境数据
         return {
             "test_data": test_data,
@@ -167,7 +158,8 @@ class APIRuncaseGeneratorWorkflow:
         """结构化接口用例生成"""
         # 1、获取API接口文档和对应的依赖接口
         writer = get_stream_writer()
-        writer("【开始执行节点】 2、生成可运行的api结构化测试用例")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("run_wf.node2_start", _lang))
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=APIruncaseModel)
         resp = safe_structure_parser(api_runcase_generator_prompt,llm,parser,
@@ -178,23 +170,18 @@ class APIRuncaseGeneratorWorkflow:
                                      'test_data':state.get("test_data"),
                                      'test_files':state.get("test_files"),
                                      'function_list':state.get("function_list"),
-                                     'additional_info': state.get("additional_info")
+                                     'additional_info': state.get("additional_info"),
+                                     'language_overlay': state.get("language_overlay", ""),
                                       })
         # ★ 归一化：确保 api_case 始终为单个 dict
-        # LLM 可能输出 [{...}]（list）或 {...}（dict），统一提取为单个 dict
         if isinstance(resp, list):
             if len(resp) > 0:
-                resp = resp[0]   # 取第一条
-                writer(f"LLM 生成了列表格式，已取第一条用例：{resp.get('title')}")
+                resp = resp[0]
             else:
                 resp = None
-                writer("⚠️ LLM 返回了空列表")
-        elif isinstance(resp, dict):
-            writer(f"LLM 生成了单条用例：{resp.get('title')}")
-        else:
+        elif not isinstance(resp, dict):
             resp = None
-            writer(f"⚠️ LLM 返回类型异常：{type(resp)}")
-        writer("【执行节点完成】 2、生成可运行的api结构化测试用例")
+        writer(msg("run_wf.node2_done", _lang))
         # ★ 根据接口文档修正 AI 生成的前置步骤 Content-Type / body 字段
         if isinstance(resp, dict):
             _pre_list = resp.get("preconditions")
@@ -214,23 +201,17 @@ class APIRuncaseGeneratorWorkflow:
     def api_case_run(self, state: APIState):
         """执行生成的结构化接口用例"""
         writer = get_stream_writer()
-        writer("【开始执行节点】 3、执行生成的结构化接口用例")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("run_wf.node3_start", _lang))
         api_case_raw  = state.get("api_case")
         test_env_data = _resolve_test_env_data(state)
         result = {}
         # 1、将生成的可执行用例格式（List），转换成测试引擎可执行的用例格式（dict)
         runner_api_case = None
-        # ★★★ 关键修复：从 list 中提取可执行的用例（safe_structure_parser返回的数据都是List格式） ★★★
         if isinstance(api_case_raw, list) and len(api_case_raw) > 0:
-            # 取出第一条用例（单条用例格式）
             runner_api_case = api_case_raw[0]
-            writer(f"提取的待执行用例：{runner_api_case.get('title')}")
         elif isinstance(api_case_raw, dict):
-            # 如果已经是 dict 格式，直接使用
             runner_api_case = api_case_raw
-            writer(f"直接使用的用例：{runner_api_case.get('title')}")
-        else:
-            writer("⚠️ api_case 为空或格式异常")
         # 2、调用接口执行引擎执行用例
         if runner_api_case:
             try:
@@ -254,7 +235,7 @@ class APIRuncaseGeneratorWorkflow:
         review_status = result.get("state") or result.get("status", "init")
         writer(f"执行的结果为：{result},可执行状态：{review_status},已执行次数：{generator_count}")
         # 2、返回执行结果
-        writer("【执行节点完成】 3、执行生成的结构化接口用例")
+        writer(msg("run_wf.node3_done", lang_from_overlay(state.get("language_overlay", ""))))
         return {"api_case_run_result": result,"review_status": review_status,"generator_count": generator_count}
 
     # 4、重新生成可执行的结构化接口用例
@@ -262,7 +243,7 @@ class APIRuncaseGeneratorWorkflow:
         """重新生成可执行的结构化接口用例"""
         # 1、获取API接口文档和对应的依赖接口
         writer = get_stream_writer()
-        writer("【开始执行节点】 4、重新生成可运行的api结构化测试用例")
+        writer(msg("run_wf.node4_start", lang_from_overlay(state.get("language_overlay", ""))))
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=APIruncaseModel)
         resp = safe_structure_parser(api_runcase_regenerator_prompt,llm,parser,
@@ -275,9 +256,10 @@ class APIRuncaseGeneratorWorkflow:
                                      'function_list':state.get("function_list"),
                                      'additional_info': state.get("additional_info"),
                                       "api_case_run_result":state.get("api_case_run_result"),
-                                      "api_case":state.get("api_case")
+                                      "api_case":state.get("api_case"),
+                                      'language_overlay': state.get("language_overlay", ""),
                                       })
-        writer("【执行节点完成】 4、重新生成可运行的api结构化测试用例")
+        writer(msg("run_wf.node4_done", lang_from_overlay(state.get("language_overlay", ""))))
         # ★ 根据接口文档修正 AI 生成的前置步骤 Content-Type / body 字段
         if isinstance(resp, dict):
             _pre_list = resp.get("preconditions")
@@ -298,7 +280,7 @@ class APIRuncaseGeneratorWorkflow:
         """输出生成的接口用例"""
         # 1、获取生成的接口用例
         writer = get_stream_writer()
-        writer("【开始执行节点】 5、输出生成的接口用例")
+        writer(msg("run_wf.node5_start", lang_from_overlay(state.get("language_overlay", ""))))
         api_case = state.get("api_case")
         review_status = state.get("review_status")
         exec_result = state.get("api_case_run_result") or {}
@@ -309,7 +291,7 @@ class APIRuncaseGeneratorWorkflow:
         # 2、返回用例结果
         api_case.setdefault("review_status", review_status)
         writer(f"最终生成的接口用例为：{api_case},可执行状态：{review_status}")
-        writer("【执行节点完成】 5、输出生成的接口用例")
+        writer(msg("run_wf.node5_done", lang_from_overlay(state.get("language_overlay", ""))))
         return {
             "api_case": _convert_to_serializable(api_case),
             "review_status": review_status,

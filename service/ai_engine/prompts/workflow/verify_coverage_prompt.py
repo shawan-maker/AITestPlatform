@@ -12,4 +12,5 @@ prompt = PromptTemplate.from_template(
       1、测试点涵盖了功能正常情况下的测试点、边界测试点、异常测试点
       2、不需要考虑非功能方面测试点（如性能、安全等）
 如果没有全部覆盖，请给出覆盖率分析报告，并整理出未覆盖的点
-{user_prompt_section}""")
+{user_prompt_section}
+{language_overlay}""")

@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
 from service.ai_generation.common import build_default_additional_info
+from service.ai_engine.shared.messages import msg
 from service.ai_generation.payload_sync import (
     session_id_from_config,
     sync_api_base_payload,
@@ -73,24 +74,25 @@ def search_requirement(query:str, config: RunnableConfig):
             query:检索的需求文档内容
     """
     project_name = config.get("context", {}).get("project_name", "")
+    _lang = config.get("configurable", {}).get("language", "zh")
     writer = get_stream_writer()
-    writer("🔍 [阶段1/3] 开始从知识库检索需求文档...")
+    writer(msg("tools.searching_req", _lang))
     try:
-        writer("  → 正在调用 RAG 检索服务，请稍候...")
+        writer(msg("tools.calling_rag", _lang))
         result = _run_async_safely(RagGateway.query(project_name, query))
         print("rag检索的需求文档内容为：",result)
         if result:
             preview = result[:150] + ("..." if len(result) > 150 else "")
-            writer(f"  → 检索完成，已获取需求内容（预览: {preview}）")
+            writer(msg("tools.search_done_preview", _lang, preview=preview))
         else:
-            writer("  ⚠️ 未检索到匹配的需求文档")
-        writer("✅ [阶段1完成] 需求文档检索完毕")
-        return result or "（未检索到相关需求文档）"
+            writer(msg("tools.no_match_req", _lang))
+        writer(msg("tools.req_search_done", _lang))
+        return result or msg("tools.no_req_doc", _lang)
     except Exception as e:
-        error_msg = f"❌ [阶段1失败] 检索异常({type(e).__name__}): {str(e)[:200]}"
+        error_msg = msg("tools.search_req_error", _lang, etype=type(e).__name__, detail=str(e)[:200])
         print(error_msg)
         writer(error_msg)
-        return f"知识库检索失败（{type(e).__name__}），请基于用户输入的需求描述直接进行测试用例设计。"
+        return msg("tools.search_req_fallback", _lang, etype=type(e).__name__)
 
 @tool("generate_testcases",description="基于需求文档生成测试用例的工具")
 def generate_testcases(requirement:str, config: RunnableConfig, user_prompt: str = ""):
@@ -101,21 +103,26 @@ def generate_testcases(requirement:str, config: RunnableConfig, user_prompt: str
             user_prompt:用户的附加要求（如数量限制"设计5条用例"、特殊场景要求等）
     """
 
+    # 从 config 中获取语言设置
+    language = config.get("configurable", {}).get("language", "zh")
     writer = get_stream_writer()
-    writer("🧪 开始生成测试点与测试用例...")
+    writer(msg("tools.gen_starting", language))
     try:
         # 从 config.context 中获取项目信息
         project_name = config.get("context", {}).get("project_name", "")
         module_id = config.get("context", {}).get("module_id", "")
 
-        writer("  → 正在初始化用例生成工作流...")
+        from service.ai_engine.shared.language_overlay import get_language_overlay
+        language_overlay = get_language_overlay(language)
+
+        writer(msg("tools.init_workflow", language))
         workflow = GenerateTestCases().create_workflow()
-        writer("  → 调用大模型生成测试点和用例（耗时较长请耐心等待）...")
+        writer(msg("tools.calling_llm", language))
 
         # 使用 invoke() 获取完整的最终状态
         # stream() 的返回值解析复杂，直接使用 invoke() 获取最终状态更可靠
         final_state = workflow.invoke(
-            {"requirement": requirement, "user_prompt": user_prompt},
+            {"requirement": requirement, "user_prompt": user_prompt, "language_overlay": language_overlay},
             config=config,
         )
         
@@ -123,17 +130,17 @@ def generate_testcases(requirement:str, config: RunnableConfig, user_prompt: str
         test_cases = (final_state or {}).get("test_cases", [])
         points = (final_state or {}).get("points") or (final_state or {}).get("test_points") or []
 
-        writer(f"  ✅ 测试用例生成完毕: {len(test_cases)} 条用例")
+        writer(msg("tools.gen_done", language, count=len(test_cases)))
 
         session_id = session_id_from_config(config)
         if session_id:
-            writer("  → 正在保存生成结果到会话...")
+            writer(msg("tools.saving_result", language))
             _run_db_operation(sync_functional_payload(session_id, final_state))
-            writer("  → 结果已保存")
+            writer(msg("tools.saved", language))
         
         return test_cases
     except Exception as e:
-        error_msg = f"❌ 用例生成异常({type(e).__name__}): {str(e)[:200]}"
+        error_msg = msg("tools.gen_cases_error", language, etype=type(e).__name__, detail=str(e)[:200])
         print(error_msg)
         writer(error_msg)
         raise
@@ -147,34 +154,35 @@ def search_api_document(query: str, config: RunnableConfig):
             query:检索的接口文档内容
     """
     project_name = config.get("context", {}).get("project_name", "")
+    _lang = config.get("configurable", {}).get("language", "zh")
     writer = get_stream_writer()
-    writer("🔍 [阶段1/3] 开始从知识库检索接口文档...")
+    writer(msg("tools.searching_api_doc", _lang))
     try:
         result = ""
         if RagGateway.is_remote_available():
-            writer("  → 正在调用 RAG 流式检索服务（流式模式）...")
+            writer(msg("tools.rag_streaming", _lang))
             for item in RagGateway.query_stream(project_name, query):
                 if item is not None:
                     writer(item)
                     result += item
         else:
-            writer("  → 正在调用 RAG 检索服务，请稍候...")
+            writer(msg("tools.calling_rag", _lang))
             chunk = _run_async_safely(RagGateway.query(project_name, query))
             if chunk:
                 writer(chunk)
                 result += chunk
         if result:
             preview = result[:150] + ("..." if len(result) > 150 else "")
-            writer(f"  → 检索完成（预览: {preview}）")
+            writer(msg("tools.search_done_api", _lang, preview=preview))
         else:
-            writer("  ⚠️ 未检索到匹配的接口文档")
-        writer("✅ [阶段1完成] 接口文档检索完毕")
-        return result or "（未检索到相关接口文档）"
+            writer(msg("tools.no_match_api", _lang))
+        writer(msg("tools.api_search_done", _lang))
+        return result or msg("tools.no_api_doc", _lang)
     except Exception as e:
-        error_msg = f"❌ [阶段1失败] 检索异常({type(e).__name__}): {str(e)[:200]}"
+        error_msg = msg("tools.search_api_error", _lang, etype=type(e).__name__, detail=str(e)[:200])
         print(error_msg)
         writer(error_msg)
-        return f"知识库检索失败（{type(e).__name__}），请基于用户提供的接口信息直接设计测试用例。"
+        return msg("tools.search_api_fallback", _lang, etype=type(e).__name__)
 
 @tool("generate_base_cases", description="基于接口文档生成基础接口测试用例（不含预执行）")
 def generate_base_cases(
@@ -184,24 +192,28 @@ def generate_base_cases(
     user_prompt: str | None = None,
 ):
     """仅生成 api_basecase_workflow 基础用例，写入 session output_payload。"""
+    # 从 config 中获取语言设置
+    _lang = config.get("configurable", {}).get("language", "zh")
     writer = get_stream_writer()
-    writer("🧪 [阶段2/3] 开始生成基础接口测试用例...")
+    writer(msg("tools.gen_base_starting", _lang))
     try:
         res = APIDocumentParser().api_parser(api_document)
         api_doc = json.dumps(res, ensure_ascii=False, indent=4)
-        writer("  → 接口文档解析完成，正在调用工作流生成用例...")
+        writer(msg("tools.parsing_and_gen", _lang))
+        from service.ai_engine.shared.language_overlay import get_language_overlay
+        _overlay = get_language_overlay(_lang)
         base_workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         base_state = base_workflow.invoke(
-            {"api_doc": api_doc, "precoditions": precoditions or [], "user_prompt": user_prompt},
+            {"api_doc": api_doc, "precoditions": precoditions or [], "user_prompt": user_prompt, "language_overlay": _overlay},
             config=config,
         )
         base_cases = base_state.get("api_cases") or []
-        writer(f"  ✅ 基础接口用例生成完毕: {len(base_cases)} 条用例")
-        writer("✅ [阶段3完成] 接口测试用例生成完毕")
+        writer(msg("tools.base_gen_done", _lang, count=len(base_cases)))
+        writer(msg("tools.api_gen_done", _lang))
 
         session_id = session_id_from_config(config)
         if session_id:
-            writer("  → 正在保存生成结果到会话...")
+            writer(msg("tools.saving_result", _lang))
             _run_db_operation(
                 sync_api_base_payload(
                     session_id,
@@ -209,10 +221,10 @@ def generate_base_cases(
                     api_doc=api_doc,
                 )
             )
-            writer("  → 结果已保存")
+            writer(msg("tools.saved", _lang))
         return base_cases
     except Exception as e:
-        error_msg = f"❌ [阶段2/3失败] 用例生成异常({type(e).__name__}): {str(e)[:200]}"
+        error_msg = msg("tools.gen_base_error", _lang, etype=type(e).__name__, detail=str(e)[:200])
         print(error_msg)
         writer(error_msg)
         raise
@@ -265,8 +277,11 @@ def api_document_to_cases(api_document: str,
     api_doc = json.dumps(res, ensure_ascii=False, indent=4)
 
     base_workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
+    _lang2 = config.get("configurable", {}).get("language", "zh")
+    from service.ai_engine.shared.language_overlay import get_language_overlay as _gol
+    _overlay2 = _gol(_lang2)
     base_state = base_workflow.invoke(
-        {"api_doc": api_doc, "precoditions": precoditions or []},
+        {"api_doc": api_doc, "precoditions": precoditions or [], "language_overlay": _overlay2},
         config=config,
     )
     base_cases = base_state.get("api_cases") or []
@@ -274,6 +289,9 @@ def api_document_to_cases(api_document: str,
         return []
 
     info = additional_info or build_default_additional_info()
+    _lang3 = config.get("configurable", {}).get("language", "zh")
+    from service.ai_engine.shared.language_overlay import get_language_overlay as _gol3
+    _overlay3 = _gol3(_lang3)
     pre_results = concurrent_pre_run_base_cases(
         base_cases,
         api_doc=api_doc,
@@ -281,6 +299,7 @@ def api_document_to_cases(api_document: str,
         test_env_data=test_env_data,
         additional_info=info,
         config=config,
+        language_overlay=_overlay3,
     )
     return [r.api_case for r in pre_results]
 

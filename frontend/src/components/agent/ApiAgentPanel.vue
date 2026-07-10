@@ -164,7 +164,7 @@ const props = defineProps({
 
 const emit = defineEmits(['composer-mode-change', 'tab-change'])
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { projectId, withProjectParams } = useProjectScope()
@@ -244,23 +244,25 @@ async function loadSessions() {
   sessions.value = res.data.data ?? []
 }
 
-async function refreshSession() {
-  if (!activeSessionId.value) {
-    sessionDetail.value = null
+async function refreshSession(sessionId) {
+  const sid = sessionId ?? activeSessionId.value
+  if (!sid) {
+    if (!sessionId) sessionDetail.value = null
     return
   }
-  const res = await getApiSession(activeSessionId.value)
+  const res = await getApiSession(sid)
   sessionDetail.value = res.data.data
   const payload = sessionDetail.value?.output_payload ?? {}
   boundInterfaceId.value = payload.interface_id ?? boundInterfaceId.value
 }
 
-async function loadMessages(gen) {
-  if (!activeSessionId.value) {
-    messages.value = []
-    return
+async function loadMessages(gen, sessionId) {
+  const sid = sessionId ?? activeSessionId.value
+  if (!sid) {
+    if (!sessionId) messages.value = []
+    return []
   }
-  const res = await listApiMessages(activeSessionId.value)
+  const res = await listApiMessages(sid)
   const raw = res.data.data ?? []
 
   // Merge legacy messages (role=assistant/tool/system) into unified agent responses
@@ -290,7 +292,7 @@ async function loadMessages(gen) {
         const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour12: false }) : ''
         _addLogToAgent(currentAgent, 'history', `[${time}] ${msg.content}`)
       } else if (msg.message_type === 'tool_call' && msg.tool_name) {
-        _addLogToAgent(currentAgent, 'history', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
+        _addLogToAgent(currentAgent, 'history', `[${t('page.agent.toolCall')}] ${msg.tool_name}: ${msg.content || ''}`)
       } else if (msg.role === 'assistant' && msg.content) {
         currentAgent.finalText += (currentAgent.finalText ? '\n' : '') + msg.content
       } else if (msg.content) {
@@ -325,9 +327,10 @@ async function loadMessages(gen) {
 
   // 竞态保护：如果 selectSession 已被新的调用取代，丢弃本次过期响应
   if (gen !== undefined && gen !== _loadGen) {
-    return
+    return []
   }
   messages.value = merged
+  return merged
 }
 
 function _addLogToAgent(agent, stageName, line) {
@@ -375,42 +378,41 @@ async function selectSession(id) {
   _stopRunningPoll()
   _lastEventSeq = -1  // 重置事件序号追踪
   const gen = ++_loadGen
-  activeSessionId.value = id
-  // 立即显示加载占位，给用户切换反馈（替代白屏）
-  messages.value = [{
-    id: 'loading-placeholder',
-    role: 'agent',
-    isStreaming: true,
-    stages: [{ name: 'processing', status: 'running', text: t('page.agent.loadingSession'), logs: [] }],
-    finalText: '',
-    payload: null,
-    streamingText: '',
-  }]
-  setComposerMode(false)
+  // 方案A：不立即替换 messages，旧消息保持可见直到新数据就绪
 
-  // 防抖：300ms 内的连续点击只执行最后一次，减少请求风暴
+  // 防抖：150ms 内的连续点击只执行最后一次
   if (_selectSessionTimer) clearTimeout(_selectSessionTimer)
   await new Promise(resolve => {
     _selectSessionTimer = setTimeout(() => {
       _selectSessionTimer = null
       resolve()
-    }, 300)
+    }, 150)
   })
   // 防抖等待后再次检查 gen（可能已有更新的点击）
   if (gen !== _loadGen) return
 
   try {
-    await Promise.all([refreshSession(), loadMessages(gen), loadSessions()])
+    // 先加载 session 详情（loadMessages 依赖 sessionDetail.output_payload）
+    await refreshSession(id)
+    if (gen !== _loadGen) return
+    // 再并行加载消息和会话列表
+    const merged = await loadMessages(gen, id)
+    await loadSessions()
     // 竞态保护：如果用户已切到其他 session，丢弃本次结果
     if (gen !== _loadGen) {
       return
     }
+    // 数据就绪，一次性切换 activeSessionId + messages
+    activeSessionId.value = id
+    if (merged) messages.value = merged
   } catch (e) {
     console.error('[ApiAgentPanel] selectSession 加载失败:', e)
     if (gen !== _loadGen) return // 过期请求不弹错误提示
     ElMessage.error(t('page.agent.loadSessionFailed'))
     return
   }
+
+  setComposerMode(false)
 
   const detail = sessionDetail.value
   // 按钮可见性：confirming 状态显示编辑按钮，running 隐藏，success 看是否有 summary
@@ -521,7 +523,7 @@ async function _ensureApiTitle() {
   if (_titleBusy) return
   const s = sessionDetail.value
   if (!s || s.status !== 'success' || !activeSessionId.value) return
-  if (s.title && s.title !== '新对话' && !s.title.endsWith('...')) return
+  if (s.title && s.title !== '新对话' && s.title !== 'New Conversation' && !s.title.endsWith('...')) return
   _titleBusy = true
   try {
     await summarizeApiTitle(activeSessionId.value)
@@ -627,6 +629,7 @@ async function createSessionFromComposer(payload) {
       user_prompt: payload.userPrompt,
       environment_id: payload.environmentId,
       mode: payload.mode,
+      locale: locale.value,
     }
     const res = await createApiSession(body)
     const session = res?.data?.data
@@ -757,8 +760,8 @@ async function sendMessage(content) {
         },
         tool_call: (data) => {
           hasStageProgress.value = true
-          if (data?.name) _addLog(data.name, `调用工具: ${data.name}`)
-          else _addLog('default', '工具调用')
+          if (data?.name) _addLog(data.name, t('page.agent.toolCalling', { name: data.name }))
+          else _addLog('default', t('page.agent.toolCall'))
         },
         interface_progress: (data) => {
           // Update per-interface progress in payload
@@ -786,7 +789,7 @@ async function sendMessage(content) {
             _addLog('edit_base_cases', t('page.agent.baseCasesGenerated', { count: ifaces.length }))
             for (const iface of ifaces) {
               const skipped = iface.skipped ? t('page.agent.skippedExists') : ''
-              _addLog('edit_base_cases', `  ${iface.method} ${iface.summary || iface.path} — ${(iface.base_cases || []).length} 条基础用例${skipped}`)
+              _addLog('edit_base_cases', `  ${iface.method} ${iface.summary || iface.path} — ${t('page.agent.baseCasesUnit', { count: (iface.base_cases || []).length })}${skipped}`)
             }
           }
           if (payloadUpdatedResolve) payloadUpdatedResolve()
@@ -804,7 +807,7 @@ async function sendMessage(content) {
         error: (data) => {
           const errorMsg = data?.message || t('common.requestFailed')
           ElMessage.error(errorMsg)
-          _addLog('default', `[错误] ${errorMsg}`)
+          _addLog('default', `${t('page.agent.errorPrefix')} ${errorMsg}`)
         },
         done: async () => {
           abortController?.abort()
@@ -838,7 +841,7 @@ async function sendMessage(content) {
         id: `temp-${++tempMsgId}`,
         role: 'tool',
         message_type: 'custom',
-        content: `[连接中断] ${msg}`,
+        content: `${t('page.agent.connInterrupted')} ${msg}`,
         sequence: messages.value.length + 1,
       }]
       await loadMessages()
@@ -858,15 +861,15 @@ async function sendMessage(content) {
 /* 构建富文本消息：上下文 + 用户输入 */
 function buildRichContent(payload) {
   const lines = []
-  if (payload.projectName) lines.push(`📋 项目: ${payload.projectName}`)
+  if (payload.projectName) lines.push(`📋 ${t('page.agent.ctxProject')}: ${payload.projectName}`)
   if (payload.mode === 'from_interfaces' && payload.interfaceNames?.length) {
-    lines.push(`🔗 接口: ${payload.interfaceNames.join(', ')}`)
+    lines.push(`🔗 ${t('page.agent.ctxInterface')}: ${payload.interfaceNames.join(', ')}`)
   } else if (payload.mode === 'from_doc') {
-    lines.push('📄 模式: 从接口文档生成')
+    lines.push(`📄 ${t('page.agent.mode')}: ${t('page.agent.ctxModeFromDoc')}`)
   } else if (payload.mode === 'from_prompt') {
-    lines.push('📝 模式: 从输入内容解析接口')
+    lines.push(`📝 ${t('page.agent.mode')}: ${t('page.agent.ctxModeFromPrompt')}`)
   }
-  if (payload.environmentName) lines.push(`🌐 环境: ${payload.environmentName}`)
+  if (payload.environmentName) lines.push(`🌐 ${t('page.agent.ctxEnvironment')}: ${payload.environmentName}`)
   const text = payload.content || ''
   if (lines.length) {
     return `[context]\n${lines.join('\n')}\n[/context]\n${text}`
@@ -1020,7 +1023,7 @@ async function onSaveEditedBaseCases(editedInterfaces) {
         },
         error: (data) => {
           ElMessage.error(data?.message || t('common.requestFailed'))
-          _addLog('default', `[错误] ${data?.message || ''}`)
+          _addLog('default', `${t('page.agent.errorPrefix')} ${data?.message || ''}`)
         },
         done: async () => {
           abortController?.abort()

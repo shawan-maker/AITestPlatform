@@ -438,6 +438,7 @@ api_runcase_regenerator_prompt = PromptTemplate.from_template(
 - 输出格式为标准 JSON（**不带 markdown 标记**）
 - 所有字段必须补全，即使为空也要完整保留
 - 所有变量、提取表达式、函数调用等格式必须严格符合规则
+{language_overlay}
 """.replace(
     "{core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME}",
     core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME,

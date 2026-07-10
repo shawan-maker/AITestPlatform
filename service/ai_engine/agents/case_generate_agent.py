@@ -24,6 +24,7 @@ from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 
 from service.ai_engine.prompts.agents import case_generate_agent_prompt, api_case_generate_agent_prompt, main_agent_prompt
+from service.ai_engine.shared.language_overlay import get_language_overlay, get_transitional_message
 from service.core.settings import llm
 from service.ai_engine.mcp.tools import (
     search_requirement,
@@ -42,53 +43,80 @@ class AgentManage:
     """Agent管理类"""
 
     @staticmethod
-    def create_case_generate_agent():
+    def create_case_generate_agent(language: str = "zh"):
         """创建功能测试用例生成的 Agent（挂载 checkeeper 用于短期多轮记忆）"""
         # 从 DualMemoryManager 获取全局单例 checkpointer
         memory = DualMemoryManager()
+        overlay = get_language_overlay(language)
+        transitional = get_transitional_message(language)
+        sys_prompt = case_generate_agent_prompt.prompt
+        # 替换 TRANSITIONAL 标记为对应语言版本
+        sys_prompt = sys_prompt.replace(
+            "[TRANSITIONAL] 📋 需求检索完成，正在梳理需求要点，准备生成测试点与测试用例...",
+            transitional,
+        )
+        if overlay:
+            sys_prompt = sys_prompt + "\n" + overlay
         agent = create_react_agent(
             name="case_generate_agent",
             model=llm,
             tools=[search_requirement, generate_testcases],
-            prompt=case_generate_agent_prompt.prompt,
+            prompt=sys_prompt,
             checkpointer=memory.checkpointer,
         )
         return agent
 
     @staticmethod
-    def create_functional_generate_agent():
+    def create_functional_generate_agent(language: str = "zh"):
         """创建不含 search_requirement 的轻量手工用例生成 Agent（用于无文档场景）"""
         memory = DualMemoryManager()
+        overlay = get_language_overlay(language)
+        transitional = get_transitional_message(language)
+        sys_prompt = case_generate_agent_prompt.prompt
+        sys_prompt = sys_prompt.replace(
+            "[TRANSITIONAL] 📋 需求检索完成，正在梳理需求要点，准备生成测试点与测试用例...",
+            transitional,
+        )
+        if overlay:
+            sys_prompt = sys_prompt + "\n" + overlay
         agent = create_react_agent(
             name="functional_generate_agent",
             model=llm,
             tools=[generate_testcases],
-            prompt=case_generate_agent_prompt.prompt,
+            prompt=sys_prompt,
             checkpointer=memory.checkpointer,
         )
         return agent
 
     @staticmethod
-    def create_api_case_generate_agent():
+    def create_api_case_generate_agent(language: str = "zh"):
         """创建API测试用例生成的 Agent"""
         memory = DualMemoryManager()
+        overlay = get_language_overlay(language)
+        sys_prompt = api_case_generate_agent_prompt.prompt
+        if overlay:
+            sys_prompt = sys_prompt + "\n" + overlay
         agent = create_react_agent(
             name="api_case_generate_agent",
             model=llm,
             tools=[search_api_document, generate_base_cases],
-            prompt=api_case_generate_agent_prompt.prompt,
+            prompt=sys_prompt,
             checkpointer=memory.checkpointer,
         )
         return agent
 
     @classmethod
-    def create_supervisor_agent(cls):
+    def create_supervisor_agent(cls, language: str = "zh"):
         """创建一个主管的多 Agent 程序（supervisor 协调各子 Agent 分工）"""
         memory = DualMemoryManager()
+        overlay = get_language_overlay(language)
+        sys_prompt = main_agent_prompt.prompt
+        if overlay:
+            sys_prompt = sys_prompt + "\n" + overlay
         supervisor = create_supervisor(
-            agents=[cls.create_case_generate_agent(), cls.create_api_case_generate_agent()],
+            agents=[cls.create_case_generate_agent(language), cls.create_api_case_generate_agent(language)],
             model=llm,
-            prompt=main_agent_prompt.prompt,
+            prompt=sys_prompt,
             output_mode="full_history",  # 保留完整对话历史，确保 checkpointer 能积累上下文
         ).compile(
             checkpointer=memory.checkpointer,

@@ -436,6 +436,7 @@ api_runcase_generator_prompt = PromptTemplate.from_template(
 - 不进行说明或解释，仅输出测试用例结构化 JSON 内容
 - 输出的测试用例结构规范（必须遵循）：
 
+{language_overlay}
 """.replace(
     "{core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME}",
     core_config.AI_AGENT_PROMPT_EXAMPLE_USERNAME,

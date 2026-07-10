@@ -558,6 +558,8 @@ class ApiCaseGenerationService:
                     loop,
                 )
 
+            from service.ai_engine.shared.language_overlay import get_language_overlay
+            _lang_overlay = get_language_overlay(session.output_language or "zh")
             pre_run_results = await cls._pre_run_selected_base_cases(
                 selected_items=selected_items,
                 api_doc=api_doc,
@@ -567,6 +569,7 @@ class ApiCaseGenerationService:
                 test_env_data=test_env_data,
                 skip_execution=True,
                 progress_callback=_on_progress,
+                language_overlay=_lang_overlay,
             )
             logger.info("[confirm] session=%s Phase1: LLM 结构化完成, results=%d", session.id, len(pre_run_results))
 
@@ -895,6 +898,7 @@ class ApiCaseGenerationService:
 
         for order, dep_name in enumerate(new_dep_names):
             dep_doc = dep_doc_by_summary.get(dep_name)
+            case_title = dep_name  # 默认用 DB 接口名，AI 有翻译时会被覆盖
 
             # 如果 precoditions_api_doc 中找不到，尝试按 summary 查数据库
             if dep_doc is None:
@@ -926,7 +930,9 @@ class ApiCaseGenerationService:
             if ai_step:
                 from service.api_test.shared.payload_builder import _convert_precondition, _normalize_template_vars
                 case_payload = _convert_precondition(ai_step)
-                case_payload["title"] = dep_name
+                # 优先使用 AI 生成的标题（英文模式下已翻译），否则用 DB 接口名
+                case_payload["title"] = (ai_step.get("title") or dep_name).strip() or dep_name
+                case_title = case_payload["title"]
                 # Override URL/method with actual interface data from DB (AI may guess wrong)
                 # Normalize {var} → ${var} so the engine can replace them at runtime
                 if dep_doc and dep_doc.get("path"):
@@ -1010,7 +1016,7 @@ class ApiCaseGenerationService:
                 project_id=interface.project_id,
                 module_id=interface.module_id,
                 interface_id=interface.id,
-                title=dep_name,
+                title=case_title,
                 case_kind=ApiCaseKind.precondition,
                 sort_order=sort_base + order,
                 case_payload=case_payload,
@@ -1584,6 +1590,7 @@ class ApiCaseGenerationService:
         test_env_data: dict | None = None,
         progress_callback=None,
         skip_execution: bool = False,
+        language_overlay: str = "",
     ):
         if api_test_gen_use_mock():
             return [
@@ -1621,6 +1628,7 @@ class ApiCaseGenerationService:
             progress_callback=progress_callback,
             skip_execution=skip_execution,
             max_workers=None,
+            language_overlay=language_overlay,
         )
 
     @classmethod

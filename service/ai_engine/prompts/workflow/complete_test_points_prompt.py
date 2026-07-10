@@ -21,7 +21,8 @@ prompt = PromptTemplate.from_template(
          {{"type":"功能测试","dimension":"边界测试","test_point":"用户名为空，登录失败"}},
          {{"type":"功能测试","dimension":"异常测试","test_point":"用户名为空，登录失败"}},
       ]
-{user_prompt_section}""")
+{user_prompt_section}
+{language_overlay}""")
 
 def get_max_test_points_section(max_test_points: int | None) -> str:
     """根据是否有数量限制，返回对应的数量限制说明（用于替换 template 中的 {max_test_points_section}）"""

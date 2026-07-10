@@ -21,6 +21,7 @@ from service.core.settings import BASE_DIR, MAX_BATCH_SIZE
 from service.ai_generation.common import build_default_additional_info
 from service.core.enums import ReviewStatus
 from service.ai_engine.shared.logger import _ThreadSafeStdout
+from service.ai_engine.shared.messages import msg
 from service.ai_engine.workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow, StateNode
 from service.ai_engine.workflow.api_runcase_workflow import APIRuncaseGeneratorWorkflow, APIState
 
@@ -70,6 +71,7 @@ def concurrent_pre_run_base_cases(
     max_workers: int | None = None,
     progress_callback=None,
     skip_execution: bool = False,
+    language_overlay: str = "",
 ) -> list[BaseCasePreRunResult]:
     """ThreadPoolExecutor 并发预执行基础用例（共享入口，供主工作流与 api_test confirm 复用）。
 
@@ -103,6 +105,7 @@ def concurrent_pre_run_base_cases(
                     "environment_id": environment_id,
                     "generator_count": generator_count,
                     "skip_execution": skip_execution,
+                    "language_overlay": language_overlay,
                 }
                 if precoditions_api_doc is not None:
                     invoke_input["precoditions_api_doc"] = precoditions_api_doc
@@ -200,21 +203,23 @@ class APICaseGeneratorMainWorkflow:
     """
     # 1、根据接口文档生成基础的接口用例
     def generator_api_basecase(self,state:mainState,config: RunnableConfig):
+        _lang = config.get("configurable", {}).get("language", "zh")
         writer = get_stream_writer()
-        writer("【开始执行主流程节点】 1、生成api基础测试用例：")
+        writer(msg("main_wf.node1_start", _lang))
         workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         basecase_state:StateNode = workflow.invoke(
                                     {"api_doc": state.get("api_doc"), "precoditions": state.get("precoditions")},
                                    config=config
                                    )
-        writer("【执行主流程节点完成】 1、生成api基础测试用例：")
+        writer(msg("main_wf.node1_done", _lang))
         return {"base_cases":basecase_state.get("api_cases")}
 
     # 2、根据基础的接口用例，生成可执行结构化接口用例
     def generator_api_structure_runcase(self, state: mainState, config: RunnableConfig):
         """并发预执行：复用 concurrent_pre_run_base_cases。"""
+        _lang = config.get("configurable", {}).get("language", "zh")
         writer = get_stream_writer()
-        writer("【开始执行主流程节点】 2、生成可执行结构化接口用例：")
+        writer(msg("main_wf.node2_start", _lang))
         results = concurrent_pre_run_base_cases(
             state.get("base_cases") or [],
             api_doc=state.get("api_doc") or "",
@@ -224,20 +229,21 @@ class APICaseGeneratorMainWorkflow:
             generator_count=state.get("generator_count") or 0,
             config=config,
         )
-        writer("【执行主流程节点完成】 2、生成可执行结构化接口用例")
+        writer(msg("main_wf.node2_done", _lang))
         return {"api_run_cases": [r.api_case for r in results]}
 
     # 3、保存结构化接口用例到数据库
-    def save_api_runcase_to_db(self,state:mainState):
+    def save_api_runcase_to_db(self,state:mainState, config: RunnableConfig = None):
+        _lang = (config or {}).get("configurable", {}).get("language", "zh") if config else "zh"
         writer = get_stream_writer()
-        writer("【开始执行主流程节点】 4、保存结构化接口用例到数据库：")
+        writer(msg("main_wf.node4_start", _lang))
         # 保存结构化接口用例到数据库
         # 将结构化接口用例写入到文件 test_data下的api_run_cases.json 中
         file_path = str(BASE_DIR / "data" / "test_data" / "api_run_cases.json")
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(state.get("api_run_cases"), f, ensure_ascii=False, indent=4)
-        writer(f"一共生成 {len(state.get('api_run_cases'))} 个结构化接口用例，并保存到 {file_path} 中")
-        writer("【执行主流程节点完成】 4、保存结构化接口用例到数据库：")
+        writer(msg("main_wf.node4_save", _lang, count=len(state.get('api_run_cases')), path=file_path))
+        writer(msg("main_wf.node4_done", _lang))
         return {}
 
     # 6、创建主工作流

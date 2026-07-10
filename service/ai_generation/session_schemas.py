@@ -20,6 +20,7 @@ class AIGenerationSessionOut(BaseModel):
     user_prompt: str | None
     source_channel: SourceChannel
     title: str | None
+    output_language: str = "zh"
     created_at: datetime
     finished_at: datetime | None
 

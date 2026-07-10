@@ -18,6 +18,7 @@ from service.ai_generation.common import (
     is_llm_configured,
     LLM_NOT_CONFIGURED_MSG,
 )
+from service.ai_engine.shared.messages import msg
 from service.ai_generation.event_buffer import (
     cleanup_live_queue,
     get_or_create_buffer,
@@ -162,10 +163,11 @@ class AgentStreamService:
                     has_doc = session.knowledge_document_id is not None and bool(doc_context)
                     if not has_doc:
                         _log.info("[SSE] 无关联需求文档，发送初始 stage session=%s", session.id)
+                        _init_lang = session.output_language or "zh"
                         yield _sse("stage", {
                             "name": "generate_testcases",
                             "status": "running",
-                            "text": "正在分析需求并生成测试用例...",
+                            "text": msg("stage.analyzing_and_gen", _init_lang),
                         })
 
                 _agent_completed = False
@@ -198,15 +200,17 @@ class AgentStreamService:
                 _log.warning("[SSE] ⚠️ Agent 未正常完成，跳过 payload_updated/done session=%s", session.id)
             
         except asyncio.TimeoutError:
-            timeout_msg = f"Agent 执行超时（{_AGENT_TIMEOUT_SECONDS}秒），请稍后重试"
+            timeout_msg = msg("stream.timeout", session.output_language or "zh", seconds=_AGENT_TIMEOUT_SECONDS)
             _log.error("[SSE] ❌ 超时 session=%s: %s", session.id, timeout_msg)
             await SessionLifecycleService.mark_failed(session, timeout_msg)
             yield _sse("error", {"message": timeout_msg})
+            yield _sse("done", {})
         except Exception as exc:
             msg = str(exc) or repr(exc)
             _log.error("[SSE] ❌ session=%s 异常: %s", session.id, exc, exc_info=True)
             await SessionLifecycleService.mark_failed(session, msg)
             yield _sse("error", {"message": msg})
+            yield _sse("done", {})
 
     @classmethod
     async def _mock_functional(
@@ -220,7 +224,7 @@ class AgentStreamService:
             session.id,
             {"points": payload["test_points"], "cases": payload["cases"]},
         )
-        text = "已生成功能用例预览（mock）。"
+        text = msg("stream.mock_functional", session.output_language or "zh")
         await MessageService.append(
             session.id,
             role=MessageRole.assistant,
@@ -246,7 +250,7 @@ class AgentStreamService:
             api_doc=extra.get("api_doc"),
             extra={k: v for k, v in extra.items() if k != "base_cases"},
         )
-        text = "已生成接口基础用例预览（mock）。"
+        text = msg("stream.mock_api", session.output_language or "zh")
         await MessageService.append(
             session.id,
             role=MessageRole.assistant,
@@ -294,6 +298,7 @@ class AgentStreamService:
             user_id=str(session.created_by_id),
             session_id=str(session.id),
             thread_id=f"{thread_prefix}-{session.id}",
+            language=session.output_language or "zh",
         )
         _log.info("[SSE] RuntimeContext 已创建 session=%s, thread_id=%s", session.id, context.thread_id)
         
@@ -301,20 +306,23 @@ class AgentStreamService:
             has_doc = session.knowledge_document_id is not None and bool(
                 (session.output_payload or {}).get("_document_context", "")
             )
+            lang = session.output_language or "zh"
             if has_doc:
-                agent = AgentManage.create_case_generate_agent()
-                _log.info("[SSE] 创建 functional agent (有文档) session=%s", session.id)
+                agent = AgentManage.create_case_generate_agent(language=lang)
+                _log.info("[SSE] 创建 functional agent (有文档) session=%s lang=%s", session.id, lang)
             else:
-                agent = AgentManage.create_functional_generate_agent()
-                _log.info("[SSE] 创建 functional agent (无文档，跳过搜索) session=%s", session.id)
+                agent = AgentManage.create_functional_generate_agent(language=lang)
+                _log.info("[SSE] 创建 functional agent (无文档，跳过搜索) session=%s lang=%s", session.id, lang)
         else:
-            agent = AgentManage.create_api_case_generate_agent()
-            _log.info("[SSE] 创建 api agent session=%s", session.id)
+            lang = session.output_language or "zh"
+            agent = AgentManage.create_api_case_generate_agent(language=lang)
+            _log.info("[SSE] 创建 api agent session=%s lang=%s", session.id, lang)
 
         run_config = {
             "configurable": {
                 "thread_id": context.thread_id,
                 "ai_session_id": session.id,
+                "language": lang,
             }
         }
         _log.info("[SSE] run_config 已创建 session=%s", session.id)
@@ -324,12 +332,12 @@ class AgentStreamService:
         if thread_done is None:
             thread_done = threading.Event()  # fallback，但 _stream_turn 无法等待
 
-        # Tool name -> (icon, stage_text) mapping
+        # Tool name -> (icon, msg_key) mapping — bilingual via msg()
         _stage_map = {
-            "search_requirement": ("🔍", "正在检索需求文档..."),
-            "search_api_document": ("🔍", "正在检索接口文档..."),
-            "generate_testcases": ("🧪", "正在生成测试用例..."),
-            "generate_base_cases": ("🧪", "正在生成接口测试用例..."),
+            "search_requirement": ("🔍", "stream.stage_search_req"),
+            "search_api_document": ("🔍", "stream.stage_search_api"),
+            "generate_testcases": ("🧪", "stream.stage_gen_testcases"),
+            "generate_base_cases": ("🧪", "stream.stage_gen_base"),
         }
 
         # 用于检测阶段转换，在阶段间发送等待提示
@@ -351,6 +359,16 @@ class AgentStreamService:
                 if _agent_error[0] is not None:
                     _log.info("[FINALIZE] session=%s marking failed: %s", session.id, str(_agent_error[0])[:200])
                     await SessionLifecycleService.mark_failed(session, str(_agent_error[0]))
+                    # 保存错误消息到 messages 表，确保切换会话后仍可显示
+                    try:
+                        await MessageService.append(
+                            session.id,
+                            role=MessageRole.tool,
+                            content=str(_agent_error[0]),
+                            message_type=MessageType.custom,
+                        )
+                    except Exception:
+                        pass  # DB 保存失败不影响主流程
                     return
                 if assistant_buffer:
                     content = "".join(assistant_buffer)
@@ -505,12 +523,14 @@ class AgentStreamService:
                     if _last_tool_name is not None and _last_tool_name != tool_name:
                         last_stage_info = _stage_map.get(_last_tool_name)
                         if last_stage_info:
-                            transition_msg = f"✅ {last_stage_info[1]} 阶段完成，正在准备下一阶段，请稍候..."
+                            _last_stage_text = msg(last_stage_info[1], lang)
+                            transition_msg = msg("stream.transition", lang, stage=_last_stage_text)
                             _log.info("[Agent] 阶段转换: %s -> %s", _last_tool_name, tool_name)
                             yield _sse("custom", transition_msg)
 
                     if stage_info:
-                        icon, stage_text = stage_info
+                        icon, msg_key = stage_info
+                        stage_text = msg(msg_key, lang)
                         stage_msg = f"{icon} {stage_text}"
                         _log.info("[SSE] 发送 stage 事件: %s session=%s", stage_msg, session.id)
                         yield _sse("stage", {"name": tool_name, "text": stage_msg, "status": "running"})
@@ -528,6 +548,11 @@ class AgentStreamService:
 
                     # tool_call 持久化由后台线程完成，generator 仅负责 SSE 转发
                     yield _sse("tool_call", {"name": tool_name, "content": content})
+
+            # while 循环正常结束（sentinel break）：如果后台线程报告了错误，yield error 事件
+            if _agent_error[0] is not None:
+                _log.warning("[SSE] agent 后台线程异常，发送 error 事件 session=%s: %s", session.id, str(_agent_error[0])[:200])
+                yield _sse("error", {"message": str(_agent_error[0])})
 
         except (GeneratorExit, asyncio.CancelledError):
             _log.info("[SSE-TIME] GeneratorExit/CancelledError session=%s | events_yielded=%s | assistant_buffer_len=%d",

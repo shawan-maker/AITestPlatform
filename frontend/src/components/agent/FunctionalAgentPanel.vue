@@ -196,21 +196,23 @@ async function loadSessions() {
   sessions.value = res.data.data ?? []
 }
 
-async function refreshSession() {
-  if (!activeSessionId.value) {
-    sessionDetail.value = null
+async function refreshSession(sessionId) {
+  const sid = sessionId ?? activeSessionId.value
+  if (!sid) {
+    if (!sessionId) sessionDetail.value = null
     return
   }
-  const res = await getFunctionalSession(activeSessionId.value)
+  const res = await getFunctionalSession(sid)
   sessionDetail.value = res.data.data
 }
 
-async function loadMessages(gen) {
-  if (!activeSessionId.value) {
-    messages.value = []
-    return
+async function loadMessages(gen, sessionId) {
+  const sid = sessionId ?? activeSessionId.value
+  if (!sid) {
+    if (!sessionId) messages.value = []
+    return []
   }
-  const res = await listFunctionalMessages(activeSessionId.value)
+  const res = await listFunctionalMessages(sid)
   const raw = res.data.data ?? []
 
   // Merge legacy messages (role=assistant/tool/system) into unified agent responses
@@ -247,7 +249,7 @@ async function loadMessages(gen) {
         const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour12: false }) : ''
         _addLogToAgent(currentAgent, 'history', `[${time}] ${msg.content}`)
       } else if (msg.message_type === 'tool_call' && msg.tool_name) {
-        _addLogToAgent(currentAgent, 'history', `[工具] ${msg.tool_name}: ${msg.content || ''}`)
+        _addLogToAgent(currentAgent, 'history', `[${t('page.agent.toolCall')}] ${msg.tool_name}: ${msg.content || ''}`)
       } else if (msg.role === 'assistant' && msg.content) {
         // Text content → append to finalText
         currentAgent.finalText += (currentAgent.finalText ? '\n' : '') + msg.content
@@ -304,13 +306,33 @@ async function loadMessages(gen) {
     if (visibleStages.length === 0 && !hasProcessing && !agentBlock.finalText) {
       agentBlock.stages.push({ name: 'processing', status: 'running', text: t('page.agent.generatingWait'), logs: [] })
     }
+  } else if (sessionDetail.value?.status === 'failed') {
+    // 失败的会话：如果没有 agent 块（LLM 未响应即失败），显示错误信息
+    const hasAgentBlock = merged.some(m => m.role === 'agent')
+    if (!hasAgentBlock) {
+      merged.push({
+        id: `agent-error-${Date.now()}`,
+        role: 'agent',
+        isStreaming: false,
+        stages: [{
+          name: 'error',
+          status: 'done',
+          text: '',
+          logs: [`[Error] ${sessionDetail.value?.error_message || t('page.agent.statusFailed')}`],
+        }],
+        finalText: '',
+        payload: null,
+        streamingText: '',
+      })
+    }
   }
 
   // 竞态保护：如果 selectSession 已被新的调用取代，丢弃本次过期响应
   if (gen !== undefined && gen !== _loadGen) {
-    return
+    return []
   }
   messages.value = merged
+  return merged
 }
 
 /** Helper: add a log line to an agent response's default stage */
@@ -356,39 +378,41 @@ async function selectSession(id) {
   _stopRunningPoll()
   _lastEventSeq = -1
   const gen = ++_loadGen
-  activeSessionId.value = id
-  // 立即显示加载占位，给用户切换反馈（替代白屏）
-  messages.value = [{
-    id: 'loading-placeholder',
-    role: 'agent',
-    isStreaming: true,
-    stages: [{ name: 'processing', status: 'running', text: t('page.agent.loadingSession'), logs: [] }],
-    finalText: '',
-    payload: null,
-    streamingText: '',
-  }]
-  setComposerMode(false)
-  // 防抖：300ms 内的连续点击只执行最后一次，减少请求风暴
+  // 方案A：不立即替换 messages，旧消息保持可见直到新数据就绪
+
+  // 防抖：150ms 内的连续点击只执行最后一次
   if (_selectSessionTimer) clearTimeout(_selectSessionTimer)
   await new Promise(resolve => {
     _selectSessionTimer = setTimeout(() => {
       _selectSessionTimer = null
       resolve()
-    }, 300)
+    }, 150)
   })
   if (gen !== _loadGen) return
+
   try {
-    await Promise.all([refreshSession(), loadMessages(gen), loadSessions()])
+    // 先加载 session 详情（loadMessages 依赖 sessionDetail.output_payload）
+    await refreshSession(id)
+    if (gen !== _loadGen) return
+    // 再并行加载消息和会话列表
+    const merged = await loadMessages(gen, id)
+    await loadSessions()
     // 竞态保护：如果用户已切到其他 session，丢弃本次结果
     if (gen !== _loadGen) {
       return
     }
+    // 数据就绪，一次性切换 activeSessionId + messages
+    activeSessionId.value = id
+    if (merged) messages.value = merged
     await _ensureSessionTitle()
   } catch (e) {
     if (gen !== _loadGen) return // 过期请求不弹错误提示
     ElMessage.error(t('page.agent.loadSessionFailed'))
     return
   }
+
+  setComposerMode(false)
+
   // 如果 session 仍在后台执行中，启动轮询
   if (gen !== _loadGen) return // 再次检查，防止 await 期间被取代
   if (sessionDetail.value?.status === 'running') {
@@ -438,7 +462,7 @@ async function _ensureSessionTitle() {
   if (!s || s.status !== 'success' || !activeSessionId.value) {
     return
   }
-  if (s.title && s.title !== '新对话' && !s.title.endsWith('...')) {
+  if (s.title && s.title !== '新对话' && s.title !== 'New Conversation' && !s.title.endsWith('...')) {
     return
   }
   _titleBusy = true
@@ -596,13 +620,13 @@ function detectStageFromText(text) {
   const str = String(text)
   // "[TRANSITIONAL]" marks transitional log between search_requirement and generate_testcases
   if (str.includes('[TRANSITIONAL]')) return 'transitional'
-  // "✅ [阶段1完成]" marks search_requirement as done
-  if (str.includes('✅ [阶段1完成]') || str.includes('阶段1完成')) return 'search_requirement_done'
+  // "✅ [阶段1完成]" or "✅ [Phase 1 Complete]" marks search_requirement as done
+  if (str.includes('阶段1完成') || str.includes('Phase 1 Complete')) return 'search_requirement_done'
   if (str.includes('检索') || str.includes('搜索') || str.includes('\u{1F50D}') || str.includes('search')) return 'search_requirement'
-  // "✅ 测试用例的卡片生成成功" is the final marker — mark generate_testcases as truly done
-  if (str.includes('✅ 测试用例的卡片生成成功') || str.includes('卡片生成成功')) return 'generate_testcases_done'
+  // Card generation success marker (bilingual)
+  if (str.includes('卡片生成成功') || str.includes('Test case cards generated')) return 'generate_testcases_done'
   // All testpoint/testcase related logs belong to generate_testcases stage
-  if (str.includes('测试点') || str.includes('testpoint') || str.includes('TestPoint') || str.includes('用例') || str.includes('生成') || str.includes('generate')) return 'generate_testcases'
+  if (str.includes('测试点') || str.includes('testpoint') || str.includes('TestPoint') || str.includes('用例') || str.includes('生成') || str.includes('generate') || str.includes('test case')) return 'generate_testcases'
   // Default: return last active stage or 'default'
   return 'default'
 }
@@ -622,6 +646,7 @@ async function sendMessage(content) {
   payloadUpdatedPromise = new Promise((resolve) => {
     payloadUpdatedResolve = resolve
   })
+  let _hasError = false  // track if error event was received
   console.log('[SSE-EVENT] payloadUpdatedPromise initialized')
 
   // Add user message
@@ -745,14 +770,14 @@ async function sendMessage(content) {
           console.log(`[SSE-EVENT] custom event detected stage: ${stageName}`)
           _addLog(stageName, text)
           
-          // 问题2修复：在"检索需求文档"阶段完成后，添加等待状态提示
-          if (text.includes('✅ [阶段1完成]') || text.includes('阶段1完成')) {
-            console.log('[SSE-EVENT] ✅ 检索需求文档阶段完成，等待生成测试用例...')
+          // 检索需求文档阶段完成（双语匹配）
+          if (text.includes('阶段1完成') || text.includes('Phase 1 Complete')) {
+            console.log('[SSE-EVENT] ✅ Search requirement phase complete')
           }
-          
-          // 检测测试用例生成完成
-          if (text.includes('✅ [阶段2完成]') || text.includes('阶段2完成') || text.includes('测试用例生成成功')) {
-            console.log('[SSE-EVENT] ✅ 测试用例生成完成！')
+
+          // 检测测试用例生成完成（双语匹配）
+          if (text.includes('阶段2完成') || text.includes('Phase 2 Complete') || text.includes('测试用例生成成功')) {
+            console.log('[SSE-EVENT] ✅ Test case generation complete')
           }
         },
         messages: (data) => {
@@ -776,10 +801,10 @@ async function sendMessage(content) {
           hasStageProgress.value = true
           if (data?.name) {
             console.log(`[SSE-EVENT] Tool called: ${data.name}`)
-            _addLog(data.name, `调用工具: ${data.name}`)
+            _addLog(data.name, t('page.agent.toolCalling', { name: data.name }))
           } else {
             console.warn('[SSE-EVENT] tool_call event but no name provided')
-            _addLog('default', `工具调用`)
+            _addLog('default', t('page.agent.toolCall'))
           }
         },
         payload_updated: async () => {
@@ -802,7 +827,7 @@ async function sendMessage(content) {
             console.log('[SSE-EVENT] payload_updated: marking generate_testcases stage as done')
             stage.status = 'done'
             const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
-            stage.logs = [...(stage.logs || []), `[${time}] ✅ 测试用例的卡片生成成功`]
+            stage.logs = [...(stage.logs || []), `[${time}] ${t('page.agent.cardGenSuccess')}`]
           } else {
             console.log('[SSE-EVENT] payload_updated: generate_testcases stage not found or already done')
           }
@@ -824,6 +849,7 @@ async function sendMessage(content) {
         },
         error: (data) => {
           console.error('[SSE-EVENT] ❌ error event received:', data)
+          _hasError = true
           const errorMsg = data?.message || t('common.requestFailed')
           console.error('[SSE-EVENT] error message:', errorMsg)
           ElMessage.error(errorMsg)
@@ -833,9 +859,16 @@ async function sendMessage(content) {
             const lastStage = stages[stages.length - 1]
             const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
             console.error('[SSE-EVENT] error: adding error log to stage:', lastStage.name)
-            lastStage.logs = [...(lastStage.logs || []), `[${time}] [错误] ${errorMsg}`]
+            lastStage.logs = [...(lastStage.logs || []), `[${time}] ${t('page.agent.errorPrefix')} ${errorMsg}`]
           } else {
-            console.error('[SSE-EVENT] error: no stages available to add error log')
+            // 无阶段时创建 fallback 阶段，确保错误信息始终可见
+            console.error('[SSE-EVENT] error: no stages, creating fallback error stage')
+            hasStageProgress.value = true
+            const errStage = getStage('error')
+            errStage.text = t('page.agent.statusFailed')
+            errStage.status = 'running'
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+            errStage.logs = [`[${time}] [Error] ${errorMsg}`]
           }
         },
         done: async () => {
@@ -860,10 +893,10 @@ async function sendMessage(content) {
             console.log('[SSE-EVENT] done: ⚠️ No payloadUpdatedPromise, proceeding anyway')
           }
           
-          // 标记所有阶段为 done（但保留 generate_testcases 留给 payload_updated 处理）
-          console.log('[SSE-EVENT] done: marking stages as done...')
+          // 标记所有阶段为 done（出错时全部标记，正常时保留 generate_testcases 留给 payload_updated）
+          console.log('[SSE-EVENT] done: marking stages as done... hasError:', _hasError)
           agentResponse.stages = agentResponse.stages.map(s =>
-            s.name === 'generate_testcases' ? s : { ...s, status: 'done' }
+            (!_hasError && s.name === 'generate_testcases') ? s : { ...s, status: 'done' }
           )
           console.log('[SSE-EVENT] done: stages updated')
           
@@ -932,7 +965,7 @@ async function sendMessage(content) {
         id: `temp-${++tempMsgId}`,
         role: 'tool',
         message_type: 'custom',
-        content: `[连接中断] ${msg}`,
+        content: `${t('page.agent.connInterrupted')} ${msg}`,
         sequence: messages.value.length + 1,
       }]
       await loadMessages()
@@ -952,8 +985,8 @@ async function sendMessage(content) {
 /* 构建富文本消息：上下文 + 用户输入 */
 function buildRichContent(payload) {
   const lines = []
-  if (payload.projectName) lines.push(`📋 项目: ${payload.projectName}`)
-  if (payload.documentName) lines.push(`📄 需求文档: ${payload.documentName}`)
+  if (payload.projectName) lines.push(`📋 ${t('page.agent.ctxProject')}: ${payload.projectName}`)
+  if (payload.documentName) lines.push(`📄 ${t('page.agent.ctxRequirementDoc')}: ${payload.documentName}`)
   const text = payload.content || ''
   if (lines.length) {
     return `[context]\n${lines.join('\n')}\n[/context]\n${text}`

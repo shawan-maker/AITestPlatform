@@ -82,6 +82,17 @@ async def delete_environment(
     return success(message="变量文件已删除")
 
 
+@router.post("/environments/{environment_id}/copy", summary="复制变量文件")
+async def copy_environment(
+    environment_id: int,
+    data: dict | None = None,
+    user: User = Depends(get_current_active_user),
+):
+    new_name = (data or {}).get("env_name")
+    result = await EnvironmentService.copy(user, environment_id, new_name=new_name)
+    return success(data=result, message="变量文件复制成功")
+
+
 @router.get("/environments/{environment_id}/configs", summary="配置列表")
 async def list_configs(
     environment_id: int,

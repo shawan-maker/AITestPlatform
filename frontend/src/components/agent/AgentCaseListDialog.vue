@@ -36,19 +36,31 @@
       <el-table-column type="selection" width="45" />
       <el-table-column type="index" :label="t('common.index')" width="60" />
       <el-table-column prop="case_name" :label="t('page.functional.caseName')" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="type" :label="t('page.functional.type')" width="90">
+      <el-table-column prop="type" :label="t('page.functional.type')" min-width="100">
         <template #default="{ row }">
           <el-tag size="small" type="primary" effect="light">{{ row.type || row.case_type || t('page.agent.catFunctional') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="priority" :label="t('page.functional.priority')" width="70">
+      <el-table-column prop="priority" :label="t('page.functional.priority')" min-width="80">
         <template #default="{ row }">
           <el-tag size="small" type="warning" effect="light">{{ row.priority || 'L1' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="preconditions" :label="t('page.functional.preconditions')" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="test_steps" :label="t('page.functional.steps')" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="expected_result" :label="t('page.functional.expectedResult')" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="preconditions" :label="t('page.functional.preconditions')" min-width="140">
+        <template #default="{ row }">
+          <div class="case-table__multiline">{{ formatMultilineSteps(row.preconditions) }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="test_steps" :label="t('page.functional.steps')" min-width="180">
+        <template #default="{ row }">
+          <div class="case-table__multiline">{{ formatMultilineSteps(row.test_steps) }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="expected_result" :label="t('page.functional.expectedResult')" min-width="160">
+        <template #default="{ row }">
+          <div class="case-table__multiline">{{ formatMultilineSteps(row.expected_result) }}</div>
+        </template>
+      </el-table-column>
       <el-table-column :label="t('common.actions')" width="80" fixed="right">
         <template #default="{ row, $index }">
           <div class="table-cell-actions">
@@ -274,6 +286,15 @@ function onSelectionChange(rows) {
   selectedCases.value = rows
 }
 
+/** 格式化多步文本：在编号步骤前自动插入换行 */
+function formatMultilineSteps(text) {
+  if (!text) return ''
+  // 在 "1." "2." 等编号前插入换行（支持中英文编号、带/不带括号）
+  return text
+    .replace(/(?<!^)(?<!\n)(\d+[\.\)、])/g, '\n$1')
+    .trim()
+}
+
 function onTabChange() {
   currentPage.value = 1
 }
@@ -441,5 +462,16 @@ watch(() => showSaveDialog.value, async (visible) => {
 
 .case-table {
   width: 100%;
+
+  &__multiline {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.6;
+    max-height: 200px;
+    overflow-y: auto;
+    font-size: 13px;
+    text-align: left;
+    padding: 4px 8px;
+  }
 }
 </style>

@@ -12,6 +12,8 @@ from service.ai_generation.common import compute_prompt_hash, load_knowledge_doc
 from service.ai_generation.message_service import MessageService
 from service.ai_generation.models import AIGenerationMessage, AIGenerationSession
 from service.ai_generation.session_schemas import AIGenerationSessionListItem, AIGenerationSessionOut
+from service.ai_engine.shared.language_detect import detect_language, locale_to_language
+from service.ai_engine.shared.messages import msg
 from service.core import settings as core_config
 from service.core.enums import GenType, InputRefType, MessageRole, MessageType, SessionStatus, SourceChannel
 from service.core.exceptions import AppException
@@ -31,6 +33,7 @@ def session_to_out(session: AIGenerationSession) -> AIGenerationSessionOut:
         user_prompt=session.user_prompt,
         source_channel=session.source_channel,
         title=session.title,
+        output_language=session.output_language,
         created_at=session.created_at,
         finished_at=session.finished_at,
     )
@@ -104,6 +107,10 @@ class SessionLifecycleService:
             # SIT-F7: Allow empty input (free-form conversation)
             resolved_text = ""
 
+        # 检测语言：优先用文档内容，无文档则用 user_prompt
+        detect_text = resolved_text or user_prompt or ""
+        output_language = detect_language(detect_text)
+
         await cls.enforce_fifo(
             project_id=project_id,
             user_id=user.id,
@@ -118,14 +125,16 @@ class SessionLifecycleService:
             status=SessionStatus.pending,
             user_prompt=user_prompt,
             source_channel=SourceChannel.agent_center,
-            title=title or cls._default_title(resolved_text),
+            title=title or cls._default_title(resolved_text, language=output_language),
+            output_language=output_language,
             created_by_id=user.id,
         )
         if knowledge_id:
+            kb_prefix = "以下为知识库文档全文，供生成用例参考：" if output_language == "zh" else "Below is the full knowledge base document for test case generation:"
             await MessageService.append(
                 session.id,
                 role=MessageRole.system,
-                content=f"以下为知识库文档全文，供生成用例参考：\n\n{resolved_text}",
+                content=f"{kb_prefix}\n\n{resolved_text}",
                 message_type=MessageType.text,
             )
         session.output_payload = session.output_payload or {}
@@ -147,6 +156,7 @@ class SessionLifecycleService:
         environment_id: int | None = None,
         title: str | None,
         mode: str | None = None,
+        locale: str | None = None,
     ) -> AIGenerationSessionOut:
         await cls._validate_module(project_id, module_id)
         input_ref_type = None
@@ -168,7 +178,7 @@ class SessionLifecycleService:
         if mode == "from_interfaces" and interface_ids:
             # Multi-interface mode
             input_ref_type = InputRefType.multi_iface
-            source_text = user_prompt or f"接口用例生成({len(interface_ids)}个接口)"
+            source_text = user_prompt or msg("lifecycle.iface_gen_label", locale_to_language(locale), count=len(interface_ids))
 
         elif interface_id is not None:
             from service.api_test.interface.interface_service import InterfaceService
@@ -194,6 +204,8 @@ class SessionLifecycleService:
             user_id=user.id,
             gen_type=GenType.api_base,
         )
+        # API 智能体：根据前端 locale 决定输出语言
+        output_language = locale_to_language(locale)
         session = await AIGenerationSession.create(
             project_id=project_id,
             module_id=module_id,
@@ -204,7 +216,8 @@ class SessionLifecycleService:
             status=SessionStatus.pending,
             user_prompt=user_prompt,
             source_channel=SourceChannel.agent_center,
-            title=title or cls._default_title(source_text),
+            title=title or cls._default_title(source_text, language=output_language),
+            output_language=output_language,
             created_by_id=user.id,
         )
 
@@ -251,10 +264,11 @@ class SessionLifecycleService:
         return project.name if project else str(project_id)
 
     @staticmethod
-    def _default_title(text: str | None = None, max_len: int = 30) -> str:
+    def _default_title(text: str | None = None, max_len: int = 30, language: str = "zh") -> str:
         """Generate initial temp title. Final title will be replaced by LLM after SSE done."""
+        default = "New Conversation" if language == "en" else "新对话"
         if not text or not text.strip():
-            return "新对话"
+            return default
         one_line = " ".join(text.split())
         if len(one_line) <= max_len:
             return one_line
@@ -292,7 +306,7 @@ class SessionLifecycleService:
         count = 0
         for session in stale_sessions:
             session.status = SessionStatus.failed
-            session.error_message = "服务重启，任务中断"
+            session.error_message = msg("stream.session_interrupted", session.output_language or "zh")
             session.finished_at = datetime.now(timezone.utc)
             await session.save(update_fields=["status", "error_message", "finished_at"])
             count += 1
@@ -352,8 +366,8 @@ class SessionLifecycleService:
             session = await AIGenerationSession.get_or_none(id=session_id)
             if not session:
                 return
-            # 已有有效标题则跳过（非"新对话"、非截断文本）
-            if session.title and session.title != '新对话' and not session.title.endswith('...'):
+            # 已有有效标题则跳过（非默认标题、非截断文本）
+            if session.title and session.title not in ('新对话', 'New Conversation') and not session.title.endswith('...'):
                 return
             first_msg = await AIGenerationMessage.filter(
                 session_id=session_id, role="user"
@@ -361,7 +375,8 @@ class SessionLifecycleService:
             if not first_msg or not first_msg.content:
                 return
             new_title = await cls.summarize_session_title(
-                session_id=session_id, user_first_msg=first_msg.content[:500]
+                session_id=session_id, user_first_msg=first_msg.content[:500],
+                language=session.output_language or "zh",
             )
             if new_title:
                 session.title = new_title[:200]
@@ -383,7 +398,8 @@ class SessionLifecycleService:
 
         if first_msg and first_msg.content:
             new_title = await cls.summarize_session_title(
-                session_id=session_id, user_first_msg=first_msg.content[:500]
+                session_id=session_id, user_first_msg=first_msg.content[:500],
+                language=session.output_language or "zh",
             )
 
             if new_title:
@@ -393,13 +409,13 @@ class SessionLifecycleService:
         return session_to_out(session)
 
     @classmethod
-    async def summarize_session_title(cls, *, session_id: int, user_first_msg: str) -> str | None:
+    async def summarize_session_title(cls, *, session_id: int, user_first_msg: str, language: str = "zh") -> str | None:
         """Call LLM to generate a semantic summary title for the session.
         Returns the new title string, or None on failure (silently degrade).
         """
         import json
 
-        from service.ai_generation.common import SESSION_TITLE_PROMPT, is_llm_configured
+        from service.ai_generation.common import get_session_title_prompt, is_llm_configured
         from service.core import settings as core_config
 
         if not is_llm_configured():
@@ -411,11 +427,12 @@ class SessionLifecycleService:
             # 修复：使用LLM_BINDING_HOST而不是LLM_BASE_URL
             base_url = os.getenv("LLM_BINDING_HOST", "https://api.openai.com/v1")
             model = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
-            
-            _log.info("[summarize_session_title] api_key存在: %s, base_url: %s, model: %s", 
+
+            _log.info("[summarize_session_title] api_key存在: %s, base_url: %s, model: %s",
                      bool(api_key), base_url, model)
 
-            prompt = SESSION_TITLE_PROMPT.format(user_first_message=user_first_msg[:500])
+            title_prompt = get_session_title_prompt(language)
+            prompt = title_prompt.format(user_first_message=user_first_msg[:500])
             _log.info("[summarize_session_title] 正在调用LLM生成标题, prompt长度: %d", len(prompt))
             
             resp = httpx.post(

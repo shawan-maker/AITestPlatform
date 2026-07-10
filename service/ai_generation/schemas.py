@@ -51,6 +51,7 @@ class ApiCreateSessionRequest(BaseModel):
     module_id: int | None = Field(default=None, ge=1)
     title: str | None = Field(default=None, max_length=200)
     mode: str | None = None  # "from_doc" | "from_interfaces" | None (legacy single)
+    locale: str | None = None  # 前端 i18n locale，如 "zh-CN", "en-US"
 
 
 class FunctionalGenerateRequest(BaseModel):

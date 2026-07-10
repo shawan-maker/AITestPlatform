@@ -57,6 +57,7 @@ class ApiAgentService:
             environment_id=body.environment_id,
             title=body.title,
             mode=body.mode,
+            locale=body.locale,
         )
 
     @classmethod

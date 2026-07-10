@@ -4,7 +4,7 @@
       <img :src="objectUrl" :alt="fileName" class="file-preview-panel__image" />
     </template>
     <template v-else-if="previewType === 'json'">
-      <MonacoJsonEditor v-model="textContent" read-only :height="360" />
+      <MonacoJsonEditor v-model="textContent" read-only :height="760" />
     </template>
     <template v-else-if="previewType === 'text'">
       <pre v-if="!loadError" class="file-preview-panel__text">{{ textContent }}</pre>
@@ -82,14 +82,14 @@ onBeforeUnmount(() => {
 
 .file-preview-panel__image {
   max-width: 100%;
-  max-height: 400px;
+  max-height: 800px;
   object-fit: contain;
 }
 
 .file-preview-panel__text {
   padding: 12px;
   background: var(--el-fill-color-light);
-  max-height: 400px;
+  max-height: 800px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-all;

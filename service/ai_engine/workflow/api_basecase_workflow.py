@@ -33,6 +33,8 @@ from typing import List,Annotated
 
 from service.ai_generation.common import format_user_prompt_section
 from service.ai_engine.parsers.api_document_ai_parser import safe_structure_parser
+from service.ai_engine.shared.language_overlay import is_coverage_complete
+from service.ai_engine.shared.messages import msg, lang_from_overlay
 
 checkpointer=InMemorySaver()
 
@@ -45,6 +47,7 @@ class StateNode(TypedDict):
     api_cases_check_report: str  # 覆盖率验证报告
     env_config: dict  # 测试环境配置
     basecase_regenerate_count: int  # 已执行的补充生成次数
+    language_overlay: str  # 语言覆盖指令
 
 class BaseCaseModel(BaseModel):
     name: str = Field(description="测试用例名称")
@@ -59,10 +62,13 @@ class ApiBaseCaseGeneratorWorkflow:
         """生成基础的接口测试用例（测试点）"""
         # 1、获取API接口文档和对应的依赖接口
         writer = get_stream_writer()
-        writer("【开始执行节点】 1、生成api基础测试用例：")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("api_wf.node1_start", _lang))
         api_doc = state.get("api_doc")
         precoditions = state.get("precoditions")
-        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"),
+                                                         "en" if state.get("language_overlay") else "zh")
+        language_overlay = state.get("language_overlay", "")
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
         resp = safe_structure_parser(
@@ -73,9 +79,10 @@ class ApiBaseCaseGeneratorWorkflow:
                 "api_doc": api_doc,
                 "precoditions": precoditions,
                 "user_prompt_section": user_prompt_section,
+                "language_overlay": language_overlay,
             },
         )
-        writer("【执行节点完成】 1、生成api基础测试用例：")
+        writer(msg("api_wf.node1_done", _lang))
         # 3、返回基础的测试用例
         return {"api_cases": resp}
 
@@ -84,11 +91,14 @@ class ApiBaseCaseGeneratorWorkflow:
         """验证覆盖率"""
         # 1、获取API接口文档和对应的依赖接口
         writer = get_stream_writer()
-        writer("【开始执行节点】 2、验证api基础测试用例覆盖率：")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("api_wf.node2_start", _lang))
         api_doc = state.get("api_doc")
         precoditions = state.get("precoditions")
         api_cases = state.get("api_cases")
-        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"),
+                                                         "en" if state.get("language_overlay") else "zh")
+        language_overlay = state.get("language_overlay", "")
         # 2、调用AI模型生成基础的测试用例
         chain = api_coverage_check_prompt | llm
         resp = chain.invoke(
@@ -97,10 +107,11 @@ class ApiBaseCaseGeneratorWorkflow:
                 "precoditions": precoditions,
                 "api_cases": api_cases,
                 "user_prompt_section": user_prompt_section,
+                "language_overlay": language_overlay,
             }
         )
         coverage_report = resp.content.split("\n")
-        writer("【执行节点完成】 2、验证api基础测试用例覆盖率：")
+        writer(msg("api_wf.node2_done", _lang))
         # 3、返回覆盖率的验证报告
         return {"api_cases_check_report": coverage_report}
 
@@ -109,12 +120,15 @@ class ApiBaseCaseGeneratorWorkflow:
         """补充生成api测试用例（测试点）"""
         # 1、获取API接口文档和对应的依赖接口
         writer = get_stream_writer()
-        writer("【开始执行节点】 3、补充生成api基础测试用例：")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("api_wf.node3_start", _lang))
         api_doc = state.get("api_doc")
         precoditions = state.get("precoditions")
         api_cases = state.get("api_cases")
         api_cases_check_report = state.get("api_cases_check_report")
-        user_prompt_section = format_user_prompt_section(state.get("user_prompt"))
+        user_prompt_section = format_user_prompt_section(state.get("user_prompt"),
+                                                         "en" if state.get("language_overlay") else "zh")
+        language_overlay = state.get("language_overlay", "")
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
         resp = safe_structure_parser(
@@ -127,18 +141,20 @@ class ApiBaseCaseGeneratorWorkflow:
                 "api_cases": api_cases,
                 "api_cases_check_report": api_cases_check_report,
                 "user_prompt_section": user_prompt_section,
+                "language_overlay": language_overlay,
             },
         )
-        writer("【执行节点完成】 3、补充生成api基础测试用例：")
+        writer(msg("api_wf.node3_done", _lang))
         count = state.get("basecase_regenerate_count", 0) + 1
-        writer(f"基础用例补充生成次数：{count}/{MAX_BASECASE_REGENERATE_COUNT}")
+        writer(msg("api_wf.node3_count", _lang, count=count, max=MAX_BASECASE_REGENERATE_COUNT))
         return {"api_cases": resp, "basecase_regenerate_count": count}
 
     # 1.4、输出所有的测试点
     def output_basecase(self,state: StateNode):
         """输出所有的测试点"""
         writer = get_stream_writer()
-        writer("【开始执行节点】 4、输出所有基础测试用例")
+        _lang = lang_from_overlay(state.get("language_overlay", ""))
+        writer(msg("api_wf.node4_start", _lang))
         writer(state["api_cases"])
         # 此处不能再返回一个{"api_cases": state["api_cases"]}，因为会导致operator.add 导致重复追加！
         # return {"api_cases": state["api_cases"]}
@@ -152,17 +168,17 @@ class ApiBaseCaseGeneratorWorkflow:
         user_prompt = state.get("user_prompt")
         if user_prompt and user_prompt.strip():
             writer = get_stream_writer()
-            writer("用户有附加要求，跳过覆盖率校验，直接输出生成结果")
+            writer(msg("api_wf.skip_coverage", lang_from_overlay(state.get("language_overlay", ""))))
             return "output_basecase"
 
         report = state.get("api_cases_check_report") or []
         count = state.get("basecase_regenerate_count", 0)
-        if "已经覆盖全部测试点" in "\n".join(report):
+        if is_coverage_complete("\n".join(report)):
             return "output_basecase"
         if count >= MAX_BASECASE_REGENERATE_COUNT:
             writer = get_stream_writer()
             writer(
-                f"已达基础用例最大补充生成次数({MAX_BASECASE_REGENERATE_COUNT})，停止补充"
+                msg("api_wf.max_regen", lang_from_overlay(state.get("language_overlay", "")), max=MAX_BASECASE_REGENERATE_COUNT)
             )
             return "output_basecase"
         return "complete_basecase"

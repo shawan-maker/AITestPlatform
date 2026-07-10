@@ -26,6 +26,7 @@ from service.ai_generation.event_buffer import (
     register_live_queue,
 )
 from service.ai_generation.models import AIGenerationSession
+from service.ai_engine.shared.messages import msg
 from service.core.enums import SessionStatus
 from tortoise.functions import Max
 
@@ -108,6 +109,7 @@ class ApiAgentPipeline:
     ) -> None:
         """后台执行 Phase 1-3，事件写入 Queue，完成后更新 DB。"""
         try:
+            _lang = session.output_language or "zh"
             payload = dict(session.output_payload or {})
             payload["mode"] = mode
             payload["user_prompt"] = user_prompt or ""
@@ -134,7 +136,7 @@ class ApiAgentPipeline:
                 await queue.put(_sse("stage", {
                     "name": "create_interfaces",
                     "status": "running",
-                    "text": "正在解析接口文档...",
+                    "text": msg("stage.parsing_doc", _lang),
                 }))
                 interfaces_data = await cls._phase1_create_interfaces(
                     session, api_doc_text
@@ -143,9 +145,9 @@ class ApiAgentPipeline:
                 await queue.put(_sse("stage", {
                     "name": "create_interfaces",
                     "status": "done",
-                    "text": f"解析完成，共发现 {len(interfaces_data)} 个接口",
+                    "text": msg("pipeline.parse_done", _lang, count=len(interfaces_data)),
                 }))
-                await MessageService.append(session.id, role=MessageRole.tool, content=f"解析完成，共发现 {len(interfaces_data)} 个接口", message_type=MessageType.custom)
+                await MessageService.append(session.id, role=MessageRole.tool, content=msg("pipeline.parse_done", _lang, count=len(interfaces_data)), message_type=MessageType.custom)
                 await queue.put(_sse("pipeline_progress", cls._update_progress(
                     payload["pipeline_progress"], phase=1, status="done"
                 )))
@@ -162,20 +164,23 @@ class ApiAgentPipeline:
             await queue.put(_sse("stage", {
                 "name": "generate_base_cases",
                 "status": "running",
-                "text": "正在为各接口生成基础用例...",
+                "text": msg("stage.gen_base_cases", _lang),
             }))
-            await MessageService.append(session.id, role=MessageRole.tool, content="正在为各接口生成基础用例...", message_type=MessageType.custom)
+            await MessageService.append(session.id, role=MessageRole.tool, content=msg("stage.gen_base_cases", _lang), message_type=MessageType.custom)
 
             for i, iface in enumerate(payload["interfaces"]):
-                await queue.put(_sse("custom", f"正在为「{iface.get('summary', '')}」生成基础用例..."))
+                await queue.put(_sse("custom", msg("pipeline.gen_base_for", _lang, name=iface.get('summary', ''))))
                 try:
+                    from service.ai_engine.shared.language_overlay import get_language_overlay
+                    _lang_overlay = get_language_overlay(session.output_language or "zh")
                     base_cases = await cls._generate_base_cases_for_interface(
-                        iface, user_prompt, session.project_id
+                        iface, user_prompt, session.project_id,
+                        language_overlay=_lang_overlay,
                     )
                     iface["base_cases"] = base_cases
                     iface["selected_indexes"] = list(range(len(base_cases)))
-                    await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例"))
-                    await MessageService.append(session.id, role=MessageRole.tool, content=f"✅ 「{iface.get('summary', '')}」生成 {len(base_cases)} 条基础用例", message_type=MessageType.custom)
+                    await queue.put(_sse("custom", msg("pipeline.base_done", _lang, name=iface.get('summary', ''), count=len(base_cases))))
+                    await MessageService.append(session.id, role=MessageRole.tool, content=msg("pipeline.base_done", _lang, name=iface.get('summary', ''), count=len(base_cases)), message_type=MessageType.custom)
                     await queue.put(_sse("interface_progress", {
                         "interface_index": i,
                         "phase": "base_cases_done",
@@ -186,15 +191,15 @@ class ApiAgentPipeline:
                     iface["base_cases"] = []
                     iface["selected_indexes"] = []
                     iface["error"] = str(e)
-                    await queue.put(_sse("custom", f"❌ 「{iface.get('summary', '')}」生成失败: {str(e)[:100]}"))
-                    await MessageService.append(session.id, role=MessageRole.tool, content=f"❌ 「{iface.get('summary', '')}」生成失败: {str(e)[:100]}", message_type=MessageType.custom)
+                    await queue.put(_sse("custom", msg("pipeline.base_fail", _lang, name=iface.get('summary', ''), error=str(e)[:100])))
+                    await MessageService.append(session.id, role=MessageRole.tool, content=msg("pipeline.base_fail", _lang, name=iface.get('summary', ''), error=str(e)[:100]), message_type=MessageType.custom)
 
             await queue.put(_sse("stage", {
                 "name": "generate_base_cases",
                 "status": "done",
-                "text": "基础用例生成完毕",
+                "text": msg("stage.base_cases_done", _lang),
             }))
-            await MessageService.append(session.id, role=MessageRole.tool, content="基础用例生成完毕", message_type=MessageType.custom)
+            await MessageService.append(session.id, role=MessageRole.tool, content=msg("stage.base_cases_done", _lang), message_type=MessageType.custom)
             await queue.put(_sse("pipeline_progress", cls._update_progress(
                 payload["pipeline_progress"], phase=2, status="done"
             )))
@@ -210,7 +215,7 @@ class ApiAgentPipeline:
             else:
                 # All interfaces failed — mark session as failed, not confirming
                 session.status = SessionStatus.failed
-                session.error_message = "所有接口的基础用例生成均失败，请检查 LLM 配置或重试"
+                session.error_message = msg("pipeline.all_failed", _lang)
             session.finished_at = datetime.now(timezone.utc)
             await session.save(update_fields=["output_payload", "status", "finished_at", "error_message"])
 
@@ -222,9 +227,9 @@ class ApiAgentPipeline:
             await queue.put(_sse("stage", {
                 "name": "edit_base_cases",
                 "status": "running",
-                "text": "请检查并编辑基础用例",
+                "text": msg("stage.edit_base_cases", _lang),
             }))
-            await MessageService.append(session.id, role=MessageRole.tool, content="请检查并编辑基础用例", message_type=MessageType.custom)
+            await MessageService.append(session.id, role=MessageRole.tool, content=msg("stage.edit_base_cases", _lang), message_type=MessageType.custom)
             await queue.put(_sse("pipeline_progress", cls._update_progress(
                 payload["pipeline_progress"], phase=3, status="running"
             )))
@@ -234,7 +239,7 @@ class ApiAgentPipeline:
         except Exception as e:
             _log.error("Pipeline phase 1-3 failed: %s", e, exc_info=True)
             try:
-                await MessageService.append(session.id, role=MessageRole.tool, content=f"❌ 生成失败: {str(e)[:200]}", message_type=MessageType.custom)
+                await MessageService.append(session.id, role=MessageRole.tool, content=msg("pipeline.gen_fail_prefix", _lang, error=str(e)[:200]), message_type=MessageType.custom)
             except Exception:
                 pass
             try:
@@ -350,6 +355,7 @@ class ApiAgentPipeline:
     ) -> None:
         """后台执行 Phase 4-5，事件写入 Queue，完成后更新 DB。"""
         try:
+            _lang = session.output_language or "zh"
             payload = dict(session.output_payload or {})
             interfaces = payload.get("interfaces", [])
 
@@ -361,10 +367,12 @@ class ApiAgentPipeline:
             await queue.put(_sse("stage", {
                 "name": "structure_cases",
                 "status": "running",
-                "text": "正在生成结构化测试用例...",
+                "text": msg("stage.structure_cases", _lang),
             }))
 
             from service.api_test.case.generation_service import ApiCaseGenerationService
+            from service.ai_engine.shared.language_overlay import get_language_overlay
+            _lang_overlay = get_language_overlay(session.output_language or "zh")
 
             for i, iface in enumerate(interfaces):
                 selected_indexes = iface.get("selected_indexes", [])
@@ -372,7 +380,7 @@ class ApiAgentPipeline:
                 if not selected_indexes or not base_cases:
                     continue
 
-                await queue.put(_sse("custom", f"正在为「{iface.get('summary', '')}」生成结构化用例..."))
+                await queue.put(_sse("custom", msg("pipeline.structure_for", _lang, name=iface.get('summary', ''))))
 
                 selected_items = [
                     (idx, base_cases[idx])
@@ -384,8 +392,8 @@ class ApiAgentPipeline:
                     continue
 
                 # Log selected case titles for clarity
-                selected_titles = [f"[{idx}] {base.get('name', '未命名')}" for idx, base in selected_items]
-                selected_msg = f"用户选择了 {len(selected_items)} 条用例进行结构化: {', '.join(selected_titles)}"
+                selected_titles = [f"[{idx}] {base.get('name', msg('pipeline.unnamed', _lang))}" for idx, base in selected_items]
+                selected_msg = msg("pipeline.user_selected", _lang, count=len(selected_items), titles=', '.join(selected_titles))
                 await queue.put(_sse("custom", selected_msg))
                 iface["selected_titles_text"] = selected_msg
 
@@ -427,11 +435,12 @@ class ApiAgentPipeline:
                         project_id=session.project_id,
                         test_env_data=test_env_data,
                         skip_execution=True,
+                        language_overlay=_lang_overlay,
                     )
 
                     iface["structured_cases"] = [r.api_case for r in pre_run_results if r.api_case]
                     iface["structured_count"] = len(iface["structured_cases"])
-                    await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」结构化完成: {len(iface['structured_cases'])} 条"))
+                    await queue.put(_sse("custom", msg("pipeline.structure_done", _lang, name=iface.get('summary', ''), count=len(iface['structured_cases']))))
 
                     # --- Precondition handling (same logic as interface detail page) ---
                     # 1. Collect AI-generated precondition steps
@@ -487,7 +496,7 @@ class ApiAgentPipeline:
                     _log.error("结构化失败 [%s]: %s", iface.get("summary"), e, exc_info=True)
                     iface["structured_cases"] = []
                     iface["structure_error"] = str(e)
-                    await queue.put(_sse("custom", f"❌ 「{iface.get('summary', '')}」结构化失败: {str(e)[:100]}"))
+                    await queue.put(_sse("custom", msg("pipeline.structure_fail", _lang, name=iface.get('summary', ''), error=str(e)[:100])))
 
                 await queue.put(_sse("interface_progress", {
                     "interface_index": i,
@@ -499,7 +508,7 @@ class ApiAgentPipeline:
             await queue.put(_sse("stage", {
                 "name": "structure_cases",
                 "status": "done",
-                "text": "结构化用例生成完毕",
+                "text": msg("stage.structure_done", _lang),
             }))
 
             # -- Phase 5/4: Pre-execute --
@@ -508,7 +517,7 @@ class ApiAgentPipeline:
                 await queue.put(_sse("stage", {
                     "name": "pre_run",
                     "status": "running",
-                    "text": "正在预执行测试用例...",
+                    "text": msg("stage.pre_run", _lang),
                 }))
 
                 for i, iface in enumerate(interfaces):
@@ -518,7 +527,7 @@ class ApiAgentPipeline:
                     if not case_ids:
                         _log.info("[pipeline] 接口 %d 没有 case_ids，跳过", i+1)
                         continue
-                    await queue.put(_sse("custom", f"正在预执行「{iface.get('summary', '')}」的用例..."))
+                    await queue.put(_sse("custom", msg("pipeline.prerun_for", _lang, name=iface.get('summary', ''))))
                     try:
                         _log.info("[pipeline] 开始执行接口 %d 的用例", i+1)
                         exec_results = await cls._execute_cases(
@@ -526,12 +535,14 @@ class ApiAgentPipeline:
                         )
                         _log.info("[pipeline] 接口 %d 执行完成: %s", i+1, exec_results)
                         iface["exec_results"] = exec_results
-                        await queue.put(_sse("custom", f"✅ 「{iface.get('summary', '')}」预执行完成: "
-                                  f"通过率 {exec_results.get('pass_rate', 0):.0%}"))
+                        await queue.put(_sse("custom", msg("pipeline.prerun_done", _lang,
+                                  name=iface.get('summary', ''),
+                                  passed=exec_results.get('passed', 0),
+                                  total=exec_results.get('total', 0))))
                     except Exception as e:
                         _log.error("预执行失败 [%s]: %s", iface.get("summary"), e, exc_info=True)
                         iface["exec_results"] = {"total": len(case_ids), "passed": 0, "failed": 0, "error": 0, "pass_rate": 0}
-                        await queue.put(_sse("custom", f"❌ 「{iface.get('summary', '')}」预执行失败"))
+                        await queue.put(_sse("custom", msg("pipeline.prerun_fail", _lang, name=iface.get('summary', ''))))
 
                     await queue.put(_sse("interface_progress", {
                         "interface_index": i,
@@ -543,7 +554,7 @@ class ApiAgentPipeline:
                 await queue.put(_sse("stage", {
                     "name": "pre_run",
                     "status": "done",
-                    "text": "预执行完毕",
+                    "text": msg("stage.pre_run_done", _lang),
                 }))
                 _log.info("[pipeline] stage done 消息已发送")
 
@@ -582,15 +593,17 @@ class ApiAgentPipeline:
                 sel_text = iface.get("selected_titles_text", "")
                 if sel_text:
                     stage_logs.append(f"「{name}」{sel_text}")
-                stage_logs.append(f"✅ 「{name}」结构化 {sc} 条")
+                stage_logs.append(msg("pipeline.struct_log", _lang, name=name, count=sc))
                 if er:
                     pr = er.get("pass_rate", 0)
-                    stage_logs.append(f"{'✅' if pr == 1 else '❌'} 「{name}」预执行通过率 {pr:.0%}")
+                    icon = "✅" if pr == 1 else "❌"
+                    stage_logs.append(msg("pipeline.prerun_rate", _lang, icon=icon, name=name, rate=f"{pr:.0%}"))
             summary_text = (
-                f"生成完成：共 {summary['total_interfaces']} 个接口，"
-                f"{summary['total_cases']} 条用例，"
-                f"整体通过率 {summary['overall_pass_rate']:.0%}\n"
-                + "\n".join(stage_logs)
+                msg("pipeline.summary_header", _lang,
+                    interfaces=summary['total_interfaces'],
+                    cases=summary['total_cases'],
+                    rate=f"{summary['overall_pass_rate']:.0%}")
+                + "\n" + "\n".join(stage_logs)
             )
             await MessageService.append(
                 session.id,
@@ -644,7 +657,8 @@ class ApiAgentPipeline:
         if isinstance(parsed, dict):
             parsed = [parsed]
 
-        catalog = await cls._get_or_create_ai_catalog(session.project_id)
+        _catalog_name = "AI Generated Interfaces" if (session.output_language or "zh") == "en" else "AI生成接口"
+        catalog = await cls._get_or_create_ai_catalog(session.project_id, name=_catalog_name)
         interfaces_data = []
         skipped = []
 
@@ -758,7 +772,8 @@ class ApiAgentPipeline:
 
     @classmethod
     async def _generate_base_cases_for_interface(
-        cls, iface_data: dict, user_prompt: str | None, project_id: int
+        cls, iface_data: dict, user_prompt: str | None, project_id: int,
+        language_overlay: str = "",
     ) -> list[dict]:
         """Run base case generation workflow for a single interface.
 
@@ -798,6 +813,7 @@ class ApiAgentPipeline:
             "api_doc": api_doc,
             "precoditions": precoditions,
             "user_prompt": user_prompt,
+            "language_overlay": language_overlay,
         })
         _elapsed = _time.monotonic() - _t0
 

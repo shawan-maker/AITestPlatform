@@ -76,6 +76,60 @@ class EnvironmentService:
         return await cls.get_detail(user, env.id)
 
     @classmethod
+    async def copy(cls, user: User, environment_id: int, new_name: str | None = None) -> EnvironmentDetail:
+        """复制变量文件（含配置项和数据库关联）。"""
+        from service.test_environment.models import TestEnvironmentConfig
+
+        source = await cls._get_or_404(environment_id)
+        await ensure_project_editor(source.project_id, user)
+
+        # 确定新名称
+        base_name = new_name or f"{source.env_name}_copy"
+        copy_name = base_name
+        suffix = 1
+        while await TestEnvironment.filter(project_id=source.project_id, env_name=copy_name).exists():
+            suffix += 1
+            copy_name = f"{base_name}_{suffix}"
+
+        # 创建新环境
+        new_env = await TestEnvironment.create(
+            project_id=source.project_id,
+            catalog_id=source.catalog_id,
+            env_name=copy_name,
+            description=source.description,
+        )
+
+        # 复制配置项
+        configs = await TestEnvironmentConfig.filter(environment_id=environment_id).all()
+        if configs:
+            new_configs = [
+                TestEnvironmentConfig(
+                    environment_id=new_env.id,
+                    config_group=c.config_group,
+                    name=c.name,
+                    config_type=c.config_type,
+                    value=c.value,
+                    remark=c.remark,
+                )
+                for c in configs
+            ]
+            await TestEnvironmentConfig.bulk_create(new_configs)
+
+        # 复制数据库关联
+        db_relations = await EnvironmentDbRelation.filter(environment_id=environment_id).all()
+        if db_relations:
+            new_relations = [
+                EnvironmentDbRelation(
+                    environment_id=new_env.id,
+                    db_connection_id=r.db_connection_id,
+                )
+                for r in db_relations
+            ]
+            await EnvironmentDbRelation.bulk_create(new_relations)
+
+        return await cls.get_detail(user, new_env.id)
+
+    @classmethod
     async def get_detail(cls, user: User, environment_id: int) -> EnvironmentDetail:
         env = await cls._get_or_404(environment_id)
         await ensure_project_viewer(env.project_id, user)

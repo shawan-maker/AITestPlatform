@@ -57,11 +57,11 @@
         <h4 class="sec-title">{{ t('page.functional.stepsAndExpected') }}</h4>
         <div class="field-block" v-if="caseDetail.preconditions">
           <label>{{ t('page.functional.preconditions') }}</label>
-          <pre class="field-content">{{ caseDetail.preconditions }}</pre>
+          <pre class="field-content">{{ formatMultilineSteps(caseDetail.preconditions) }}</pre>
         </div>
         <div class="field-block">
           <label>{{ t('page.functional.steps') }}</label>
-          <pre class="field-content">{{ caseDetail.test_steps || t('common.noData') }}</pre>
+          <pre class="field-content">{{ formatMultilineSteps(caseDetail.test_steps) || t('common.noData') }}</pre>
         </div>
         <div class="field-block" v-if="caseDetail.test_data">
           <label>{{ t('page.functional.testData') }}</label>
@@ -69,7 +69,7 @@
         </div>
         <div class="field-block">
           <label>{{ t('page.functional.expectedResult') }}</label>
-          <pre class="field-content">{{ caseDetail.expected_result || t('common.noData') }}</pre>
+          <pre class="field-content">{{ formatMultilineSteps(caseDetail.expected_result) || t('common.noData') }}</pre>
         </div>
       </section>
 
@@ -114,6 +114,14 @@ const caseDetail = ref(null)
 
 function formatTime(val) {
   return val ? formatDateTime(val) : '-'
+}
+
+/** 格式化多步文本：在编号步骤前自动插入换行 */
+function formatMultilineSteps(text) {
+  if (!text) return ''
+  return text
+    .replace(/(?<!^)(?<!\n)(\d+[\.\)、])/g, '\n$1')
+    .trim()
 }
 
 async function loadDetail() {
@@ -213,6 +221,7 @@ watch(() => props.caseId, (id) => {
     color: var(--el-text-color-primary);
     max-height: none;
     margin: 0;
+    text-align: left;
   }
 }
 

@@ -2,9 +2,8 @@
   <el-dialog :close-on-click-modal="false"
     v-model="visible"
     :title="fileName || t('page.env.files.preview')"
-    :width="dialogWidth"
-    :top="dialogTop"
-    :class="dialogClass"
+    width="1200px"
+    top="5vh"
   >
     <FilePreviewPanel v-if="fileId" :file-id="fileId" :file-name="fileName" />
   </el-dialog>
@@ -13,7 +12,6 @@
 <script setup>
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useContentDialog } from '@/composables/useContentDialog'
 import FilePreviewPanel from '@/components/env/FilePreviewPanel.vue'
 
 const props = defineProps({
@@ -24,7 +22,6 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue'])
 const { t } = useI18n()
-const { dialogWidth, dialogTop, dialogClass } = useContentDialog()
 
 const visible = computed({
   get: () => props.modelValue,

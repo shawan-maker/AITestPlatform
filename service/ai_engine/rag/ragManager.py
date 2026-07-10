@@ -63,7 +63,7 @@ async def reorder_model_func(query: str, documents: list[str],top_n: Optional[in
 async def visual_model_func(prompt: str, system_prompt: str = "", history_messages: list[dict[str, Any]] | None = None, image_data=None,  **kwargs: Any):
     """处理视觉模型函数"""
     # 定义系统提示
-    system_prompt = system_prompt or "你是一个资深的知识库检索助手，请根据用户的问题进行分析，并去知识库检索结果，并以中文回复"
+    system_prompt = system_prompt or "你是一个资深的知识库检索助手，请根据用户的问题进行分析，并去知识库检索结果，并使用与用户问题相同的语言回复"
     # 构造图片上传处理的消息
     messages = [
         {"role": "system", "content": system_prompt},

@@ -64,8 +64,8 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="copy">{{ t('page.env.variables.copy') }}</el-dropdown-item>
+                  <el-dropdown-item command="move">{{ t('page.env.variables.move') }}</el-dropdown-item>
                   <el-dropdown-item command="export">{{ t('page.env.variables.export') }}</el-dropdown-item>
-                  <el-dropdown-item command="import">{{ t('page.env.variables.import') }}</el-dropdown-item>
                   <el-dropdown-item command="delete" divided>{{ t('common.delete') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>

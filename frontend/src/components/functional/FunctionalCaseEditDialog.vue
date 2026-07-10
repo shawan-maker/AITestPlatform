@@ -96,6 +96,15 @@ const { t } = useI18n()
 const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(260)
 
 const textareaRows = computed(() => Math.max(5, Math.floor(bodyMaxHeight.value / 28)))
+
+/** 格式化多步文本：在编号步骤前自动插入换行 */
+function formatMultilineSteps(text) {
+  if (!text) return ''
+  return text
+    .replace(/(?<!^)(?<!\n)(\d+[\.\)、])/g, '\n$1')
+    .trim()
+}
+
 const visible = computed({
   get: () => props.modelValue,
   set: (v) => emit('update:modelValue', v),
@@ -132,10 +141,10 @@ async function loadCaseDetail() {
       priority: data.priority || 3,
       module_id: data.module_id || null,
       catalog_id: data.catalog_id || null,
-      preconditions: data.preconditions || '',
-      test_steps: data.test_steps || '',
+      preconditions: formatMultilineSteps(data.preconditions),
+      test_steps: formatMultilineSteps(data.test_steps),
       test_data: data.test_data || '',
-      expected_result: data.expected_result || '',
+      expected_result: formatMultilineSteps(data.expected_result),
     })
   } catch (e) {
     console.error('加载用例详情失败', e)

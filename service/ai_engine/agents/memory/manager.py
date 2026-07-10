@@ -51,19 +51,21 @@ def _get_memory_store() -> InMemoryStore:
 @dataclass
 class RuntimeContext:
     """运行时上下文 —— 标识一次完整对话的全部维度
-    
+
     Attributes:
         project_name: 项目名称
         module_id:    模块ID
         user_id:      用户标识（用于长期记忆命名空间第一维，隔离不同用户）
         session_id:   会话ID（用于长期记忆命名空间第二维，区分同一用户的多次会话）
         thread_id:    会话线程ID（用于 checkpointer 区分同一会话内的不同对话流）
+        language:     输出语言 ('zh' 或 'en')
     """
     project_name: str
     module_id: str
     user_id: str | None = None
     session_id: str | None = None
     thread_id: str | None = None
+    language: str = "zh"
 
 
 class DualMemoryManager:
@@ -205,28 +207,45 @@ class DualMemoryManager:
             包含项目信息的 SystemMessage；如果信息不足则返回 None
         """
         parts = []
-        
+
+        lang = getattr(context, "language", "zh")
+
         # 项目名称（必填）
         if context.project_name and context.project_name.strip():
-            parts.append(f"- **当前项目**: {context.project_name}")
+            if lang == "en":
+                parts.append(f"- **Project**: {context.project_name}")
+            else:
+                parts.append(f"- **当前项目**: {context.project_name}")
         else:
             return None  # 项目名是必须的
-            
+
         # 模块ID（可选）
         if context.module_id and context.module_id.strip() and context.module_id != "None":
-            parts.append(f"- **模块标识**: {context.module_id}")
-            
+            if lang == "en":
+                parts.append(f"- **Module**: {context.module_id}")
+            else:
+                parts.append(f"- **模块标识**: {context.module_id}")
+
         if not parts:
             return None
-            
-        content = (
-            f"【当前工作环境】\n"
-            + "\n".join(parts)
-            + "\n\n"
-            + "重要提示：你已经在上述项目中工作，无需再次询问项目名称。"
-            + "直接基于用户输入的需求/指令执行任务即可。"
-        )
-        
+
+        if lang == "en":
+            content = (
+                "[Current Working Environment]\n"
+                + "\n".join(parts)
+                + "\n\n"
+                + "Note: You are already working in the above project. "
+                + "Proceed directly based on the user's input without asking for the project name."
+            )
+        else:
+            content = (
+                f"【当前工作环境】\n"
+                + "\n".join(parts)
+                + "\n\n"
+                + "重要提示：你已经在上述项目中工作，无需再次询问项目名称。"
+                + "直接基于用户输入的需求/指令执行任务即可。"
+            )
+
         return SystemMessage(content=content)
 
     # ==================== 【写入侧】====================

@@ -38,6 +38,7 @@ class AIGenerationSession(models.Model):
         SourceChannel, default=SourceChannel.agent_center
     )
     title = fields.CharField(max_length=200, null=True)
+    output_language = fields.CharField(max_length=5, default="zh")
     created_by = fields.ForeignKeyField(
         "models.User", related_name="ai_generation_sessions", on_delete=fields.RESTRICT
     )

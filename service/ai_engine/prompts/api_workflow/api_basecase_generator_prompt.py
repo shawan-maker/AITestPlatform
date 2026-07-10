@@ -79,6 +79,7 @@ api_basecase_generator_prompt = PromptTemplate.from_template(
 ```
 
 请开始为上述接口编写测试用例，确保覆盖所有关键测试点，输出格式严格遵守结构要求。
+{language_overlay}
 """
 )
 

@@ -53,6 +53,14 @@
       :env-name="importExportEnvName"
       @imported="loadEnvs"
     />
+    <EnvMoveDialog
+      v-model="showMove"
+      :environment-id="moveEnvId"
+      :env-name="moveEnvName"
+      :current-catalog-id="moveCurrentCatalogId"
+      :catalog-tree="catalogTree"
+      @moved="loadEnvs"
+    />
   </div>
 </template>
 
@@ -82,6 +90,7 @@ import EnvInlineGlobalEditor from '@/components/env/EnvInlineGlobalEditor.vue'
 import EnvBindingPanel from '@/components/env/EnvBindingPanel.vue'
 import EnvCopyDialog from '@/components/env/EnvCopyDialog.vue'
 import EnvImportExportDialog from '@/components/env/EnvImportExportDialog.vue'
+import EnvMoveDialog from '@/components/env/EnvMoveDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -103,6 +112,10 @@ const copyEnvName = ref('')
 const showImportExport = ref(false)
 const importExportEnvId = ref(null)
 const importExportEnvName = ref('')
+const showMove = ref(false)
+const moveEnvId = ref(null)
+const moveEnvName = ref('')
+const moveCurrentCatalogId = ref(null)
 
 function syncRoute() {
   const q = { ...route.query }
@@ -212,6 +225,13 @@ function openCopy(env) {
   showCopy.value = true
 }
 
+function openMove(env) {
+  moveEnvId.value = env.id
+  moveEnvName.value = env.env_name
+  moveCurrentCatalogId.value = env.catalog_id ?? null
+  showMove.value = true
+}
+
 async function doExport(env) {
   const res = await exportEnvironment(env.id)
   downloadJson(res.data.data, `${env.env_name}.json`)
@@ -233,6 +253,7 @@ async function doDelete(env) {
 
 function onEnvCommand(cmd, env) {
   if (cmd === 'copy') openCopy(env)
+  else if (cmd === 'move') openMove(env)
   else if (cmd === 'export') doExport(env)
   else if (cmd === 'import') doImport(env)
   else if (cmd === 'delete') doDelete(env)
