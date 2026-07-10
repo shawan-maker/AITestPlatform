@@ -12,7 +12,13 @@ All output MUST be in **English**, including:
 - Test case names, descriptions, steps, preconditions, expected results
 - Test point types and dimensions
 - Assertion type keywords (e.g., use "equals" instead of "相等")
+- Dependency names in the `dependencies` array
 - Any transitional or status text
+
+### Interface Name Translation
+- When a bilingual name table is provided above, ALWAYS use the **English Name** column for `dependencies`
+- Test case `name` field must also use English interface names (e.g., "GET Get Image Captcha - Normal Request" not "GET 获取图片验证码 - 正常请求")
+- Example: if the table shows "登录" → "Login", use "Login" in dependencies, NOT "登录"
 
 ### CRITICAL EXCEPTION — Do NOT translate assertion expected values:
 - In `assertions[].expected` fields and `expected` arrays, the **actual comparison values** MUST be preserved exactly as they appear in the API document's example responses.

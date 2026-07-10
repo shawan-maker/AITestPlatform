@@ -41,6 +41,7 @@ from service.api_test.interface.schemas import InterfaceCreateRequest
 from service.api_test.models import ApiBaseCase, ApiTestCase
 from service.api_test.permissions import ensure_api_editor, ensure_api_viewer
 from service.api_test.shared.interface_doc import interface_to_doc_dict, interface_to_doc_json
+from service.ai_engine.shared.language_detect import locale_to_language
 from service.core.enums import (
     ApiBaseCaseStatus,
     ApiCaseKind,
@@ -126,11 +127,13 @@ class ApiCaseGenerationService:
         project_id: int,
         selected_items: list[tuple[int, dict]],
         existing_docs: list[dict] | None = None,
+        reverse_map: dict[str, str] | None = None,
     ) -> list[dict]:
         """按 base_case 的 dependencies 名称从 DB 补充前置依赖接口文档。
 
         复用自 _run_confirm_background 的逻辑，供 pipeline 等外部调用。
         如果 existing_docs 非空则直接返回，不做补充。
+        reverse_map: {英文依赖名: 中文summary} 用于英文模式下反向查 DB。
         """
         docs = list(existing_docs or [])
         if docs:
@@ -145,10 +148,19 @@ class ApiCaseGenerationService:
                     seen.add(name)
         if not all_dep_names:
             return docs
+
+        # Build DB lookup names: include both English and Chinese names
+        lookup_names = set(all_dep_names)
+        if reverse_map:
+            for en_name in all_dep_names:
+                zh = reverse_map.get(en_name)
+                if zh:
+                    lookup_names.add(zh)
+
         from service.api_test.interface.models import ApiInterface
         from service.api_test.shared.interface_doc import interface_to_doc_dict
         found = await ApiInterface.filter(
-            project_id=project_id, summary__in=all_dep_names, is_current=True,
+            project_id=project_id, summary__in=list(lookup_names), is_current=True,
         )
         for iface in found:
             docs.append(interface_to_doc_dict(iface))
@@ -187,6 +199,7 @@ class ApiCaseGenerationService:
             user_prompt=None,
             prompt_hash=compute_prompt_hash(api_doc, None),
             source_channel=SourceChannel.interface_detail,
+            output_language=locale_to_language(data.locale),
             created_by_id=user.id,
         )
 
@@ -218,6 +231,13 @@ class ApiCaseGenerationService:
             precoditions_api_doc = payload.get("precoditions_api_doc", [])
             environment_id = payload.get("environment_id")
 
+            # Build language overlay and translation map for English mode
+            from service.ai_engine.shared.language_overlay import get_language_overlay
+            from service.ai_engine.shared.interface_translator import build_interface_translation_map
+            _output_lang = session.output_language or "zh"
+            _lang_overlay = get_language_overlay(_output_lang)
+            _zh_to_en_map = await build_interface_translation_map(precoditions, _output_lang)
+
             if api_test_gen_use_mock():
                 base_cases = cls._mock_base_cases("preview")
             elif not is_llm_configured():
@@ -234,15 +254,20 @@ class ApiCaseGenerationService:
                     api_doc,
                     precoditions,
                     None,
+                    _lang_overlay,
+                    _zh_to_en_map or None,
                 )
 
             session.status = SessionStatus.success
-            session.output_payload = {
+            out_payload = {
                 "base_cases": base_cases,
                 "api_doc": api_doc,
                 "precoditions_api_doc": precoditions_api_doc,
                 "environment_id": environment_id,
             }
+            if _zh_to_en_map:
+                out_payload["_translation_map"] = _zh_to_en_map
+            session.output_payload = out_payload
             session.finished_at = datetime.now(timezone.utc)
             await session.save(
                 update_fields=["status", "output_payload", "finished_at"]
@@ -281,6 +306,7 @@ class ApiCaseGenerationService:
             user_prompt=data.user_prompt,
             prompt_hash=compute_prompt_hash(api_doc_text, data.user_prompt),
             source_channel=SourceChannel.interface_detail,
+            output_language=locale_to_language(data.locale),
             created_by_id=user.id,
         )
 
@@ -290,6 +316,14 @@ class ApiCaseGenerationService:
                 "[preview_from_doc] 传入项目全部 %d 个接口摘要供 AI 识别依赖",
                 len(precoditions),
             )
+
+        # Build language overlay and translation map for English mode
+        from service.ai_engine.shared.language_overlay import get_language_overlay
+        from service.ai_engine.shared.interface_translator import build_interface_translation_map
+        _output_lang = locale_to_language(data.locale)
+        _lang_overlay = get_language_overlay(_output_lang)
+        _zh_to_en_map = await build_interface_translation_map(precoditions, _output_lang)
+
         try:
             if api_test_gen_use_mock():
                 base_cases = cls._mock_base_cases("api-doc")
@@ -307,14 +341,19 @@ class ApiCaseGenerationService:
                     api_doc_text,
                     precoditions,
                     data.user_prompt,
+                    _lang_overlay,
+                    _zh_to_en_map or None,
                 )
             session.status = SessionStatus.success
-            session.output_payload = {
+            out_payload = {
                 "base_cases": base_cases,
                 "api_doc": api_doc_text,
                 "precoditions_api_doc": [],
                 "environment_id": None,
             }
+            if _zh_to_en_map:
+                out_payload["_translation_map"] = _zh_to_en_map
+            session.output_payload = out_payload
             session.finished_at = datetime.now(timezone.utc)
             await session.save(
                 update_fields=["status", "output_payload", "finished_at"]
@@ -519,6 +558,9 @@ class ApiCaseGenerationService:
             # 补充前置依赖接口文档
             if not precoditions_api_doc:
                 from service.api_test.shared.payload_builder import enrich_preconditions_api_doc
+                from service.ai_engine.shared.interface_translator import reverse_translation_map
+                _zh_to_en_map = (session.output_payload or {}).get("_translation_map", {})
+                _en_to_zh_map = reverse_translation_map(_zh_to_en_map) if _zh_to_en_map else {}
                 all_dep_names: list[str] = []
                 seen_names: set[str] = set()
                 for idx, base in selected_items:
@@ -528,11 +570,18 @@ class ApiCaseGenerationService:
                             all_dep_names.append(name)
                             seen_names.add(name)
                 if all_dep_names:
+                    # Include Chinese equivalents for DB lookup
+                    lookup_names = set(all_dep_names)
+                    if _en_to_zh_map:
+                        for en_name in all_dep_names:
+                            zh = _en_to_zh_map.get(en_name)
+                            if zh:
+                                lookup_names.add(zh)
                     from service.api_test.interface.models import ApiInterface
                     from service.api_test.shared.interface_doc import interface_to_doc_dict
                     found_ifaces = await ApiInterface.filter(
                         project_id=iface.project_id,
-                        summary__in=all_dep_names,
+                        summary__in=list(lookup_names),
                         is_current=True,
                     )
                     for found in found_ifaces:
@@ -599,6 +648,8 @@ class ApiCaseGenerationService:
                 user_id=user.id,
                 session_id=session.id,
                 ai_precondition_map=ai_precondition_map,
+                reverse_map=_en_to_zh_map or None,
+                zh_to_en_map=_zh_to_en_map or None,
             )
 
             # ═══════════════════════════════════════════════════════
@@ -854,10 +905,14 @@ class ApiCaseGenerationService:
         user_id: int,
         session_id: int,
         ai_precondition_map: dict[str, dict] | None = None,
+        reverse_map: dict[str, str] | None = None,
+        zh_to_en_map: dict[str, str] | None = None,
     ) -> dict[str, int]:
         """
         为所有选中 base_case 的 dependencies 创建 precondition 用例。
         返回 {dependency名称: 用例ID} 映射。
+        reverse_map: {英文依赖名: 中文summary} 用于 DB 反向查询。
+        zh_to_en_map: {中文summary: 英文名} 用于显示标题翻译。
         """
         # 1. 收集所有不重复的 dependency 名称
         all_dep_names: list[str] = []
@@ -874,13 +929,26 @@ class ApiCaseGenerationService:
             return {}
 
         # 2. 过滤已存在的 precondition 用例（同接口下同名则跳过）
+        # 同时检查中英文标题
+        titles_to_check = set(all_dep_names)
+        if reverse_map:
+            for en_name in all_dep_names:
+                zh = reverse_map.get(en_name)
+                if zh:
+                    titles_to_check.add(zh)
+        if zh_to_en_map:
+            for name in list(all_dep_names):
+                en = zh_to_en_map.get(name)
+                if en:
+                    titles_to_check.add(en)
         existing = await ApiTestCase.filter(
             interface_id=interface.id,
             case_kind=ApiCaseKind.precondition,
-            title__in=all_dep_names,
+            title__in=list(titles_to_check),
         ).values_list("title", flat=True)
         existing_set = set(existing)
-        new_dep_names = [n for n in all_dep_names if n not in existing_set]
+        new_dep_names = [n for n in all_dep_names if n not in existing_set
+                         and (not reverse_map or reverse_map.get(n) not in existing_set)]
         if not new_dep_names:
             logger.info("[precondition] 所有依赖用例已存在，跳过创建")
             return {}
@@ -897,16 +965,34 @@ class ApiCaseGenerationService:
         created_map: dict[str, int] = {}
 
         for order, dep_name in enumerate(new_dep_names):
+            # Try to find dep_doc by English name first, then by Chinese reverse mapping
             dep_doc = dep_doc_by_summary.get(dep_name)
-            case_title = dep_name  # 默认用 DB 接口名，AI 有翻译时会被覆盖
+            zh_dep_name = (reverse_map or {}).get(dep_name)
+            if dep_doc is None and zh_dep_name:
+                dep_doc = dep_doc_by_summary.get(zh_dep_name)
+
+            # Determine display title: AI title > English translation > original name
+            case_title = dep_name  # 默认用依赖名
+            if zh_to_en_map and dep_name in zh_to_en_map:
+                case_title = zh_to_en_map[dep_name]  # 中文 dep_name → 英文显示
+            elif zh_dep_name:
+                # dep_name is already English, use it as display title
+                case_title = dep_name
 
             # 如果 precoditions_api_doc 中找不到，尝试按 summary 查数据库
             if dep_doc is None:
+                # Try English name first, then Chinese reverse mapping
                 found_iface = await ApiInterface.filter(
                     project_id=interface.project_id,
                     summary=dep_name,
                     is_current=True,
                 ).first()
+                if not found_iface and zh_dep_name:
+                    found_iface = await ApiInterface.filter(
+                        project_id=interface.project_id,
+                        summary=zh_dep_name,
+                        is_current=True,
+                    ).first()
                 if found_iface:
                     dep_doc = interface_to_doc_dict(found_iface)
                 else:
@@ -920,7 +1006,17 @@ class ApiCaseGenerationService:
 
             # 优先用 AI 生成的前置步骤数据（含变量引用、提取、断言）
             ai_step = (ai_precondition_map or {}).get(dep_name)
-            # 精确匹配失败时，尝试子串匹配（LLM 生成的标题可能与依赖名不完全一致）
+            # 精确匹配失败时，尝试通过翻译映射查找
+            if not ai_step and ai_precondition_map:
+                # Try Chinese equivalent (English dep_name → Chinese AI key)
+                if zh_dep_name:
+                    ai_step = ai_precondition_map.get(zh_dep_name)
+                # Try English equivalent (Chinese dep_name → English AI key)
+                if not ai_step and zh_to_en_map:
+                    en_equiv = zh_to_en_map.get(dep_name)
+                    if en_equiv:
+                        ai_step = ai_precondition_map.get(en_equiv)
+            # 子串匹配（LLM 生成的标题可能与依赖名不完全一致）
             if not ai_step and ai_precondition_map:
                 for _ai_key, _ai_val in ai_precondition_map.items():
                     if dep_name in _ai_key or _ai_key in dep_name:
@@ -1230,9 +1326,13 @@ class ApiCaseGenerationService:
         api_doc: str,
         precoditions: list[str],
         user_prompt: str | None = None,
+        language_overlay: str = "",
+        zh_to_en_map: dict | None = None,
     ) -> list[dict]:
         from service.ai_engine.workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
+        from service.ai_engine.shared.interface_translator import build_bilingual_table, postprocess_dependencies
 
+        precoditions_bilingual = build_bilingual_table(zh_to_en_map) if zh_to_en_map else ""
         graph = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         config = {"configurable": {"thread_id": "api-test-gen"}}
         result = graph.invoke(
@@ -1240,13 +1340,19 @@ class ApiCaseGenerationService:
                 "api_doc": api_doc,
                 "precoditions": precoditions,
                 "user_prompt": user_prompt,
+                "language_overlay": language_overlay,
+                "precoditions_bilingual": precoditions_bilingual,
             },
             config=config,
         )
         cases = result.get("api_cases") or []
         if isinstance(cases, str):
             cases = json.loads(cases)
-        return cases if isinstance(cases, list) else []
+        cases = cases if isinstance(cases, list) else []
+        # Post-process dependencies for English mode
+        if zh_to_en_map and cases:
+            cases = postprocess_dependencies(cases, zh_to_en_map)
+        return cases
 
     @staticmethod
     def _get_ref_param_context(case: dict, var_pattern) -> dict[str, set[str]]:

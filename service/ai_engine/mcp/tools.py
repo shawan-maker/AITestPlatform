@@ -204,7 +204,7 @@ def generate_base_cases(
         _overlay = get_language_overlay(_lang)
         base_workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         base_state = base_workflow.invoke(
-            {"api_doc": api_doc, "precoditions": precoditions or [], "user_prompt": user_prompt, "language_overlay": _overlay},
+            {"api_doc": api_doc, "precoditions": precoditions or [], "user_prompt": user_prompt, "language_overlay": _overlay, "precoditions_bilingual": ""},
             config=config,
         )
         base_cases = base_state.get("api_cases") or []
@@ -281,7 +281,7 @@ def api_document_to_cases(api_document: str,
     from service.ai_engine.shared.language_overlay import get_language_overlay as _gol
     _overlay2 = _gol(_lang2)
     base_state = base_workflow.invoke(
-        {"api_doc": api_doc, "precoditions": precoditions or [], "language_overlay": _overlay2},
+        {"api_doc": api_doc, "precoditions": precoditions or [], "language_overlay": _overlay2, "precoditions_bilingual": ""},
         config=config,
     )
     base_cases = base_state.get("api_cases") or []

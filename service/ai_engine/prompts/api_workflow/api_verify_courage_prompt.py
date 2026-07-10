@@ -25,7 +25,7 @@ api_coverage_check_prompt = PromptTemplate.from_template(
    - 空值处理（空字符串、null值） —— 接口文档中参数类型为字符串时，测试空字符串，其他类型测试null值
    - 错误数据类型（如数字传字符串）  
    - 多余字段（添加未定义的参数） —— 暂不测试
-   - 接口依赖路径（需要前置调用的接口） 
+   - 接口依赖路径（需要前置调用的接口）
 
 ## 待验证信息：
 ### 目标接口文档：
@@ -33,6 +33,7 @@ api_coverage_check_prompt = PromptTemplate.from_template(
 
 ### 接口的前置依赖：
 {precoditions}
+{precoditions_bilingual}
 
 ### 已生成的测试用例集：
 {api_cases}

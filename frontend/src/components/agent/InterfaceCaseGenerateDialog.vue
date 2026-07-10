@@ -144,7 +144,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'confirmed'])
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { dialogWidth, dialogTop, dialogClass, bodyMaxHeight } = useContentDialog(120)
 
 // v2-Q2: 移除 userPrompt，仅保留环境选择
@@ -208,6 +208,7 @@ async function autoRunPreview() {
   try {
     const res = await generateCasePreview(props.interfaceId, {
       environment_id: environmentId.value || undefined,
+      locale: locale.value,
     })
     const data = res.data.data
     sessionId.value = data.session_id
@@ -245,6 +246,7 @@ async function runPreview() {
   try {
     const res = await generateCasePreview(props.interfaceId, {
       environment_id: environmentId.value || undefined,
+      locale: locale.value,
     })
     const data = res.data.data
     sessionId.value = data.session_id

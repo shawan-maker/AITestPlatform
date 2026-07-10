@@ -33,6 +33,7 @@ class GenerationStatusOut(BaseModel):
 class GeneratePreviewRequest(BaseModel):
     """v2修订: 移除user_prompt参数，直接AI生成（请求体可为空）"""
     environment_id: int | None = Field(default=None, ge=1)
+    locale: str | None = Field(default=None, description="前端 i18n locale，如 en-US / zh-CN")
 
 
 class BaseCasePreviewItem(BaseModel):
@@ -71,6 +72,7 @@ class PreviewFromDocRequest(BaseModel):
     api_doc_text: str = Field(..., min_length=1)
     user_prompt: str | None = None
     module_id: int | None = Field(default=None, ge=1)
+    locale: str | None = Field(default=None, description="前端 i18n locale，如 en-US / zh-CN")
 
 
 class ApiSessionPreviewUpdateRequest(BaseModel):

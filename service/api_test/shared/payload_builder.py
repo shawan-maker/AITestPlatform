@@ -333,10 +333,11 @@ def build_runner_case_from_payload(
     }
 
 
-def normalize_preconditions(preconditions: list, preconditions_api_doc: list) -> list:
+def normalize_preconditions(preconditions: list, preconditions_api_doc: list, reverse_map: dict | None = None) -> list:
     """根据接口文档修正 AI 生成的前置步骤的 Content-Type 和 body 字段。
 
     当 preconditions_api_doc 为空时，返回原始列表（由调用方补充文档后重试）。
+    reverse_map: {英文标题: 中文summary} 用于英文模式下匹配 AI 标题与中文文档。
     """
     if not preconditions:
         return preconditions
@@ -362,12 +363,23 @@ def normalize_preconditions(preconditions: list, preconditions_api_doc: list) ->
         title = (step.get("title") or "").strip()
         if title in doc_by_summary:
             return doc_by_summary[title]
+        # Try reverse mapping: English title → Chinese summary
+        if reverse_map and title in reverse_map:
+            zh_title = reverse_map[title]
+            if zh_title in doc_by_summary:
+                return doc_by_summary[zh_title]
         for summary, doc in doc_by_summary.items():
             if summary and summary in title:
                 return doc
         for summary, doc in doc_by_summary.items():
             if title and title in summary:
                 return doc
+        # Try reverse-mapped title for substring matching
+        if reverse_map and title in reverse_map:
+            zh_title = reverse_map[title]
+            for summary, doc in doc_by_summary.items():
+                if summary and (summary in zh_title or zh_title in summary):
+                    return doc
         iface = step.get("interface") or {}
         step_method = (iface.get("method") or "").upper()
         step_url = iface.get("url") or iface.get("path") or ""

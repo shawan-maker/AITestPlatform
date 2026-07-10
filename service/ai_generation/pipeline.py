@@ -168,6 +168,21 @@ class ApiAgentPipeline:
             }))
             await MessageService.append(session.id, role=MessageRole.tool, content=msg("stage.gen_base_cases", _lang), message_type=MessageType.custom)
 
+            # Build interface name translation map (English mode only)
+            from service.ai_engine.shared.interface_translator import build_interface_translation_map
+            _all_zh_summaries: set[str] = set()
+            for _iface in payload["interfaces"]:
+                _s = (_iface.get("summary") or "").strip()
+                if _s:
+                    _all_zh_summaries.add(_s)
+            _zh_to_en_map = await build_interface_translation_map(
+                list(_all_zh_summaries), session.output_language or "zh",
+            )
+            if _zh_to_en_map:
+                session.output_payload["_translation_map"] = _zh_to_en_map
+                await session.save(update_fields=["output_payload"])
+                _log.info("[pipeline] 接口翻译映射: %d 个名称", len(_zh_to_en_map))
+
             for i, iface in enumerate(payload["interfaces"]):
                 await queue.put(_sse("custom", msg("pipeline.gen_base_for", _lang, name=iface.get('summary', ''))))
                 try:
@@ -176,6 +191,7 @@ class ApiAgentPipeline:
                     base_cases = await cls._generate_base_cases_for_interface(
                         iface, user_prompt, session.project_id,
                         language_overlay=_lang_overlay,
+                        zh_to_en_map=_zh_to_en_map or None,
                     )
                     iface["base_cases"] = base_cases
                     iface["selected_indexes"] = list(range(len(base_cases)))
@@ -372,7 +388,10 @@ class ApiAgentPipeline:
 
             from service.api_test.case.generation_service import ApiCaseGenerationService
             from service.ai_engine.shared.language_overlay import get_language_overlay
+            from service.ai_engine.shared.interface_translator import reverse_translation_map
             _lang_overlay = get_language_overlay(session.output_language or "zh")
+            _zh_to_en_map = (session.output_payload or {}).get("_translation_map", {})
+            _en_to_zh_map = reverse_translation_map(_zh_to_en_map) if _zh_to_en_map else {}
 
             for i, iface in enumerate(interfaces):
                 selected_indexes = iface.get("selected_indexes", [])
@@ -417,7 +436,8 @@ class ApiAgentPipeline:
 
                     # Enrich precondition docs from DB (same as confirm flow)
                     precoditions_api_doc = await ApiCaseGenerationService.enrich_preconditions_api_doc(
-                        session.project_id, selected_items, precoditions_api_doc
+                        session.project_id, selected_items, precoditions_api_doc,
+                        reverse_map=_en_to_zh_map or None,
                     )
 
                     # Load environment data for LLM variable references (same as confirm flow)
@@ -481,6 +501,8 @@ class ApiAgentPipeline:
                                 user_id=session.created_by_id,
                                 session_id=session.id,
                                 ai_precondition_map=ai_precondition_map,
+                                reverse_map=_en_to_zh_map or None,
+                                zh_to_en_map=_zh_to_en_map or None,
                             )
                             _log.info("[pipeline] precondition_map created: %s", precondition_map)
 
@@ -774,6 +796,7 @@ class ApiAgentPipeline:
     async def _generate_base_cases_for_interface(
         cls, iface_data: dict, user_prompt: str | None, project_id: int,
         language_overlay: str = "",
+        zh_to_en_map: dict | None = None,
     ) -> list[dict]:
         """Run base case generation workflow for a single interface.
 
@@ -785,6 +808,7 @@ class ApiAgentPipeline:
         from service.ai_engine.workflow.api_basecase_workflow import ApiBaseCaseGeneratorWorkflow
         from service.api_test.dependency.resolver_service import DependencyResolverService
         from service.api_test.case.generation_service import ApiCaseGenerationService
+        from service.ai_engine.shared.interface_translator import build_bilingual_table, postprocess_dependencies
 
         target_summary = iface_data.get("summary", "")
 
@@ -806,6 +830,9 @@ class ApiAgentPipeline:
         if not precoditions:
             precoditions = await ApiCaseGenerationService._get_all_project_interface_summaries(project_id)
 
+        # Build bilingual table for prompt injection (English mode only)
+        precoditions_bilingual = build_bilingual_table(zh_to_en_map) if zh_to_en_map else ""
+
         workflow = ApiBaseCaseGeneratorWorkflow().create_basecase_workflow()
         _t0 = _time.monotonic()
         # FIX: 使用 asyncio.to_thread 将同步 LangGraph invoke 放到后台线程，避免阻塞 event loop
@@ -814,17 +841,39 @@ class ApiAgentPipeline:
             "precoditions": precoditions,
             "user_prompt": user_prompt,
             "language_overlay": language_overlay,
+            "precoditions_bilingual": precoditions_bilingual,
         })
         _elapsed = _time.monotonic() - _t0
 
         raw_cases = state.get("api_cases") if isinstance(state, dict) else None
 
+        if raw_cases is None:
+            _log.warning("[pipeline] 接口='%s': LLM返回None (解析失败?), 耗时%.1fs, state_keys=%s",
+                         target_summary, _elapsed, list(state.keys()) if isinstance(state, dict) else type(state).__name__)
+        elif isinstance(raw_cases, list):
+            _log.info("[pipeline] 接口='%s': LLM返回 %d 条, 耗时%.1fs", target_summary, len(raw_cases), _elapsed)
+            if raw_cases:
+                _log.info("[pipeline] 接口='%s': 首条用例name='%s', deps=%s",
+                          target_summary, raw_cases[0].get("name", "?"), raw_cases[0].get("dependencies", []))
+        else:
+            _log.warning("[pipeline] 接口='%s': LLM返回非list类型=%s, 耗时%.1fs",
+                         target_summary, type(raw_cases).__name__, _elapsed)
+
         base_cases = raw_cases or []
 
         # 安全网：过滤掉不属于目标接口的用例（LLM 可能错误地为前置依赖接口生成用例）
+        _pre_filter_count = len(base_cases)
         if base_cases and precoditions and target_summary:
             base_cases = cls._filter_precondition_cases(base_cases, target_summary, precoditions)
+            if len(base_cases) != _pre_filter_count:
+                _log.info("[pipeline] 接口='%s': _filter_precondition_cases 过滤 %d→%d 条",
+                          target_summary, _pre_filter_count, len(base_cases))
 
+        # 后处理：将中文依赖名替换为英文（英文模式）
+        if zh_to_en_map and base_cases:
+            base_cases = postprocess_dependencies(base_cases, zh_to_en_map)
+
+        _log.info("[pipeline] 接口='%s': 最终 %d 条基础用例", target_summary, len(base_cases))
         return base_cases
 
     @classmethod

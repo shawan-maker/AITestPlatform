@@ -48,6 +48,7 @@ class StateNode(TypedDict):
     env_config: dict  # 测试环境配置
     basecase_regenerate_count: int  # 已执行的补充生成次数
     language_overlay: str  # 语言覆盖指令
+    precoditions_bilingual: str  # 双语接口名称对照表（英文模式注入）
 
 class BaseCaseModel(BaseModel):
     name: str = Field(description="测试用例名称")
@@ -71,6 +72,7 @@ class ApiBaseCaseGeneratorWorkflow:
         language_overlay = state.get("language_overlay", "")
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
+        precoditions_bilingual = state.get("precoditions_bilingual", "")
         resp = safe_structure_parser(
             api_basecase_generator_prompt,
             llm,
@@ -80,6 +82,7 @@ class ApiBaseCaseGeneratorWorkflow:
                 "precoditions": precoditions,
                 "user_prompt_section": user_prompt_section,
                 "language_overlay": language_overlay,
+                "precoditions_bilingual": precoditions_bilingual,
             },
         )
         writer(msg("api_wf.node1_done", _lang))
@@ -99,6 +102,7 @@ class ApiBaseCaseGeneratorWorkflow:
         user_prompt_section = format_user_prompt_section(state.get("user_prompt"),
                                                          "en" if state.get("language_overlay") else "zh")
         language_overlay = state.get("language_overlay", "")
+        precoditions_bilingual = state.get("precoditions_bilingual", "")
         # 2、调用AI模型生成基础的测试用例
         chain = api_coverage_check_prompt | llm
         resp = chain.invoke(
@@ -108,6 +112,7 @@ class ApiBaseCaseGeneratorWorkflow:
                 "api_cases": api_cases,
                 "user_prompt_section": user_prompt_section,
                 "language_overlay": language_overlay,
+                "precoditions_bilingual": precoditions_bilingual,
             }
         )
         coverage_report = resp.content.split("\n")
@@ -129,6 +134,7 @@ class ApiBaseCaseGeneratorWorkflow:
         user_prompt_section = format_user_prompt_section(state.get("user_prompt"),
                                                          "en" if state.get("language_overlay") else "zh")
         language_overlay = state.get("language_overlay", "")
+        precoditions_bilingual = state.get("precoditions_bilingual", "")
         # 2、调用AI模型生成基础的测试用例
         parser = JsonOutputParser(pydantic_schema=List[BaseCaseModel])
         resp = safe_structure_parser(
@@ -142,6 +148,7 @@ class ApiBaseCaseGeneratorWorkflow:
                 "api_cases_check_report": api_cases_check_report,
                 "user_prompt_section": user_prompt_section,
                 "language_overlay": language_overlay,
+                "precoditions_bilingual": precoditions_bilingual,
             },
         )
         writer(msg("api_wf.node3_done", _lang))

@@ -17,6 +17,7 @@ complete_api_basecase_prompt = PromptTemplate.from_template(
 
 ### 接口的前置依赖：
 {precoditions}
+{precoditions_bilingual}
 
 ## 已生成的测试用例（避免重复）：
 {api_cases}

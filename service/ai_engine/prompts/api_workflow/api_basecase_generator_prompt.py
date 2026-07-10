@@ -132,6 +132,7 @@ api_basecase_generator_prompt = PromptTemplate.from_template(
 ## 二、接口背景信息：
 ### 项目中可用的接口列表（可从中选择前置依赖接口）：
 {precoditions}
+{precoditions_bilingual}
 ### 当前需要你编写用例的目标接口信息如下：
 {api_doc}
 ---
