@@ -8,7 +8,7 @@
     @submit.prevent="onSubmit"
   >
     <el-form-item :label="t('page.login.username')" prop="username">
-      <el-input v-model="form.username" autocomplete="username" />
+      <el-input v-model="form.username" autocomplete="username" placeholder="test1213" />
     </el-form-item>
     <el-form-item :label="t('page.login.password')" prop="password">
       <el-input
@@ -16,6 +16,7 @@
         type="password"
         show-password
         autocomplete="current-password"
+        placeholder="123456"
         @keyup.enter="onSubmit"
       />
     </el-form-item>
@@ -87,6 +88,7 @@ function onReset() {
 
   :deep(.el-form-item__label) {
     font-size: 15px;
+    white-space: nowrap;
   }
 
   :deep(.el-input__wrapper) {
@@ -97,6 +99,48 @@ function onReset() {
   :deep(.el-button) {
     font-size: 15px;
     min-height: 42px;
+  }
+}
+
+/* Medium screens: shrink label to save input space */
+@media (max-width: 1200px) {
+  .login-form {
+    :deep(.el-form-item) {
+      label-width: 80px !important;
+    }
+
+    :deep(.el-form-item__label) {
+      font-size: 13px;
+    }
+
+    :deep(.el-input__wrapper) {
+      min-height: 40px;
+    }
+  }
+}
+
+@media (max-width: 900px) {
+  .login-form {
+    font-size: 14px;
+
+    :deep(.el-form-item) {
+      label-width: 72px !important;
+      margin-bottom: 14px;
+    }
+
+    :deep(.el-form-item__label) {
+      font-size: 12px;
+    }
+
+    :deep(.el-input__wrapper) {
+      min-height: 36px;
+      font-size: 14px;
+    }
+
+    :deep(.el-button) {
+      min-height: 36px;
+      font-size: 14px;
+    }
   }
 }
 

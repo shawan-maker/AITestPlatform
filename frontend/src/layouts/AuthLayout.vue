@@ -108,7 +108,9 @@ const baseBgStyle = computed(() => ({
   justify-content: center;
   flex-shrink: 0;
   width: 50%;
-  height: clamp(360px, 33vh, 620px);
+  height: auto;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   padding: clamp(24px, 2.5vh, 40px) clamp(24px, 2vw, 36px);
   border-radius: $radius-md;
   background: var(--bg-card);
@@ -142,6 +144,28 @@ const baseBgStyle = computed(() => ({
   font-weight: 700;
   color: $text-primary;
   line-height: 1.3;
+}
+
+/* Medium screens: widen the card */
+@media (max-width: 1200px) {
+  .auth-layout__card-slot {
+    width: 60%;
+  }
+
+  .auth-layout__card {
+    width: 70%;
+  }
+}
+
+@media (max-width: 900px) {
+  .auth-layout__card-slot {
+    width: 75%;
+  }
+
+  .auth-layout__card {
+    width: 80%;
+    padding: 20px 24px;
+  }
 }
 
 @media (max-width: 767px) {

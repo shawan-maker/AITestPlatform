@@ -152,16 +152,10 @@ export function useTableColumnLayout(tableRef, dataRef) {
         next[col.id] = w
       }
     } else {
-      let assigned = 0
-      dataCols.forEach((col, index) => {
-        if (index === count - 1) {
-          next[col.id] = Math.max(MIN_COL, dataBudget - assigned)
-        } else {
-          const w = Math.max(MIN_COL, Math.floor((baseWidths[col.id] / baseSum) * dataBudget))
-          next[col.id] = w
-          assigned += w
-        }
-      })
+      // Overflow: keep measured widths, allow horizontal scroll (Element Plus handles it)
+      for (const col of dataCols) {
+        next[col.id] = baseWidths[col.id]
+      }
     }
 
     widths.value = { ...next }

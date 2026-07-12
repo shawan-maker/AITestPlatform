@@ -51,7 +51,7 @@
         <AppTableColumn variant="fixed" :label="t('page.defects.submitTime')" :width="170">
           <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
         </AppTableColumn>
-        <AppTableColumn actions variant="fixed" :label="t('common.actions')" :button-labels="[t('common.view'), t('common.edit'), t('page.defects.transition')]">
+        <AppTableColumn actions variant="fixed" fixed="right" :label="t('common.actions')" :button-labels="[t('common.view'), t('common.edit'), t('page.defects.transition')]">
           <template #default="{ row }">
             <el-button link type="primary" @click="router.push(`/test/defects/${row.id}`)">{{ t('common.view') }}</el-button>
             <el-button link type="primary" @click="router.push(`/test/defects/${row.id}?edit=1`)">{{ t('common.edit') }}</el-button>

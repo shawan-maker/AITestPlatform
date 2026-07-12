@@ -12,6 +12,7 @@
     :header-align="columnAlign"
     :class-name="columnCellClass"
     :label-class-name="columnHeaderClass"
+    :fixed="resolvedFixed"
   >
     <template v-if="$slots.default" #default="scope">
       <div v-if="actions" class="app-table-column__actions">
@@ -77,6 +78,14 @@ const resolvedMinWidth = computed(() => {
 })
 
 const columnAlign = computed(() => (props.variant === 'content' ? 'left' : 'center'))
+
+const resolvedFixed = computed(() => {
+  // Explicit fixed prop takes precedence
+  if (attrs.fixed !== undefined) return attrs.fixed
+  // Actions columns auto-fix to right
+  if (props.actions) return 'right'
+  return undefined
+})
 
 const columnCellClass = computed(() =>
   props.variant === 'content' ? 'app-table-col--content' : 'app-table-col--center',
