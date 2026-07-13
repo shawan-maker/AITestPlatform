@@ -213,7 +213,7 @@ def main():
     print("[OK] 部署初始化完成！")
     print()
     print("后续步骤：")
-    print("  1. 重启后端: docker compose -f deploy/docker-compose.yml restart backend")
+    print("  1. 重启后端: docker compose -f deploy/multi-container/docker-compose.yml restart backend")
     print("     (或本地: python main.py)")
     print("  2. 后端会自动创建默认管理员 (admin / 123456)")
     print("  3. 如从旧实例迁移数据: python deploy/scripts/import_data.py --input backup.sql")

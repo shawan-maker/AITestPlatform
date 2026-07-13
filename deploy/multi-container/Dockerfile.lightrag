@@ -1,6 +1,6 @@
 # ============================================================================
 # LightRAG Server Dockerfile
-# 构建: docker build -f deploy/Dockerfile.lightrag -t aitestplatform-lightrag .
+# 构建: docker build -f deploy/multi-container/Dockerfile.lightrag -t aitestplatform-lightrag .
 # ============================================================================
 FROM python:3.11-slim
 

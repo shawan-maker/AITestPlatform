@@ -1,6 +1,6 @@
 # ============================================================================
 # AITestPlatform 后端 Dockerfile
-# 构建: docker build -f deploy/Dockerfile.backend -t aitestplatform-backend .
+# 构建: docker build -f deploy/multi-container/Dockerfile.backend -t aitestplatform-backend .
 # ============================================================================
 FROM python:3.11-slim AS base
 

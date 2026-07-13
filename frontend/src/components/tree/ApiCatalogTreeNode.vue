@@ -20,7 +20,7 @@
         </el-icon>
         <span v-else class="expand-placeholder" />
         <el-icon class="ui-tree-node-icon"><Folder /></el-icon>
-        <span class="ui-tree-node-label">{{ cat.name }}</span>
+        <span class="ui-tree-node-label">{{ displayCatalogName(cat) }}</span>
         <span v-if="cat.interface_count != null" class="ui-tree-node-count">
           {{ t('page.apiCases.interfaceCount', { count: cat.interface_count }) }}
         </span>
@@ -110,6 +110,16 @@ const emit = defineEmits([
 
 const { t } = useI18n()
 const localDraggingId = ref(null)
+
+/** AI 生成目录的已知名称（数据库中固定存储中文，显示时走 i18n 翻译） */
+const AI_CATALOG_NAMES = ['AI生成接口', 'AI Generated Interfaces']
+
+function displayCatalogName(cat) {
+  if (AI_CATALOG_NAMES.includes(cat.name)) {
+    return t('page.apiCases.aiCatalogName')
+  }
+  return cat.name
+}
 
 function isExpanded(catalogId) {
   return props.expandedCatalogIds.includes(catalogId)

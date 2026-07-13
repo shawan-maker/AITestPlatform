@@ -65,10 +65,10 @@ vim .env
 #   MYSQL_ROOT_PASSWORD     — Docker Compose 使用，默认 aitest2026
 
 # 启动 Docker（MySQL + Redis + Backend + Frontend）
-docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/multi-container/docker-compose.yml up -d --build
 
 # 等待 MySQL 就绪（约 30 秒）
-docker compose -f deploy/docker-compose.yml ps
+docker compose -f deploy/multi-container/docker-compose.yml ps
 
 # 将备份文件复制到 backend 容器
 docker cp deploy/backup_*.json aitestplatform-backend:/app/deploy/
@@ -185,7 +185,7 @@ PYTHONPATH=. python deploy/scripts/migrate_to_server.py --backup deploy/backup_2
 | `deploy/scripts/init_deploy.py` | 数据库初始化脚本 |
 | `deploy/scripts/db_manage.py` | Aerich 迁移管理工具 |
 | `deploy/.env.server` | Docker 部署用 .env 模板 |
-| `deploy/docker-compose.yml` | Docker Compose 编排文件 |
+| `deploy/multi-container/docker-compose.yml` | Docker Compose 编排文件 |
 | `.env.example` | 通用 .env 模板 |
 
 ## 数据库备份详情
@@ -234,7 +234,7 @@ docker exec -it aitestplatform-backend aerich upgrade
 # 重新构建
 cd frontend && npm run build
 # Docker:
-docker compose -f deploy/docker-compose.yml up -d --build frontend
+docker compose -f deploy/multi-container/docker-compose.yml up -d --build frontend
 ```
 
 ---

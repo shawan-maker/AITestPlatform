@@ -318,7 +318,7 @@ def main():
     print("  Migration complete! Next steps:")
     print()
     print("  Option A: Docker deployment (recommended)")
-    print("    docker compose -f deploy/docker-compose.yml up -d --build")
+    print("    docker compose -f deploy/multi-container/docker-compose.yml up -d --build")
     print()
     print("  Option B: Native deployment")
     print("    cd frontend && npm install && npm run build   # Build frontend")

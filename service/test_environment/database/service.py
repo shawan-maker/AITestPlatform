@@ -2,6 +2,10 @@
 
 service
 """
+import logging
+import os
+import socket
+
 import asyncmy
 from copy import deepcopy
 
@@ -295,6 +299,48 @@ class DbConnectionService:
         except Exception:
             return pwd
 
+    @staticmethod
+    def _is_in_docker() -> bool:
+        """检测当前是否运行在 Docker 容器内。"""
+        return os.path.exists("/.dockerenv")
+
+    @staticmethod
+    def _resolve_docker_host(host: str) -> str:
+        """在 Docker 环境中解析数据库主机地址。
+
+        当后端运行在 Docker 容器中时，localhost/127.0.0.1 指向容器自身而非宿主机，
+        需要转换为 Docker 内部可达的地址。
+        """
+        if not host:
+            return host
+
+        # localhost / 127.0.0.1 → 尝试 host.docker.internal（Docker Desktop）或容器网关
+        if host in ("localhost", "127.0.0.1", "::1"):
+            try:
+                socket.getaddrinfo("host.docker.internal", 3306)
+                return "host.docker.internal"
+            except socket.gaierror:
+                pass
+            # Linux Docker 没有 host.docker.internal，尝试默认网关
+            gateway = os.environ.get("DOCKER_GATEWAY", "172.17.0.1")
+            return gateway
+
+        # 已经是容器名、外部 IP 或其他有效地址，直接返回
+        return host
+
+    @classmethod
+    def _docker_connection_hint(cls, error_msg: str) -> str:
+        """当连接失败且疑似 Docker 网络问题时，生成排查提示。"""
+        if not cls._is_in_docker():
+            return ""
+        # 错误中包含 Docker 网关 IP（如 172.x.x.x），说明走了 NAT
+        if any(seg in error_msg for seg in ("172.16.", "172.17.", "172.18.", "172.19.", "172.20.")):
+            return (
+                " [提示] 后端运行在 Docker 容器中，通过 Docker 网关访问外部 MySQL。"
+                " 如果是连接 Docker Compose 内的 MySQL，请将数据库连接配置中的 host 改为 'mysql'（容器名）。"
+            )
+        return ""
+
     @classmethod
     async def _test_mysql(cls, config: dict) -> tuple[bool, str]:
         host = config.get("host")
@@ -302,9 +348,17 @@ class DbConnectionService:
         user = config.get("username") or config.get("user")
         password = await cls._get_plain_password(config)
         database = config.get("database_name") or config.get("database")
+
+        # Docker 环境自动解析主机地址
+        resolved_host = host
+        if cls._is_in_docker():
+            resolved_host = cls._resolve_docker_host(host)
+            if resolved_host != host:
+                logging.info(f"数据库探测: Docker 环境 host {host!r} → {resolved_host!r}")
+
         try:
             conn = await asyncmy.connect(
-                host=host,
+                host=resolved_host,
                 port=port,
                 user=user,
                 password=password,
@@ -317,7 +371,9 @@ class DbConnectionService:
                 conn.close()
             return True, "连接成功"
         except Exception as exc:
-            return False, str(exc)
+            error_msg = str(exc)
+            hint = cls._docker_connection_hint(error_msg)
+            return False, error_msg + hint
 
     @classmethod
     async def test_connection(cls, user: User, connection_id: int) -> DbConnectionTestResult:

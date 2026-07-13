@@ -4,9 +4,9 @@
 # 包含: MySQL + Redis + Backend(FastAPI) + Frontend(Nginx)
 #
 # 使用方法:
-#   1. cp .env.docker .env && vim .env   # 修改 API Key 等配置
-#   2. docker compose -f deploy/docker-compose.yml up -d --build
-#   3. docker compose -f deploy/docker-compose.yml logs -f
+#   1. cp deploy/multi-container/.env.docker .env && vim .env   # 修改 API Key 等配置
+#   2. docker compose -f deploy/multi-container/docker-compose.yml up -d --build
+#   3. docker compose -f deploy/multi-container/docker-compose.yml logs -f
 #
 # 首次部署后初始化数据库:
 #   docker exec -it aitestplatform-backend python deploy/scripts/init_deploy.py
@@ -68,12 +68,12 @@ services:
   # --------------------------------------------------------------------------
   backend:
     build:
-      context: ..
-      dockerfile: deploy/Dockerfile.backend
+      context: ../..
+      dockerfile: deploy/multi-container/Dockerfile.backend
     container_name: aitestplatform-backend
     restart: unless-stopped
     env_file:
-      - ../.env
+      - ../../.env
     environment:
       - BACKEND_HOST=0.0.0.0
       - BACKEND_PORT=8000
@@ -83,6 +83,8 @@ services:
       - LOG_FILE=
     volumes:
       - app-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"    # Linux Docker 支持 host.docker.internal
     networks:
       - app-network
     depends_on:
@@ -102,8 +104,8 @@ services:
   # --------------------------------------------------------------------------
   frontend:
     build:
-      context: ..
-      dockerfile: deploy/Dockerfile.frontend
+      context: ../..
+      dockerfile: deploy/multi-container/Dockerfile.frontend
     container_name: aitestplatform-frontend
     restart: unless-stopped
     ports:
@@ -121,12 +123,12 @@ services:
   # --------------------------------------------------------------------------
   lightrag:
     build:
-      context: ../lightrag-server
-      dockerfile: ../deploy/Dockerfile.lightrag
+      context: ../../lightrag-server
+      dockerfile: ../deploy/multi-container/Dockerfile.lightrag
     container_name: aitestplatform-lightrag
     restart: unless-stopped
     env_file:
-      - ../lightrag-server/.env
+      - ../../lightrag-server/.env
     environment:
       - WORKING_DIR=/app/rag_storage
       - TIKTOKEN_CACHE_DIR=/app/temp/tiktoken
@@ -134,9 +136,9 @@ services:
       - "${RAG_PORT:-9621}:9621"
     volumes:
       - lightrag-data:/app/rag_storage
-      - ../lightrag-server/documents:/app/documents
-      - ../lightrag-server/output:/app/output
-      - ../lightrag-server/temp:/app/temp
+      - ../../lightrag-server/documents:/app/documents
+      - ../../lightrag-server/output:/app/output
+      - ../../lightrag-server/temp:/app/temp
     networks:
       - app-network
     healthcheck:

@@ -66,11 +66,17 @@ defineEmits([
 
 const { t } = useI18n()
 
+/** AI 生成目录的已知名称（搜索时也匹配翻译后的名称） */
+const AI_CATALOG_NAMES = ['AI生成接口', 'AI Generated Interfaces']
+
 function filterCatalogTree(nodes, kw) {
   const result = []
   for (const node of nodes) {
     const children = node.children?.length ? filterCatalogTree(node.children, kw) : []
-    const nameMatch = node.name?.toLowerCase().includes(kw)
+    const displayName = AI_CATALOG_NAMES.includes(node.name)
+      ? t('page.apiCases.aiCatalogName')
+      : node.name
+    const nameMatch = displayName?.toLowerCase().includes(kw) || node.name?.toLowerCase().includes(kw)
     if (nameMatch || children.length) {
       result.push({ ...node, children })
     }

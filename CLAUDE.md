@@ -140,4 +140,4 @@ AI 大模型调用的底层引擎层，统一管理所有 LLM/RAG/Agent 相关�
 
 ### Other Directories
 
-- `deploy/` — Deployment configs (nginx, Dockerfiles, docker-compose, scripts/db_manage.py, DB export/import tools)
+- `deploy/` — Deployment configs (nginx, scripts/db_manage.py, DB export/import tools); `deploy/multi-container/` for Docker Compose multi-container setup (docker-compose.yml, Dockerfiles, .env.docker)

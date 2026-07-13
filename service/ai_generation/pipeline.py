@@ -679,7 +679,7 @@ class ApiAgentPipeline:
         if isinstance(parsed, dict):
             parsed = [parsed]
 
-        _catalog_name = "AI Generated Interfaces" if (session.output_language or "zh") == "en" else "AI生成接口"
+        _catalog_name = "AI生成接口"
         catalog = await cls._get_or_create_ai_catalog(session.project_id, name=_catalog_name)
         interfaces_data = []
         skipped = []
@@ -962,13 +962,27 @@ class ApiAgentPipeline:
 
     @classmethod
     async def _get_or_create_ai_catalog(cls, project_id: int, name: str = "AI生成接口"):
-        """Get or create the AI-generated interfaces catalog (root-level)."""
+        """Get or create the AI-generated interfaces catalog (root-level).
+
+        数据库中始终使用中文名称 "AI生成接口" 存储，前端通过 i18n 翻译显示。
+        兼容历史数据：如果已存在英文名称 "AI Generated Interfaces" 的目录，自动统一为中文名。
+        """
         from service.api_test.interface.models import ApiInterfaceCatalog
 
         catalog = await ApiInterfaceCatalog.get_or_none(
             project_id=project_id, name=name, parent_id=None
         )
         if not catalog:
+            # 兼容历史数据：查找英文名的旧目录
+            legacy_catalog = await ApiInterfaceCatalog.get_or_none(
+                project_id=project_id, name="AI Generated Interfaces", parent_id=None
+            )
+            if legacy_catalog:
+                # 统一为中文名（前端通过 i18n 翻译显示）
+                legacy_catalog.name = name
+                await legacy_catalog.save()
+                return legacy_catalog
+
             # Get max sort_order at root level
             from tortoise.functions import Max
             result = await ApiInterfaceCatalog.filter(
