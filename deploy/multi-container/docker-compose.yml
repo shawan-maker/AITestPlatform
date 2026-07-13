@@ -154,6 +154,10 @@ networks:
 
 volumes:
   mysql-data:       # MySQL 数据持久化
+    name: deploy_mysql-data
   redis-data:       # Redis 持久化
+    name: deploy_redis-data
   app-data:         # 运行时数据 (RAG/知识库/测试文件等)
+    name: deploy_app-data
   lightrag-data:    # LightRAG 索引数据持久化
+    name: deploy_lightrag-data
