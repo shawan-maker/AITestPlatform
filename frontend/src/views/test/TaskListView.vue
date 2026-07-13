@@ -1,8 +1,6 @@
 <template>
   <div class="task-list-view app-card">
     <PageHeader :title="t('page.test.tasks.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <template v-else>
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
@@ -62,7 +60,6 @@
           </template>
         </AppTableColumn>
       </PaginatedTable>
-    </template>
 
     <!-- 新建任务对话框 -->
     <TaskCreateDialog v-model="showCreate" :project-id="projectId" @saved="load" />

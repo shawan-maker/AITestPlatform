@@ -7,14 +7,20 @@
 
 流程：
     1. 检查 .env 配置
-    2. 检查数据库连接
+    2. 检查数据库连接（使用 asyncmy，兼容 Docker 容器内 MySQL 8.0）
     3. 创建数据库（如不存在）
     4. 运行 Aerich init-db（首次建表）
     5. 运行 Aerich upgrade（应用所有迁移）
     6. 验证：查询各表记录数
+
+注意：
+    Docker 容器内的 MySQL 8.0 默认启用 TLS，mysql CLI 客户端会因证书验证失败。
+    本脚本使用 asyncmy Python 驱动连接数据库，不受此问题影响。
+    如 aerich upgrade 超时（国内网络偶发），自动回退到 Tortoise.generate_schemas()。
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import subprocess
@@ -37,10 +43,63 @@ def parse_db_url(url: str) -> dict:
     }
 
 
-def run_cmd(cmd: list[str], check: bool = True, **kwargs) -> subprocess.CompletedProcess:
+async def async_mysql_connect(db: dict):
+    """使用 asyncmy 连接 MySQL（兼容 Docker 容器内 MySQL 8.0 TLS）"""
+    import asyncmy
+
+    conn = await asyncmy.connect(
+        host=db["host"],
+        port=db["port"],
+        user=db["user"],
+        password=db["password"],
+    )
+    return conn
+
+
+async def async_mysql_query(db: dict, sql: str, database: str | None = None):
+    """执行 SQL 查询并返回结果"""
+    import asyncmy
+
+    conn = await asyncmy.connect(
+        host=db["host"],
+        port=db["port"],
+        user=db["user"],
+        password=db["password"],
+        db=database,
+    )
+    try:
+        async with conn.cursor() as cursor:
+            await cursor.execute(sql)
+            rows = await cursor.fetchall()
+            desc = cursor.description
+            columns = [col[0] for col in desc] if desc else []
+            return columns, rows
+    finally:
+        conn.close()
+
+
+async def async_mysql_execute(db: dict, sql: str):
+    """执行 SQL（无返回）"""
+    import asyncmy
+
+    conn = await asyncmy.connect(
+        host=db["host"],
+        port=db["port"],
+        user=db["user"],
+        password=db["password"],
+    )
+    try:
+        async with conn.cursor() as cursor:
+            await cursor.execute(sql)
+        await conn.commit()
+    finally:
+        conn.close()
+
+
+def run_cmd(cmd: list[str], check: bool = True, timeout: int = 60, **kwargs) -> subprocess.CompletedProcess:
     """执行命令并打印结果"""
     print(f"  >>> {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, **kwargs)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, timeout=timeout, **kwargs)
     if result.stdout.strip():
         print(f"  {result.stdout.strip()}")
     if result.returncode != 0 and result.stderr.strip():
@@ -91,52 +150,102 @@ def main():
         print("  [6] 验证表结构")
         return
 
-    # --- Step 2: 检查数据库连接 ---
+    # --- Step 2: 检查数据库连接（使用 asyncmy，避免 mysql CLI SSL 证书问题）---
     print("\n[2/6] 检查数据库连接...")
-    mysql_cmd = ["mysql", "-h", db["host"], "-P", str(db["port"]),
-                 "-u", db["user"], f"-p{db['password']}", "-e", "SELECT 1"]
-    result = run_cmd(mysql_cmd, check=False)
-    if result.returncode != 0:
-        print("  [FAIL] 无法连接 MySQL，请检查网络和认证信息")
+    try:
+        asyncio.run(async_mysql_execute(db, "SELECT 1"))
+        print("  [OK] MySQL 连接成功")
+    except Exception as e:
+        print(f"  [FAIL] 无法连接 MySQL: {e}")
         sys.exit(1)
-    print("  [OK] MySQL 连接成功")
 
     # --- Step 3: 创建数据库（如不存在）---
     print("\n[3/6] 创建数据库（如不存在）...")
-    create_sql = f"CREATE DATABASE IF NOT EXISTS `{db['database']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-    run_cmd(["mysql", "-h", db["host"], "-P", str(db["port"]),
-             "-u", db["user"], f"-p{db['password']}", "-e", create_sql])
-    print(f"  [OK] 数据库 {db['database']} 就绪")
+    try:
+        create_sql = f"CREATE DATABASE IF NOT EXISTS `{db['database']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+        asyncio.run(async_mysql_execute(db, create_sql))
+        print(f"  [OK] 数据库 {db['database']} 就绪")
+    except Exception as e:
+        print(f"  [FAIL] 创建数据库失败: {e}")
+        sys.exit(1)
 
     # --- Step 4: Aerich init-db ---
     print("\n[4/6] Aerich init-db...")
-    result = run_cmd(["aerich", "init-db"], check=False)
-    if result.returncode != 0:
-        print("  [WARN]  init-db 可能已执行过，继续下一步...")
+    try:
+        run_cmd(["aerich", "init-db"], check=False, timeout=30)
+    except subprocess.TimeoutExpired:
+        print("  [WARN]  aerich init-db 超时，继续下一步...")
+    except Exception as e:
+        print(f"  [WARN]  init-db 可能已执行过: {e}")
 
     # --- Step 5: Aerich upgrade ---
     print("\n[5/6] Aerich upgrade...")
-    run_cmd(["aerich", "upgrade"])
-    print("  [OK] 数据库迁移已应用")
+    try:
+        run_cmd(["aerich", "upgrade"], timeout=60)
+        print("  [OK] 数据库迁移已应用")
+    except subprocess.TimeoutExpired:
+        print("  [WARN]  aerich upgrade 超时，回退到 Tortoise.generate_schemas()...")
+        _fallback_generate_schemas(db_url)
+    except Exception as e:
+        print(f"  [WARN]  aerich upgrade 失败: {e}")
+        print("  回退到 Tortoise.generate_schemas()...")
+        _fallback_generate_schemas(db_url)
 
     # --- Step 6: 验证 ---
     print("\n[6/6] 验证表结构...")
-    verify_sql = (
-        "SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES "
-        f"WHERE TABLE_SCHEMA='{db['database']}' ORDER BY TABLE_NAME;"
-    )
-    run_cmd(["mysql", "-h", db["host"], "-P", str(db["port"]),
-             "-u", db["user"], f"-p{db['password']}", "-e", verify_sql])
+    try:
+        columns, rows = asyncio.run(
+            async_mysql_query(db, "SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES "
+                              f"WHERE TABLE_SCHEMA='{db['database']}' ORDER BY TABLE_NAME",
+                              database=db["database"])
+        )
+        if rows:
+            print(f"  {'表名':<40} {'行数':>10}")
+            print(f"  {'-'*40} {'-'*10}")
+            for row in rows:
+                print(f"  {row[0]:<40} {row[1]:>10}")
+        else:
+            print("  [WARN] 未发现任何表")
+    except Exception as e:
+        print(f"  [WARN] 验证失败: {e}")
 
     print("\n" + "=" * 60)
     print("[OK] 部署初始化完成！")
     print()
     print("后续步骤：")
-    print("  1. 启动后端: python main.py")
+    print("  1. 重启后端: docker compose -f deploy/docker-compose.yml restart backend")
+    print("     (或本地: python main.py)")
     print("  2. 后端会自动创建默认管理员 (admin / 123456)")
     print("  3. 如从旧实例迁移数据: python deploy/scripts/import_data.py --input backup.sql")
     print("  4. 构建前端: cd frontend && npm run build")
     print("=" * 60)
+
+
+def _fallback_generate_schemas(db_url: str):
+    """当 aerich upgrade 超时时，使用 Tortoise ORM 直接建表作为回退方案。
+
+    这在 Docker 容器内部尤其有用，因为 aerich 可能因网络或驱动问题超时。
+    """
+    import asyncio
+    from tortoise import Tortoise
+
+    async def _run():
+        # 加载项目配置（需要在 sys.path 中有项目根目录）
+        sys.path.insert(0, str(ROOT))
+        from service.core.settings import TORTOISE_ORM
+
+        await Tortoise.init(config=TORTOISE_ORM, _enable_global_fallback=True)
+        await Tortoise.generate_schemas(safe=True)
+
+        # 验证
+        conn = Tortoise.get_connection("default")
+        _, rows = await conn.execute_query("SHOW TABLES")
+        table_count = len(rows)
+        print(f"  [OK] Tortoise.generate_schemas 完成，共创建 {table_count} 张表")
+
+        await Tortoise.close_connections()
+
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":

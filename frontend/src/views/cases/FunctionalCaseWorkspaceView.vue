@@ -1,9 +1,8 @@
 <template>
   <div class="functional-workspace app-card">
     <PageHeader :title="t('page.functional.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
 
-    <SplitView v-else :initial-width="300" :min-width="240" :max-width="420" :drawer-title="t('page.functional.allCases')">
+    <SplitView :initial-width="300" :min-width="240" :max-width="420" :drawer-title="t('page.functional.allCases')">
       <template #left>
         <FunctionalCatalogSidebar
           :catalog-nodes="catalogTree"

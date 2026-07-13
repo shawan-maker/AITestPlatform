@@ -149,7 +149,10 @@ function cancelEdit() {
   deletedIds.value = []
 }
 
-watch(() => props.projectId, load, { immediate: true })
+watch(() => props.projectId, (id) => {
+  // 只有 projectId 是有效数字时才加载，防止 null/NaN 导致 URL 路径错误
+  if (id && Number.isFinite(id)) load()
+}, { immediate: true })
 </script>
 
 <style scoped>

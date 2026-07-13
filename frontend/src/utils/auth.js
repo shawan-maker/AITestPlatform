@@ -24,7 +24,10 @@ export function clearTokens() {
 
 export function getCurrentProjectId() {
   const raw = localStorage.getItem(STORAGE_KEYS.CURRENT_PROJECT_ID)
-  return raw ? Number(raw) : null
+  if (!raw) return null
+  const num = Number(raw)
+  // 校验：必须是有限正整数（排除 NaN, Infinity, 负数, 0）
+  return Number.isFinite(num) && num > 0 ? num : null
 }
 
 export function setCurrentProjectId(id) {

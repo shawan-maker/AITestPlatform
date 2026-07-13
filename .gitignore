@@ -36,6 +36,11 @@ temp/
 *.log
 debug_*.log
 
+# 部署产物（打包文件、数据库备份）
+deploy/*.tar.gz
+deploy/backup*.json
+deploy/backup*.sql
+
 # Frontend 测试
 frontend/test-results/
 frontend/playwright-report/

@@ -1,8 +1,6 @@
 <template>
   <div class="function-list-view app-card">
     <PageHeader :title="t('page.env.function.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <template v-else>
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
@@ -53,7 +51,6 @@
           </template>
         </AppTableColumn>
       </PaginatedTable>
-    </template>
 
     <FunctionFileFormDialog v-model="showForm" :file-id="editId" @saved="onSaved" />
     <FunctionDetailDialog

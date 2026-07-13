@@ -23,12 +23,12 @@ export const useProjectStore = defineStore('project', {
       try {
         const res = await listProjects(params)
         this.projects = res.data.data?.items ?? []
-        if (this.projects.length && !this.currentProjectId) {
+        if (!this.projects.length) {
+          // 无项目时，强制清除 currentProjectId（防止使用 localStorage 中的旧 ID）
+          this.setCurrent(null)
+        } else if (!this.currentProjectId) {
           this.setCurrent(this.projects[0].id)
-        } else if (
-          this.currentProjectId &&
-          !this.projects.some((p) => p.id === this.currentProjectId)
-        ) {
+        } else if (!this.projects.some((p) => p.id === this.currentProjectId)) {
           this.setCurrent(this.projects[0]?.id ?? null)
         }
       } finally {

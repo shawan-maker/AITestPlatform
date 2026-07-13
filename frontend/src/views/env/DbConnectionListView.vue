@@ -1,8 +1,7 @@
 <template>
   <div class="db-list-view app-card">
     <PageHeader :title="t('page.env.db.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <template v-else>
+
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
@@ -53,7 +52,6 @@
           </template>
         </AppTableColumn>
       </PaginatedTable>
-    </template>
 
     <DbConnectionFormDialog v-model="showForm" :connection-id="editId" @saved="onSaved" />
     <DbConnectionDetailDialog v-model="showDetail" :connection-id="detailId" />

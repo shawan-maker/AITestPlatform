@@ -1,8 +1,6 @@
 <template>
   <div class="defect-list-view app-card">
     <PageHeader :title="t('page.defects.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <template v-else>
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="showCreate = true">{{ t('common.create') }}</el-button>
@@ -59,7 +57,6 @@
           </template>
         </AppTableColumn>
       </PaginatedTable>
-    </template>
 
     <!-- 创建缺陷对话框 -->
     <el-dialog :close-on-click-modal="false" v-model="showCreate" :title="t('page.defects.create')" width="640px">
@@ -194,6 +191,7 @@ async function create() {
   saving.value = true
   try {
     const params = withProjectParams()
+    if (!params) return
     await createDefect({ ...createForm, project_id: params.project_id })
     ElMessage.success(t('common.saved'))
     showCreate.value = false

@@ -1,11 +1,5 @@
 <template>
   <div class="agent-center-view">
-    <EmptyState
-      v-if="!projectId && !projectStore.loading"
-      :title="t('common.noProject')"
-      :description="t('common.selectProjectHint')"
-    />
-    <template v-else>
       <div class="agent-center-view__body">
         <FunctionalAgentPanel
           v-show="activeTab === 'functional'"
@@ -26,7 +20,6 @@
           @tab-change="onTabChange"
         />
       </div>
-    </template>
   </div>
 </template>
 

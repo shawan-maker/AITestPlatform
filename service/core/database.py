@@ -4,7 +4,9 @@ from service.core.settings import TORTOISE_ORM
 
 
 async def init_db() -> None:
-    await Tortoise.init(config=TORTOISE_ORM)
+    # Tortoise ORM 1.1.7+ 使用 contextvars 管理状态，FastAPI lifespan 和
+    # HTTP 请求运行在不同 async task 中，需要开启 global fallback 才能跨 task 访问
+    await Tortoise.init(config=TORTOISE_ORM, _enable_global_fallback=True)
 
 
 async def close_db() -> None:

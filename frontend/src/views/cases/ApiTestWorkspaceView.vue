@@ -1,8 +1,7 @@
 <template>
   <div class="api-workspace app-card">
     <PageHeader :title="t('page.apiCases.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <SplitView v-else :initial-width="selectedInterfaceId ? 0 : 380" :min-width="300" :max-width="560" :drawer-title="t('page.apiCases.allInterfaces')">
+    <SplitView :initial-width="selectedInterfaceId ? 0 : 380" :min-width="300" :max-width="560" :drawer-title="t('page.apiCases.allInterfaces')">
       <template #left>
         <ApiCatalogSidebar
           v-model:keyword="sidebarKeyword"

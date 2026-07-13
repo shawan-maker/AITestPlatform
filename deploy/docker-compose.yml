@@ -116,6 +116,36 @@ services:
     networks:
       - app-network
 
+  # --------------------------------------------------------------------------
+  # LightRAG 知识库服务
+  # --------------------------------------------------------------------------
+  lightrag:
+    build:
+      context: ../lightrag-server
+      dockerfile: ../deploy/Dockerfile.lightrag
+    container_name: aitestplatform-lightrag
+    restart: unless-stopped
+    env_file:
+      - ../lightrag-server/.env
+    environment:
+      - WORKING_DIR=/app/rag_storage
+      - TIKTOKEN_CACHE_DIR=/app/temp/tiktoken
+    ports:
+      - "${RAG_PORT:-9621}:9621"
+    volumes:
+      - lightrag-data:/app/rag_storage
+      - ../lightrag-server/documents:/app/documents
+      - ../lightrag-server/output:/app/output
+      - ../lightrag-server/temp:/app/temp
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9621/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
 networks:
   app-network:
     driver: bridge
@@ -124,3 +154,4 @@ volumes:
   mysql-data:       # MySQL 数据持久化
   redis-data:       # Redis 持久化
   app-data:         # 运行时数据 (RAG/知识库/测试文件等)
+  lightrag-data:    # LightRAG 索引数据持久化

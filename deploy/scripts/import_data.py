@@ -130,7 +130,8 @@ async def import_json(input_file: str, on_conflict: str = "skip"):
                         pass
 
             cols = ", ".join(f"`{k}`" for k in row.keys())
-            placeholders = ", ".join("?" for _ in row)
+            # Tortoise ORM MySQL 后端使用 %s 作为占位符
+            placeholders = ", ".join("%s" for _ in row)
             values = list(row.values())
 
             if on_conflict == "skip":

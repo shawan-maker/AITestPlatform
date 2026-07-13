@@ -1,8 +1,6 @@
 <template>
   <div class="uploaded-file-list app-card">
     <PageHeader :title="t('page.env.files.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <template v-else>
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="fileInput?.click()">{{ t('common.upload') }}</el-button>
@@ -53,7 +51,6 @@
           </template>
         </AppTableColumn>
       </PaginatedTable>
-    </template>
 
     <FilePreviewDialog
       v-model="showPreview"
@@ -170,6 +167,7 @@ async function onUpload(e) {
   const fd = new FormData()
   fd.append('file', file)
   const params = withProjectParams()
+  if (!params) return
   try {
     await uploadFile(fd, params)
     ElMessage.success(t('common.uploaded'))

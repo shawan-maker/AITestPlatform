@@ -1,8 +1,6 @@
 <template>
   <div class="suite-list-view app-card">
     <PageHeader :title="t('page.test.suites.title')" />
-    <EmptyState v-if="!projectId" :title="t('common.noProject')" :description="t('common.selectProjectHint')" />
-    <template v-else>
       <FilterBar @search="load" @reset="reset">
         <template #primary>
           <el-button v-if="canEdit" type="primary" @click="openCreate">{{ t('common.create') }}</el-button>
@@ -58,7 +56,6 @@
           </template>
         </AppTableColumn>
       </PaginatedTable>
-    </template>
 
     <!-- 新建套件对话框 -->
     <SuiteCreateDialog v-model="showForm" @saved="load" />
