@@ -24,7 +24,8 @@ class StorageBackend(ABC):
 
 class LocalStorageBackend(StorageBackend):
     def absolute_path(self, storage_key: str) -> Path:
-        return BASE_DIR / storage_key
+        # 兼容 Windows 路径分隔符（DB 中可能存储反斜杠路径）
+        return BASE_DIR / storage_key.replace("\\", "/")
 
     def write(self, storage_key: str, content: bytes) -> None:
         path = self.absolute_path(storage_key)
