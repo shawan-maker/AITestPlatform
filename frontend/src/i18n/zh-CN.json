@@ -561,6 +561,7 @@
     },
     "apiCases": {
       "title": "接口用例",
+      "aiCatalogName": "AI生成接口",
       "tabDocPreview": "文档预览",
       "tabTestCases": "测试用例",
       "tabInterfaceDebug": "接口调试",

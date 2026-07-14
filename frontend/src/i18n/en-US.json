@@ -561,6 +561,7 @@
     },
     "apiCases": {
       "title": "Interface Cases",
+      "aiCatalogName": "AI Generated Interfaces",
       "tabDocPreview": "Document Preview",
       "tabTestCases": "Test Cases",
       "tabInterfaceDebug": "Debug",
