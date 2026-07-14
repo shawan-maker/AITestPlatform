@@ -19,6 +19,38 @@ class CatalogService:
     """目录服务"""
     MAX_LEVEL = 5
 
+    # AI 生成目录的已知名称（数据库中固定存储中文名，此列表用于兼容历史数据）
+    AI_CATALOG_CURRENT_NAME = "AI生成接口"
+    AI_CATALOG_LEGACY_NAMES = ("AI Generated Interfaces",)
+
+    @classmethod
+    async def _merge_legacy_ai_catalogs(cls, project_id: int) -> None:
+        """将遗留的英文名 AI 目录合并为中文名。
+
+        在加载目录树时调用，将 "AI Generated Interfaces" 目录（旧代码按语言创建）
+        统一合并到 "AI生成接口" 目录。合并后该目录及其所有子目录、接口完整保留。
+        幂等操作：不存在 legacy 目录时直接返回。
+        """
+        for legacy_name in cls.AI_CATALOG_LEGACY_NAMES:
+            legacy = await ApiInterfaceCatalog.get_or_none(
+                project_id=project_id, name=legacy_name, parent_id=None
+            )
+            if not legacy:
+                continue
+
+            current = await ApiInterfaceCatalog.get_or_none(
+                project_id=project_id, name=cls.AI_CATALOG_CURRENT_NAME, parent_id=None
+            )
+            if current:
+                # 两个都存在：将 legacy 下的接口和子目录迁移到 current，然后删除 legacy
+                await ApiInterface.filter(catalog_id=legacy.id).update(catalog_id=current.id)
+                await ApiInterfaceCatalog.filter(parent_id=legacy.id).update(parent_id=current.id)
+                await legacy.delete()
+            else:
+                # 只有 legacy 没有 current：直接重命名
+                legacy.name = cls.AI_CATALOG_CURRENT_NAME
+                await legacy.save()
+
     @classmethod
     async def _get_catalog_or_404(
         cls, catalog_id: int, project_id: int | None = None
@@ -100,6 +132,8 @@ class CatalogService:
     @classmethod
     async def get_tree(cls, user: User, project_id: int) -> list[CatalogTreeNode]:
         await ensure_api_viewer(project_id, user)
+        # 自动合并遗留的英文名 AI 目录（幂等操作，不存在时立即返回）
+        await cls._merge_legacy_ai_catalogs(project_id)
         catalogs = await ApiInterfaceCatalog.filter(project_id=project_id).order_by(
             "level", "sort_order", "id"
         )

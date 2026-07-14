@@ -321,23 +321,25 @@ class DbConnectionService:
                 return "host.docker.internal"
             except socket.gaierror:
                 pass
-            # Linux Docker 没有 host.docker.internal，尝试默认网关
             gateway = os.environ.get("DOCKER_GATEWAY", "172.17.0.1")
             return gateway
 
-        # 已经是容器名、外部 IP 或其他有效地址，直接返回
         return host
+
+    # Docker 网关私有地址前缀（172.16.0.0/12，即 172.16.x ~ 172.31.x）
+    _DOCKER_GATEWAY_PREFIXES = tuple(f"172.{i}." for i in range(16, 32))
 
     @classmethod
     def _docker_connection_hint(cls, error_msg: str) -> str:
         """当连接失败且疑似 Docker 网络问题时，生成排查提示。"""
         if not cls._is_in_docker():
             return ""
-        # 错误中包含 Docker 网关 IP（如 172.x.x.x），说明走了 NAT
-        if any(seg in error_msg for seg in ("172.16.", "172.17.", "172.18.", "172.19.", "172.20.")):
+        # 错误中包含 Docker 网关 IP（172.16.x~172.31.x），说明走了 NAT
+        if any(seg in error_msg for seg in cls._DOCKER_GATEWAY_PREFIXES):
             return (
-                " [提示] 后端运行在 Docker 容器中，通过 Docker 网关访问外部 MySQL。"
-                " 如果是连接 Docker Compose 内的 MySQL，请将数据库连接配置中的 host 改为 'mysql'（容器名）。"
+                " [提示] 后端运行在 Docker 容器中。"
+                " 若要连接 Compose 内的 MySQL，请将 host 改为 'mysql'，密码使用 Compose 的 MYSQL_ROOT_PASSWORD。"
+                " 若要连接外部 MySQL，请确保外部 MySQL 已授权服务器公网 IP 访问。"
             )
         return ""
 
